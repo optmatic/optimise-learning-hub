@@ -635,6 +635,9 @@ if (current_user_can('tutor')) {
           echo '        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>';
           echo '      </div>';
           echo '      <div class="modal-body">';
+          echo '        <div id="rescheduleSuccessMessage" class="alert alert-success" style="display: none;">';
+          echo '          <p>Your reschedule request has been successfully submitted.</p>';
+          echo '        </div>';
           echo '        <form id="rescheduleForm" method="post">';
           echo '          <input type="hidden" name="submit_reschedule_request" value="1">';
           echo '          <input type="hidden" name="tutor_name" value="' . esc_attr(wp_get_current_user()->display_name) . '">';
@@ -649,7 +652,7 @@ if (current_user_can('tutor')) {
           echo '          </div>';
           echo '          <div class="modal-footer">';
           echo '            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
-          echo '            <button type="submit" class="btn btn-primary">Submit</button>';
+          echo '            <button type="button" class="btn btn-primary" id="submitReschedule">Submit</button>';
           echo '          </div>';
           echo '        </form>';
           echo '      </div>';
@@ -705,34 +708,54 @@ document.getElementById('add-resource').addEventListener('click', function() {
     });
 });
 
-document.getElementById('submitReschedule').addEventListener('click', function() {
-    const newDate = document.getElementById('newDate').value;
-    const reason = document.getElementById('reason').value;
-
-    // Send the data to the server
-    fetch('path/to/your/server/endpoint', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ newDate, reason })
-    })
-    .then(response => response.json())
-    .then(data => {
-        // Assuming the server returns a success message
-        alert('Reschedule proposed successfully!');
-
-        // Optionally, you can update the Tutor Comms tab here
-        const tutorCommsTab = document.getElementById('tutor-comms');
-        const newComm = document.createElement('p');
-        newComm.textContent = `Proposed new date: ${newDate}. Reason: ${reason}`;
-        tutorCommsTab.appendChild(newComm);
-
-        // Close the modal
-        $('#editScheduleModal').modal('hide');
-    })
-    .catch(error => {
-        console.error('Error:', error);
-    });
+document.addEventListener('DOMContentLoaded', function() {
+    // Get the submit button
+    const submitButton = document.getElementById('submitReschedule');
+    if (submitButton) {
+        submitButton.addEventListener('click', function() {
+            // Get form data
+            const form = document.getElementById('rescheduleForm');
+            const formData = new FormData(form);
+            
+            // Submit the form using fetch
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Show success message
+                    const successMessage = document.getElementById('rescheduleSuccessMessage');
+                    successMessage.style.display = 'block';
+                    
+                    // Clear form fields
+                    document.getElementById('newDate').value = '';
+                    document.getElementById('reason').value = '';
+                    
+                    // Hide the form
+                    form.style.display = 'none';
+                    
+                    // Set a timeout to close the modal after 3 seconds
+                    setTimeout(function() {
+                        // Close the modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('editScheduleModal'));
+                        modal.hide();
+                        
+                        // Reset the form and hide success message for next time
+                        setTimeout(function() {
+                            form.style.display = 'block';
+                            successMessage.style.display = 'none';
+                        }, 500);
+                    }, 3000);
+                } else {
+                    alert('There was an error submitting your request. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('There was an error submitting your request. Please try again.');
+            });
+        });
+    }
 });
 </script>
