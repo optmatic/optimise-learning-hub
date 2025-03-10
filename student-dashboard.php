@@ -31,7 +31,7 @@ if (current_user_can('student')) {
                     <a class="nav-link" id="my-progress-tab" data-bs-toggle="tab" href="#my-progress">Your Learning Overviews</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" id="my-progress-tab" data-bs-toggle="tab" href="#my-progress">Tutor Comms</a>
+                    <a class="nav-link" id="tutor-comms-tab" data-bs-toggle="tab" href="#tutor-comms">Tutor Comms</a>
                 </li>
             </ul>
         </div>
@@ -291,6 +291,13 @@ if (current_user_can('student')) {
     }
     ?>
 </div>
+
+                <!-- Tutor Comms Tab -->
+                <div class="tab-pane fade" id="tutor-comms" role="tabpanel" aria-labelledby="tutor-comms-tab">
+                    <h5>Tutor Communications</h5>
+                    <p>This section is reserved for communications from your tutor. Please check back here for updates and messages.</p>
+                    <p>Placeholder for future content related to tutor communications.</p>
+                </div>
 
             </div>
         </div>
