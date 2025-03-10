@@ -295,8 +295,68 @@ if (current_user_can('student')) {
                 <!-- Tutor Comms Tab -->
                 <div class="tab-pane fade" id="tutor-comms" role="tabpanel" aria-labelledby="tutor-comms-tab">
                     <h5>Tutor Communications</h5>
-                    <p>This section is reserved for communications from your tutor. Please check back here for updates and messages.</p>
-                    <p>Placeholder for future content related to tutor communications.</p>
+                    
+                    <?php
+                    $current_user = wp_get_current_user();
+                    $user_id = $current_user->ID;
+                    
+                    // Query for reschedule requests
+                    $args = array(
+                        'post_type'      => 'progress_report',
+                        'posts_per_page' => -1,
+                        'meta_query'     => array(
+                            'relation' => 'AND',
+                            array(
+                                'key'     => 'student_id',
+                                'value'   => $user_id,
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'request_type',
+                                'value'   => 'reschedule',
+                                'compare' => '=',
+                            )
+                        )
+                    );
+                    
+                    $reschedule_requests = get_posts($args);
+                    
+                    if (!empty($reschedule_requests)) {
+                        echo '<div class="accordion" id="rescheduleAccordion">';
+                        $counter = 1;
+                        
+                        foreach ($reschedule_requests as $request) {
+                            $request_id = $request->ID;
+                            $tutor_name = get_post_meta($request_id, 'tutor_name', true);
+                            $new_date = get_post_meta($request_id, 'new_date', true);
+                            $reason = get_post_meta($request_id, 'reason', true);
+                            
+                            // Format the date for display
+                            $formatted_date = date('jS \of F, Y', strtotime($new_date));
+                            
+                            echo '<div class="accordion-item">';
+                            echo '<h2 class="accordion-header" id="rescheduleHeading' . $counter . '">';
+                            echo '<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#rescheduleCollapse' . $counter . '" aria-expanded="true" aria-controls="rescheduleCollapse' . $counter . '">';
+                            echo 'Reschedule Request - ' . $formatted_date;
+                            echo '</button>';
+                            echo '</h2>';
+                            echo '<div id="rescheduleCollapse' . $counter . '" class="accordion-collapse collapse" aria-labelledby="rescheduleHeading' . $counter . '" data-bs-parent="#rescheduleAccordion">';
+                            echo '<div class="accordion-body">';
+                            echo '<p><strong>Tutor:</strong> ' . $tutor_name . '</p>';
+                            echo '<p><strong>Proposed New Date:</strong> ' . $formatted_date . '</p>';
+                            echo '<p><strong>Reason:</strong> ' . $reason . '</p>';
+                            echo '</div>';
+                            echo '</div>';
+                            echo '</div>';
+                            
+                            $counter++;
+                        }
+                        
+                        echo '</div>';
+                    } else {
+                        echo '<p>No reschedule requests found.</p>';
+                    }
+                    ?>
                 </div>
 
             </div>

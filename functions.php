@@ -567,6 +567,7 @@ add_action( 'personal_options_update', 'save_assigned_students_field' );
 add_action( 'edit_user_profile_update', 'save_assigned_students_field' );
 
 function process_tutor_dashboard_form() {
+    // Handle regular lesson overview submissions (keep this existing code)
     if (isset($_POST['submit_progress_report'])) {
         // Include WordPress file handling functions
         require_once(ABSPATH . 'wp-admin/includes/file.php');
@@ -640,8 +641,44 @@ function process_tutor_dashboard_form() {
             echo 'Error creating your lesson overview.';
         }
     }
+    
+    // Add new code to handle reschedule requests
+    if (isset($_POST['submit_reschedule_request'])) {
+        $tutor_name = sanitize_text_field($_POST['tutor_name']);
+        $student_id = intval($_POST['student_id']);
+        $student = get_userdata($student_id);
+        $student_name = $student ? $student->display_name : 'Unknown Student';
+        $new_date = sanitize_text_field($_POST['new_date']);
+        $reason = sanitize_textarea_field($_POST['reason']);
+        
+        // Create a new progress report post for the reschedule request
+        $new_reschedule_request = array(
+            'post_title'   => 'Reschedule Request: ' . $tutor_name . ' - ' . $student_name,
+            'post_content' => '',
+            'post_status'  => 'publish',
+            'post_type'    => 'progress_report',
+        );
+        
+        $post_id = wp_insert_post($new_reschedule_request, true);
+        
+        if (!is_wp_error($post_id)) {
+            // Save the reschedule request details as post meta
+            update_post_meta($post_id, 'tutor_name', $tutor_name);
+            update_post_meta($post_id, 'student_id', $student_id);
+            update_post_meta($post_id, 'request_type', 'reschedule');
+            update_post_meta($post_id, 'new_date', $new_date);
+            update_post_meta($post_id, 'reason', $reason);
+            
+            // Set a global message to display to the user
+            global $submission_message;
+            $submission_message = 'Your reschedule request has been successfully submitted.';
+        } else {
+            global $submission_message;
+            $submission_message = 'Error: ' . $post_id->get_error_message();
+        }
+    }
 }
-add_action( 'init', 'process_tutor_dashboard_form' );
+add_action('init', 'process_tutor_dashboard_form');
 
 function get_student_progress_reports( $user_id ) {
     $args = array(

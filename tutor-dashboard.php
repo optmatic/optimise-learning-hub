@@ -635,20 +635,23 @@ if (current_user_can('tutor')) {
           echo '        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>';
           echo '      </div>';
           echo '      <div class="modal-body">';
-          echo '        <form id="rescheduleForm">';
+          echo '        <form id="rescheduleForm" method="post">';
+          echo '          <input type="hidden" name="submit_reschedule_request" value="1">';
+          echo '          <input type="hidden" name="tutor_name" value="' . esc_attr(wp_get_current_user()->display_name) . '">';
+          echo '          <input type="hidden" name="student_id" value="' . esc_attr($student_id) . '">';
           echo '          <div class="mb-3">';
           echo '            <label for="newDate" class="form-label">New Date</label>';
-          echo '            <input type="date" class="form-control" id="newDate" name="newDate" required>';
+          echo '            <input type="date" class="form-control" id="newDate" name="new_date" required>';
           echo '          </div>';
           echo '          <div class="mb-3">';
           echo '            <label for="reason" class="form-label">Reason for Reschedule</label>';
           echo '            <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>';
           echo '          </div>';
+          echo '          <div class="modal-footer">';
+          echo '            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
+          echo '            <button type="submit" class="btn btn-primary">Submit</button>';
+          echo '          </div>';
           echo '        </form>';
-          echo '      </div>';
-          echo '      <div class="modal-footer">';
-          echo '        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
-          echo '        <button type="button" class="btn btn-primary" id="submitReschedule">Submit</button>';
           echo '      </div>';
           echo '    </div>';
           echo '  </div>';
@@ -699,6 +702,37 @@ document.getElementById('add-resource').addEventListener('click', function() {
     // Add remove button functionality
     newField.querySelector('.remove-resource').addEventListener('click', function() {
         this.parentElement.remove();
+    });
+});
+
+document.getElementById('submitReschedule').addEventListener('click', function() {
+    const newDate = document.getElementById('newDate').value;
+    const reason = document.getElementById('reason').value;
+
+    // Send the data to the server
+    fetch('path/to/your/server/endpoint', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ newDate, reason })
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Assuming the server returns a success message
+        alert('Reschedule proposed successfully!');
+
+        // Optionally, you can update the Tutor Comms tab here
+        const tutorCommsTab = document.getElementById('tutor-comms');
+        const newComm = document.createElement('p');
+        newComm.textContent = `Proposed new date: ${newDate}. Reason: ${reason}`;
+        tutorCommsTab.appendChild(newComm);
+
+        // Close the modal
+        $('#editScheduleModal').modal('hide');
+    })
+    .catch(error => {
+        console.error('Error:', error);
     });
 });
 </script>
