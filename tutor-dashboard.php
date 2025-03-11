@@ -42,9 +42,6 @@ if (current_user_can('tutor')) {
     <li class="nav-item">
         <a class="nav-link" id="sample-reports-tab" data-bs-toggle="tab" href="#sample-reports">Sample Progress Comments</a>
     </li>
-    <li class="nav-item">
-        <a class="nav-link" id="scheduling-tab" data-bs-toggle="tab" href="#scheduling">Scheduling</a>
-    </li>
             </ul>
         </div>
         <!-- Main Content -->
@@ -582,97 +579,163 @@ if (current_user_can('tutor')) {
 
         <h5>Your Schedule</h5>
         <?php
-                    // Retrieve the Google Sheet ID from the ACF field
-                    $google_sheet_id = get_field('schedule', 'user_' . get_current_user_id());
-                    ?>
-                    <iframe src="https://docs.google.com/spreadsheets/d/e/<?php echo esc_attr($google_sheet_id); ?>/pubhtml?widget=true&amp;headers=false" 
-                            style="width: 100%; height: 500px; border: none;"></iframe>
+        // Retrieve the Google Sheet ID from the ACF field
+        $google_sheet_id = get_field('schedule', 'user_' . get_current_user_id());
+        ?>
+        <iframe src="https://docs.google.com/spreadsheets/d/e/<?php echo esc_attr($google_sheet_id); ?>/pubhtml?widget=true&amp;headers=false" 
+                style="width: 100%; height: 500px; border: none;"></iframe>
 
-      <!-- <h5>Tutoring Resources</h5>
-      <a href="https://tutorproresources.com" target="_blank">TutorPro Resources</a> -->
-    </div>
+        <h5>Lesson Rescheduling</h5>
+        <p>Use this section to propose lesson reschedules to your students.</p>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <h6>Propose a Lesson Reschedule</h6>
+                
+                <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#newRescheduleModal">
+                    Create New Reschedule Request
+                </button>
+                
+                <!-- Modal for creating a new reschedule request -->
+                <div class="modal fade" id="newRescheduleModal" tabindex="-1" aria-labelledby="newRescheduleModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="newRescheduleModalLabel">Propose Lesson Reschedule</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="rescheduleSuccessMessage" class="alert alert-success" style="display: none;">
+                                    <p>Your reschedule request has been successfully submitted.</p>
+                                </div>
+                                <form id="rescheduleForm" method="post">
+                                    <input type="hidden" name="submit_reschedule_request" value="1">
+                                    <input type="hidden" name="tutor_name" value="<?php echo esc_attr(wp_get_current_user()->display_name); ?>">
+                                    
+                                    <div class="mb-3">
+                                        <label for="student_select" class="form-label">Select Student</label>
+                                        <select name="student_id" id="student_select" class="form-select" required>
+                                            <option value="">--Select student--</option>
+                                            <?php
+                                            $assigned_students = get_user_meta(get_current_user_id(), 'assigned_students', true);
+                                            $student_ids = !empty($assigned_students) ? explode(',', $assigned_students) : array();
 
-    <!-- Scheduling Tab -->
-    <div class="tab-pane fade" id="scheduling" role="tabpanel" aria-labelledby="scheduling-tab">
-        <h5>Scheduling Communications</h5>
-        <p>Communicate with your students' parents about their lesson schedule here.</p>
-           <?php
-    // Get the IDs of the students assigned to the current user.
-    $assigned_students = get_user_meta(get_current_user_id(), 'assigned_students', true);
-
-    // If the current user has students assigned to them, display them.
-    if (!empty($assigned_students)) {
-        // Convert the string of student IDs into an array.
-        $student_ids = explode(',', $assigned_students);
-
-        echo '<div class="accordion" id="studentAccordion">'; // Start accordion container
-        $counter = 1;
-        // Loop through the array of student IDs.
-        foreach ($student_ids as $student_id) {
-          // Get the user data of the student.
-          $student = get_userdata($student_id);
-		$year = get_field('year', 'user_' . $student_id);  // Fetch the year for each student
-
-      
-          // Display the student's name as accordion header.
-          echo '<div class="accordion-item">';
-          echo '<h2 class="accordion-header" id="heading' . $counter . '">';
-          echo '<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse' . $counter . '" aria-expanded="true" aria-controls="collapse' . $counter . '">';
-          echo $student->display_name . ' - Year ' . $year; // Display year from ACF field
-          echo '</button>';
-          echo '</h2>';
-          echo '<div id="collapse' . $counter . '" class="accordion-collapse collapse" aria-labelledby="heading' . $counter . '" data-bs-parent="#studentAccordion">';
-          echo '<div class="accordion-body">';
-          
-          echo '<button type="button" style="background-color: white; color: black;" data-bs-toggle="modal" data-bs-target="#editScheduleModal">Propose lesson reschedule</button>';
-          
-          // Modal for proposing lesson reschedule
-          echo '<div class="modal fade" id="editScheduleModal" tabindex="-1" aria-labelledby="editScheduleModalLabel" aria-hidden="true">';
-          echo '  <div class="modal-dialog">';
-          echo '    <div class="modal-content">';
-          echo '      <div class="modal-header">';
-          echo '        <h5 class="modal-title" id="editScheduleModalLabel">Propose Lesson Reschedule</h5>';
-          echo '        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>';
-          echo '      </div>';
-          echo '      <div class="modal-body">';
-          echo '        <div id="rescheduleSuccessMessage" class="alert alert-success" style="display: none;">';
-          echo '          <p>Your reschedule request has been successfully submitted.</p>';
-          echo '        </div>';
-          echo '        <form id="rescheduleForm" method="post">';
-          echo '          <input type="hidden" name="submit_reschedule_request" value="1">';
-          echo '          <input type="hidden" name="tutor_name" value="' . esc_attr(wp_get_current_user()->display_name) . '">';
-          echo '          <input type="hidden" name="student_id" value="' . esc_attr($student_id) . '">';
-          echo '          <div class="mb-3">';
-          echo '            <label for="newDate" class="form-label">New Date</label>';
-          echo '            <input type="date" class="form-control" id="newDate" name="new_date" required>';
-          echo '          </div>';
-          echo '          <div class="mb-3">';
-          echo '            <label for="reason" class="form-label">Reason for Reschedule</label>';
-          echo '            <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>';
-          echo '          </div>';
-          echo '          <div class="modal-footer">';
-          echo '            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
-          echo '            <button type="button" class="btn btn-primary" id="submitReschedule">Submit</button>';
-          echo '          </div>';
-          echo '        </form>';
-          echo '      </div>';
-          echo '    </div>';
-          echo '  </div>';
-          echo '</div>';
-          
-          echo '</div>';
-          echo '</div>';
-          echo '</div>';
-      
-          $counter++;
-      }
-
-        echo '</div>'; // End accordion container
-    } else {
-        // If the current user doesn't have any students assigned to them, display a message.
-        echo "<p>You don't have any students assigned to you.</p>";
-    }
-    ?>
+                                            foreach ($student_ids as $student_id) {
+                                                $student = get_userdata($student_id);
+                                                $year = get_field('year', 'user_' . $student_id);
+                                                echo '<option value="' . esc_attr($student_id) . '">' . esc_html($student->display_name) . ' - Year ' . esc_html($year) . '</option>';
+                                            }
+                                            ?>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="original_date" class="form-label">Original Lesson Date</label>
+                                        <input type="date" class="form-control" id="original_date" name="original_date" required>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="original_time" class="form-label">Original Lesson Time</label>
+                                        <input type="time" class="form-control" id="original_time" name="original_time" required>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="new_date" class="form-label">Proposed New Date</label>
+                                        <input type="date" class="form-control" id="new_date" name="new_date" required>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="new_time" class="form-label">Proposed New Time</label>
+                                        <input type="time" class="form-control" id="new_time" name="new_time" required>
+                                    </div>
+                                    
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        <button type="button" class="btn btn-primary" id="submitReschedule">Submit</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Toggle button for recent reschedule requests -->
+                <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+                    <h6 class="mb-0">Recent Reschedule Requests</h6>
+                    <button class="btn btn-sm btn-outline-secondary" id="toggleRescheduleHistory">
+                        <span class="show-text">Show</span>
+                        <span class="hide-text d-none">Hide</span>
+                        <i class="fas fa-chevron-down show-icon"></i>
+                        <i class="fas fa-chevron-up hide-icon d-none"></i>
+                    </button>
+                </div>
+                
+                <!-- Recent reschedule requests (initially hidden) -->
+                <div class="table-responsive" id="rescheduleHistoryTable" style="display: none;">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Original Date/Time</th>
+                                <th>Proposed Date/Time</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php
+                            // Query for reschedule requests made by this tutor
+                            $args = array(
+                                'post_type'      => 'progress_report',
+                                'posts_per_page' => 5,
+                                'meta_query'     => array(
+                                    'relation' => 'AND',
+                                    array(
+                                        'key'     => 'tutor_name',
+                                        'value'   => wp_get_current_user()->display_name,
+                                        'compare' => '=',
+                                    ),
+                                    array(
+                                        'key'     => 'request_type',
+                                        'value'   => 'reschedule',
+                                        'compare' => '=',
+                                    )
+                                )
+                            );
+                            
+                            $reschedule_requests = get_posts($args);
+                            
+                            if (!empty($reschedule_requests)) {
+                                foreach ($reschedule_requests as $request) {
+                                    $request_id = $request->ID;
+                                    $student_id = get_post_meta($request_id, 'student_id', true);
+                                    $student = get_userdata($student_id);
+                                    $student_name = $student ? $student->display_name : 'Unknown Student';
+                                    
+                                    $original_date = get_post_meta($request_id, 'original_date', true);
+                                    $original_time = get_post_meta($request_id, 'original_time', true);
+                                    $new_date = get_post_meta($request_id, 'new_date', true);
+                                    $new_time = get_post_meta($request_id, 'new_time', true);
+                                    
+                                    // Format dates for display
+                                    $original_datetime = $original_date ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
+                                    $new_datetime = $new_date ? date('M j, Y', strtotime($new_date)) . ' at ' . date('g:i A', strtotime($new_time)) : 'N/A';
+                                    
+                                    echo '<tr>';
+                                    echo '<td>' . esc_html($student_name) . '</td>';
+                                    echo '<td>' . esc_html($original_datetime) . '</td>';
+                                    echo '<td>' . esc_html($new_datetime) . '</td>';
+                                    echo '<td><span class="badge bg-warning">Pending</span></td>';
+                                    echo '</tr>';
+                                }
+                            } else {
+                                echo '<tr><td colspan="4" class="text-center">No reschedule requests found.</td></tr>';
+                            }
+                            ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     </div>           
@@ -709,7 +772,7 @@ document.getElementById('add-resource').addEventListener('click', function() {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Get the submit button
+    // Handle reschedule request submission
     const submitButton = document.getElementById('submitReschedule');
     if (submitButton) {
         submitButton.addEventListener('click', function() {
@@ -729,8 +792,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     successMessage.style.display = 'block';
                     
                     // Clear form fields
-                    document.getElementById('newDate').value = '';
-                    document.getElementById('reason').value = '';
+                    document.getElementById('student_select').value = '';
+                    document.getElementById('original_date').value = '';
+                    document.getElementById('original_time').value = '';
+                    document.getElementById('new_date').value = '';
+                    document.getElementById('new_time').value = '';
                     
                     // Hide the form
                     form.style.display = 'none';
@@ -738,14 +804,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Set a timeout to close the modal after 3 seconds
                     setTimeout(function() {
                         // Close the modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('editScheduleModal'));
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('newRescheduleModal'));
                         modal.hide();
                         
-                        // Reset the form and hide success message for next time
-                        setTimeout(function() {
-                            form.style.display = 'block';
-                            successMessage.style.display = 'none';
-                        }, 500);
+                        // Reload the page to show the updated list of reschedule requests
+                        window.location.reload();
                     }, 3000);
                 } else {
                     alert('There was an error submitting your request. Please try again.');
@@ -755,6 +818,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error:', error);
                 alert('There was an error submitting your request. Please try again.');
             });
+        });
+    }
+    
+    // Handle toggle for reschedule history
+    const toggleButton = document.getElementById('toggleRescheduleHistory');
+    if (toggleButton) {
+        toggleButton.addEventListener('click', function() {
+            const historyTable = document.getElementById('rescheduleHistoryTable');
+            const showText = this.querySelector('.show-text');
+            const hideText = this.querySelector('.hide-text');
+            const showIcon = this.querySelector('.show-icon');
+            const hideIcon = this.querySelector('.hide-icon');
+            
+            if (historyTable.style.display === 'none') {
+                // Show the table
+                historyTable.style.display = 'block';
+                showText.classList.add('d-none');
+                hideText.classList.remove('d-none');
+                showIcon.classList.add('d-none');
+                hideIcon.classList.remove('d-none');
+            } else {
+                // Hide the table
+                historyTable.style.display = 'none';
+                showText.classList.remove('d-none');
+                hideText.classList.add('d-none');
+                showIcon.classList.remove('d-none');
+                hideIcon.classList.add('d-none');
+            }
         });
     }
 });

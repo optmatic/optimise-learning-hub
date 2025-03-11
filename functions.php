@@ -648,7 +648,12 @@ function process_tutor_dashboard_form() {
         $student_id = intval($_POST['student_id']);
         $student = get_userdata($student_id);
         $student_name = $student ? $student->display_name : 'Unknown Student';
+        
+        // Get original and new date/time
+        $original_date = sanitize_text_field($_POST['original_date']);
+        $original_time = sanitize_text_field($_POST['original_time']);
         $new_date = sanitize_text_field($_POST['new_date']);
+        $new_time = sanitize_text_field($_POST['new_time']);
         $reason = sanitize_textarea_field($_POST['reason']);
         
         // Create a new progress report post for the reschedule request
@@ -666,7 +671,10 @@ function process_tutor_dashboard_form() {
             update_post_meta($post_id, 'tutor_name', $tutor_name);
             update_post_meta($post_id, 'student_id', $student_id);
             update_post_meta($post_id, 'request_type', 'reschedule');
+            update_post_meta($post_id, 'original_date', $original_date);
+            update_post_meta($post_id, 'original_time', $original_time);
             update_post_meta($post_id, 'new_date', $new_date);
+            update_post_meta($post_id, 'new_time', $new_time);
             update_post_meta($post_id, 'reason', $reason);
             
             // Set a global message to display to the user
