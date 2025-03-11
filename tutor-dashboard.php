@@ -659,7 +659,7 @@ if (current_user_can('tutor')) {
                     </div>
                 </div>
                 
-                <!-- Toggle button for recent reschedule requests -->
+                <!-- Recent reschedule requests -->
                 <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
                     <h6 class="mb-0">Recent Reschedule Requests</h6>
                     <button class="btn btn-sm btn-outline-secondary" id="toggleRescheduleHistory">
@@ -686,7 +686,7 @@ if (current_user_can('tutor')) {
                             // Query for reschedule requests made by this tutor
                             $args = array(
                                 'post_type'      => 'progress_report',
-                                'posts_per_page' => 5,
+                                'posts_per_page' => -1,
                                 'meta_query'     => array(
                                     'relation' => 'AND',
                                     array(
@@ -699,7 +699,9 @@ if (current_user_can('tutor')) {
                                         'value'   => 'reschedule',
                                         'compare' => '=',
                                     )
-                                )
+                                ),
+                                'order'          => 'DESC',
+                                'orderby'        => 'date'
                             );
                             
                             $reschedule_requests = get_posts($args);
@@ -715,16 +717,27 @@ if (current_user_can('tutor')) {
                                     $original_time = get_post_meta($request_id, 'original_time', true);
                                     $new_date = get_post_meta($request_id, 'new_date', true);
                                     $new_time = get_post_meta($request_id, 'new_time', true);
+                                    $status = get_post_meta($request_id, 'status', true);
                                     
                                     // Format dates for display
                                     $original_datetime = $original_date ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
                                     $new_datetime = $new_date ? date('M j, Y', strtotime($new_date)) . ' at ' . date('g:i A', strtotime($new_time)) : 'N/A';
                                     
+                                    // Set status badge
+                                    $status_badge = '';
+                                    if ($status === 'confirmed') {
+                                        $status_badge = '<span class="badge bg-success">Confirmed</span>';
+                                    } elseif ($status === 'unavailable') {
+                                        $status_badge = '<span class="badge bg-danger">Unavailable</span>';
+                                    } else {
+                                        $status_badge = '<span class="badge bg-warning">Pending</span>';
+                                    }
+                                    
                                     echo '<tr>';
                                     echo '<td>' . esc_html($student_name) . '</td>';
                                     echo '<td>' . esc_html($original_datetime) . '</td>';
                                     echo '<td>' . esc_html($new_datetime) . '</td>';
-                                    echo '<td><span class="badge bg-warning">Pending</span></td>';
+                                    echo '<td>' . $status_badge . '</td>';
                                     echo '</tr>';
                                 }
                             } else {
@@ -848,5 +861,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Auto-refresh the reschedule history table every 60 seconds
+    function refreshRescheduleHistory() {
+        const historyTable = document.getElementById('rescheduleHistoryTable');
+        if (historyTable && historyTable.style.display !== 'none') {
+            fetch(window.location.href + '?refresh_reschedule=1')
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newTable = doc.getElementById('rescheduleHistoryTable');
+                    if (newTable) {
+                        historyTable.innerHTML = newTable.innerHTML;
+                    }
+                })
+                .catch(error => console.error('Error refreshing reschedule history:', error));
+        }
+    }
+    
+    // Set up auto-refresh interval
+    setInterval(refreshRescheduleHistory, 60000); // Refresh every 60 seconds
 });
 </script>
