@@ -26,7 +26,44 @@ if (current_user_can('tutor')) {
                 
                
                 <li class="nav-item">
-    <a class="nav-link" id="classroom-url-tab" data-bs-toggle="tab" href="#classroom-url">Your Lessons</a>
+    <a class="nav-link position-relative" id="classroom-url-tab" data-bs-toggle="tab" href="#classroom-url">
+        Your Lessons
+        <?php
+        // Count unavailable reschedule requests that need alternatives
+        $unavailable_args = array(
+            'post_type'      => 'progress_report',
+            'posts_per_page' => -1,
+            'meta_query'     => array(
+                'relation' => 'AND',
+                array(
+                    'key'     => 'tutor_name',
+                    'value'   => wp_get_current_user()->display_name,
+                    'compare' => '=',
+                ),
+                array(
+                    'key'     => 'request_type',
+                    'value'   => 'reschedule',
+                    'compare' => '=',
+                ),
+                array(
+                    'key'     => 'status',
+                    'value'   => 'unavailable',
+                    'compare' => '=',
+                ),
+                array(
+                    'key'     => 'alternatives_provided',
+                    'compare' => 'NOT EXISTS',
+                )
+            )
+        );
+        
+        $unavailable_count = count(get_posts($unavailable_args));
+        ?>
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+            <?php echo $unavailable_count; ?>
+            <span class="visually-hidden">unconfirmed requests</span>
+        </span>
+    </a>
   </li>
             
   <li class="nav-item">
@@ -404,7 +441,7 @@ if (current_user_can('tutor')) {
   <li>(Student's name) consistently demonstrates exceptional initiative in seeking additional practice and materials to supplement our online lessons.</li>
   <li>I am impressed with (Student's name)'s ability to express themselves clearly and concisely during our online sessions.</li>
   <li>Outstanding progress is evident in (Student's name)'s ability to think creatively and generate innovative ideas during our individualised online lessons.</li>
-  <li>(Student's name) consistently exhibits excellent research skills and uses reliable sources to enhance their online learning experience.</li>
+  <li>(Student's name) consistently exhibits exceptional research skills and uses reliable sources to enhance their online learning experience.</li>
   <li>I am pleased to see (Student's name) actively engage in self-reflection, as they identify areas for improvement.</li>
   <li>(Student's name) consistently demonstrates exceptional focus and concentration, maximising their learning potential during our individualised online lessons.</li>
   <li>I am impressed with (Student's name)'s ability to apply their knowledge and skills in different contexts, showcasing their understandings in our online sessions.</li>
@@ -747,6 +784,166 @@ if (current_user_can('tutor')) {
                         </tbody>
                     </table>
                 </div>
+                
+                <?php
+                // Count unavailable reschedule requests that need alternatives
+                $unavailable_args = array(
+                    'post_type'      => 'progress_report',
+                    'posts_per_page' => -1,
+                    'meta_query'     => array(
+                        'relation' => 'AND',
+                        array(
+                            'key'     => 'tutor_name',
+                            'value'   => wp_get_current_user()->display_name,
+                            'compare' => '=',
+                        ),
+                        array(
+                            'key'     => 'request_type',
+                            'value'   => 'reschedule',
+                            'compare' => '=',
+                        ),
+                        array(
+                            'key'     => 'status',
+                            'value'   => 'unavailable',
+                            'compare' => '=',
+                        ),
+                        array(
+                            'key'     => 'alternatives_provided',
+                            'compare' => 'NOT EXISTS',
+                        )
+                    )
+                );
+                
+                $unavailable_requests = get_posts($unavailable_args);
+                $unavailable_count = count($unavailable_requests);
+                ?>
+                
+                <!-- Unconfirmed Requests Section with Notification Badge -->
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0 d-flex align-items-center">
+                            Unconfirmed Requests
+                            <?php if ($unavailable_count > 0): ?>
+                            <span class="badge bg-danger rounded-pill ms-2"><?php echo $unavailable_count; ?></span>
+                            <?php endif; ?>
+                        </h6>
+                        <button class="btn btn-sm btn-outline-secondary" id="toggleUnconfirmedRequests">
+                            <span class="show-text">Show</span>
+                            <span class="hide-text d-none">Hide</span>
+                            <i class="fas fa-chevron-down show-icon"></i>
+                            <i class="fas fa-chevron-up hide-icon d-none"></i>
+                        </button>
+                    </div>
+                    
+                    <div id="unconfirmedRequestsSection" style="display: none;">
+                        <?php if (!empty($unavailable_requests)): ?>
+                        <p>The following reschedule requests were marked as unavailable by students. Please provide alternative times.</p>
+                        
+                        <div class="accordion" id="unavailableAccordion">
+                            <?php 
+                            $counter = 1;
+                            foreach ($unavailable_requests as $request): 
+                                $request_id = $request->ID;
+                                $student_id = get_post_meta($request_id, 'student_id', true);
+                                $student = get_userdata($student_id);
+                                $student_name = $student ? $student->display_name : 'Unknown Student';
+                                
+                                $original_date = get_post_meta($request_id, 'original_date', true);
+                                $original_time = get_post_meta($request_id, 'original_time', true);
+                                $new_date = get_post_meta($request_id, 'new_date', true);
+                                $new_time = get_post_meta($request_id, 'new_time', true);
+                                
+                                // Format dates for display
+                                $original_datetime = $original_date ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
+                                $new_datetime = $new_date ? date('M j, Y', strtotime($new_date)) . ' at ' . date('g:i A', strtotime($new_time)) : 'N/A';
+                            ?>
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="unavailableHeading<?php echo $counter; ?>">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#unavailableCollapse<?php echo $counter; ?>" aria-expanded="false" aria-controls="unavailableCollapse<?php echo $counter; ?>">
+                                        <span class="badge bg-danger me-2">Unavailable</span> <?php echo esc_html($student_name); ?> - <?php echo esc_html($original_datetime); ?>
+                                    </button>
+                                </h2>
+                                
+                                <div id="unavailableCollapse<?php echo $counter; ?>" class="accordion-collapse collapse" aria-labelledby="unavailableHeading<?php echo $counter; ?>" data-bs-parent="#unavailableAccordion">
+                                    <div class="accordion-body">
+                                        <div class="card mb-3">
+                                            <div class="card-body">
+                                                <p><strong>Student:</strong> <?php echo esc_html($student_name); ?></p>
+                                                <p><strong>Original Lesson:</strong> <?php echo esc_html($original_datetime); ?></p>
+                                                <p><strong>Proposed Time (Unavailable):</strong> <?php echo esc_html($new_datetime); ?></p>
+                                                
+                                                <form method="post" class="mt-3" id="alternativeForm<?php echo $request_id; ?>">
+                                                    <input type="hidden" name="provide_alternatives" value="1">
+                                                    <input type="hidden" name="request_id" value="<?php echo $request_id; ?>">
+                                                    <input type="hidden" name="student_id" value="<?php echo $student_id; ?>">
+                                                    
+                                                    <h6 class="mt-4">Provide Alternative Times</h6>
+                                                    <p class="text-muted">Please provide up to 3 alternative times for this lesson.</p>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Alternative 1</label>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <input type="date" class="form-control" name="alt1_date" required>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <input type="time" class="form-control" name="alt1_time" required>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Alternative 2</label>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <input type="date" class="form-control" name="alt2_date">
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <input type="time" class="form-control" name="alt2_time">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Alternative 3</label>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <input type="date" class="form-control" name="alt3_date">
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <input type="time" class="form-control" name="alt3_time">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Message to Student</label>
+                                                        <textarea class="form-control" name="message" rows="3" placeholder="Optional message to the student"></textarea>
+                                                    </div>
+                                                    
+                                                    <div id="alternativeSuccess<?php echo $request_id; ?>" class="alert alert-success" style="display: none;">
+                                                        <p>Alternative times have been successfully submitted.</p>
+                                                    </div>
+                                                    
+                                                    <button type="submit" class="btn btn-primary">Submit Alternative Times</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php 
+                                $counter++;
+                            endforeach; 
+                            ?>
+                        </div>
+                        <?php else: ?>
+                        <div class="alert alert-info">
+                            <p>No unconfirmed requests requiring alternative times.</p>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -882,5 +1079,178 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Set up auto-refresh interval
     setInterval(refreshRescheduleHistory, 60000); // Refresh every 60 seconds
+
+    // Handle toggle for unconfirmed requests
+    const toggleUnconfirmedButton = document.getElementById('toggleUnconfirmedRequests');
+    if (toggleUnconfirmedButton) {
+        toggleUnconfirmedButton.addEventListener('click', function() {
+            const unconfirmedSection = document.getElementById('unconfirmedRequestsSection');
+            const showText = this.querySelector('.show-text');
+            const hideText = this.querySelector('.hide-text');
+            const showIcon = this.querySelector('.show-icon');
+            const hideIcon = this.querySelector('.hide-icon');
+            
+            if (unconfirmedSection.style.display === 'none') {
+                // Show the section
+                unconfirmedSection.style.display = 'block';
+                showText.classList.add('d-none');
+                hideText.classList.remove('d-none');
+                showIcon.classList.add('d-none');
+                hideIcon.classList.remove('d-none');
+            } else {
+                // Hide the section
+                unconfirmedSection.style.display = 'none';
+                showText.classList.remove('d-none');
+                hideText.classList.add('d-none');
+                showIcon.classList.remove('d-none');
+                hideIcon.classList.add('d-none');
+            }
+        });
+    }
+
+    // Handle alternative times form submissions
+    document.querySelectorAll('form[id^="alternativeForm"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const requestId = this.querySelector('input[name="request_id"]').value;
+            const successMessage = document.getElementById('alternativeSuccess' + requestId);
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Show success message
+                    successMessage.style.display = 'block';
+                    
+                    // Hide the form
+                    this.querySelectorAll('input, textarea, button').forEach(el => {
+                        el.disabled = true;
+                    });
+                    
+                    // Reload the page after 2 seconds to update the UI
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    alert('There was an error submitting your alternative times. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('There was an error submitting your alternative times. Please try again.');
+            });
+        });
+    });
+
+    // Auto-refresh the unconfirmed requests section every 60 seconds
+    function refreshUnconfirmedRequests() {
+        const unconfirmedSection = document.getElementById('unconfirmedRequestsSection');
+        if (unconfirmedSection && unconfirmedSection.style.display !== 'none') {
+            fetch(window.location.href + '?refresh_unconfirmed=1')
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newSection = doc.getElementById('unconfirmedRequestsSection');
+                    if (newSection) {
+                        unconfirmedSection.innerHTML = newSection.innerHTML;
+                    }
+                })
+                .catch(error => console.error('Error refreshing unconfirmed requests:', error));
+        }
+    }
+
+    // Set up auto-refresh interval for unconfirmed requests
+    setInterval(refreshUnconfirmedRequests, 60000); // Refresh every 60 seconds
 });
 </script>
+
+<?php
+// Process alternative times submission
+if (isset($_POST['provide_alternatives']) && isset($_POST['request_id'])) {
+    $request_id = intval($_POST['request_id']);
+    $student_id = intval($_POST['student_id']);
+    
+    // Get alternative times
+    $alternatives = array();
+    
+    if (!empty($_POST['alt1_date']) && !empty($_POST['alt1_time'])) {
+        $alternatives[] = array(
+            'date' => sanitize_text_field($_POST['alt1_date']),
+            'time' => sanitize_text_field($_POST['alt1_time'])
+        );
+    }
+    
+    if (!empty($_POST['alt2_date']) && !empty($_POST['alt2_time'])) {
+        $alternatives[] = array(
+            'date' => sanitize_text_field($_POST['alt2_date']),
+            'time' => sanitize_text_field($_POST['alt2_time'])
+        );
+    }
+    
+    if (!empty($_POST['alt3_date']) && !empty($_POST['alt3_time'])) {
+        $alternatives[] = array(
+            'date' => sanitize_text_field($_POST['alt3_date']),
+            'time' => sanitize_text_field($_POST['alt3_time'])
+        );
+    }
+    
+    $message = !empty($_POST['message']) ? sanitize_textarea_field($_POST['message']) : '';
+    
+    // Create a new reschedule request with alternatives
+    $new_request = array(
+        'post_title'   => 'Alternative Reschedule Request - ' . wp_get_current_user()->display_name,
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
+    
+    $new_request_id = wp_insert_post($new_request);
+    
+    if (!is_wp_error($new_request_id)) {
+        // Save the request details
+        update_post_meta($new_request_id, 'tutor_name', wp_get_current_user()->display_name);
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'request_type', 'reschedule_alternatives');
+        update_post_meta($new_request_id, 'original_request_id', $request_id);
+        update_post_meta($new_request_id, 'alternatives', $alternatives);
+        update_post_meta($new_request_id, 'message', $message);
+        update_post_meta($new_request_id, 'status', 'pending');
+        
+        // Mark the original request as having alternatives provided
+        update_post_meta($request_id, 'alternatives_provided', '1');
+        
+        // Set a global message to display to the user
+        global $submission_message;
+        $submission_message = 'Alternative times have been successfully submitted.';
+    } else {
+        global $submission_message;
+        $submission_message = 'Error: ' . $new_request_id->get_error_message();
+    }
+}
+?>
+
+<style>
+    /* Add this to the existing style section or create a new one */
+    .nav-link .badge {
+        font-size: 0.65rem;
+        transform: translate(-50%, -30%) !important;
+    }
+    
+    /* Style for the unconfirmed requests section */
+    #unconfirmedRequestsSection {
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        padding: 1rem;
+        margin-top: 0.5rem;
+    }
+    
+    /* Make the badge more visible */
+    .badge.bg-danger {
+        background-color: #dc3545 !important;
+    }
+</style>

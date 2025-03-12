@@ -47,6 +47,54 @@ if (isset($_POST['mark_viewed']) && $_POST['mark_viewed'] === '1') {
         exit;
     }
 }
+
+// Process alternative time selection
+if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
+    $request_id = intval($_POST['request_id']);
+    $selected_alternative = intval($_POST['selected_alternative']);
+    
+    // Update the request status
+    update_post_meta($request_id, 'status', 'confirmed');
+    update_post_meta($request_id, 'selected_alternative', $selected_alternative);
+    
+    // Get the alternatives
+    $alternatives = get_post_meta($request_id, 'alternatives', true);
+    $selected = $alternatives[$selected_alternative];
+    
+    // Get the original request ID
+    $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+    
+    // Create a new confirmed reschedule request
+    $new_request = array(
+        'post_title'   => 'Confirmed Reschedule Request',
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
+    
+    $new_request_id = wp_insert_post($new_request);
+    
+    if (!is_wp_error($new_request_id)) {
+        // Copy over the original details
+        $student_id = get_post_meta($request_id, 'student_id', true);
+        $tutor_name = get_post_meta($request_id, 'tutor_name', true);
+        $original_date = get_post_meta($original_request_id, 'original_date', true);
+        $original_time = get_post_meta($original_request_id, 'original_time', true);
+        
+        // Save the request details
+        update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'request_type', 'reschedule');
+        update_post_meta($new_request_id, 'original_date', $original_date);
+        update_post_meta($new_request_id, 'original_time', $original_time);
+        update_post_meta($new_request_id, 'new_date', $selected['date']);
+        update_post_meta($new_request_id, 'new_time', $selected['time']);
+        update_post_meta($new_request_id, 'status', 'confirmed');
+        
+        // Show confirmation message
+        echo '<div class="alert alert-success">Your selection has been confirmed.</div>';
+    }
+}
 ?>
 
 <div class="container mt-4">
@@ -784,6 +832,143 @@ if (isset($_POST['mark_viewed']) && $_POST['mark_viewed'] === '1') {
                         echo '</div>'; // End card
                     } else {
                         echo '<div class="alert alert-info">No reschedule requests found.</div>';
+                    }
+                    ?>
+
+                    <!-- Alternative Reschedule Requests -->
+                    <?php
+                    $alternative_args = array(
+                        'post_type'      => 'progress_report',
+                        'posts_per_page' => -1,
+                        'meta_query'     => array(
+                            'relation' => 'AND',
+                            array(
+                                'key'     => 'student_id',
+                                'value'   => get_current_user_id(),
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'request_type',
+                                'value'   => 'reschedule_alternatives',
+                                'compare' => '=',
+                            )
+                        ),
+                        'order'          => 'DESC',
+                        'orderby'        => 'date'
+                    );
+
+                    $alternative_requests = get_posts($alternative_args);
+
+                    if (!empty($alternative_requests)) {
+                        echo '<div class="card mb-4 mt-4">';
+                        echo '<div class="card-header bg-primary text-white">Alternative Lesson Times</div>';
+                        echo '<div class="card-body">';
+                        echo '<p>Your tutor has provided alternative times for lessons you were unavailable for. Please select one of the options below:</p>';
+                        
+                        echo '<div class="accordion" id="alternativeAccordion">';
+                        $counter = 1;
+                        
+                        foreach ($alternative_requests as $request) {
+                            $request_id = $request->ID;
+                            $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+                            $tutor_name = get_post_meta($request_id, 'tutor_name', true);
+                            $alternatives = get_post_meta($request_id, 'alternatives', true);
+                            $message = get_post_meta($request_id, 'message', true);
+                            $status = get_post_meta($request_id, 'status', true);
+                            $request_date = get_the_date('F j, Y', $request_id);
+                            
+                            // Get original request details
+                            $original_date = get_post_meta($original_request_id, 'original_date', true);
+                            $original_time = get_post_meta($original_request_id, 'original_time', true);
+                            
+                            // Format the original date for display
+                            $formatted_original_date = !empty($original_date) ? date('l, jS \of F, Y', strtotime($original_date)) : 'N/A';
+                            $formatted_original_time = !empty($original_time) ? date('g:i A', strtotime($original_time)) : '';
+                            
+                            // Set status badge
+                            $status_badge = '';
+                            if ($status === 'confirmed') {
+                                $status_badge = '<span class="badge bg-success">Confirmed</span>';
+                            } else {
+                                $status_badge = '<span class="badge bg-warning">Pending</span>';
+                            }
+                            
+                            echo '<div class="accordion-item">';
+                            echo '<h2 class="accordion-header" id="alternativeHeading' . $counter . '">';
+                            echo '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#alternativeCollapse' . $counter . '" aria-expanded="false" aria-controls="alternativeCollapse' . $counter . '">';
+                            echo 'Alternative Times - ' . $request_date . ' ' . $status_badge;
+                            echo '</button>';
+                            echo '</h2>';
+                            
+                            echo '<div id="alternativeCollapse' . $counter . '" class="accordion-collapse collapse" aria-labelledby="alternativeHeading' . $counter . '" data-bs-parent="#alternativeAccordion">';
+                            echo '<div class="accordion-body">';
+                            
+                            echo '<div class="card mb-3">';
+                            echo '<div class="card-header bg-light">Original Lesson</div>';
+                            echo '<div class="card-body">';
+                            echo '<p><strong>Date:</strong> ' . $formatted_original_date . '</p>';
+                            if (!empty($formatted_original_time)) {
+                                echo '<p><strong>Time:</strong> ' . $formatted_original_time . '</p>';
+                            }
+                            echo '<p><strong>Tutor:</strong> ' . esc_html($tutor_name) . '</p>';
+                            echo '</div>';
+                            echo '</div>';
+                            
+                            if (!empty($message)) {
+                                echo '<div class="alert alert-info">';
+                                echo '<p><strong>Message from tutor:</strong> ' . esc_html($message) . '</p>';
+                                echo '</div>';
+                            }
+                            
+                            if ($status !== 'confirmed') {
+                                echo '<form method="post" class="mt-3">';
+                                echo '<input type="hidden" name="select_alternative" value="1">';
+                                echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                
+                                echo '<div class="list-group mb-3">';
+                                foreach ($alternatives as $index => $alternative) {
+                                    $alt_date = $alternative['date'];
+                                    $alt_time = $alternative['time'];
+                                    
+                                    $formatted_alt_date = date('l, jS \of F, Y', strtotime($alt_date));
+                                    $formatted_alt_time = date('g:i A', strtotime($alt_time));
+                                    
+                                    echo '<div class="list-group-item">';
+                                    echo '<div class="form-check">';
+                                    echo '<input class="form-check-input" type="radio" name="selected_alternative" value="' . $index . '" id="alt' . $request_id . '_' . $index . '" ' . ($index === 0 ? 'checked' : '') . '>';
+                                    echo '<label class="form-check-label" for="alt' . $request_id . '_' . $index . '">';
+                                    echo 'Option ' . ($index + 1) . ': ' . $formatted_alt_date . ' at ' . $formatted_alt_time;
+                                    echo '</label>';
+                                    echo '</div>';
+                                    echo '</div>';
+                                }
+                                echo '</div>';
+                                
+                                echo '<button type="submit" class="btn btn-success">Confirm Selected Time</button>';
+                                echo '</form>';
+                            } else {
+                                // Show the confirmed alternative
+                                $selected_index = get_post_meta($request_id, 'selected_alternative', true);
+                                $selected_alternative = $alternatives[$selected_index];
+                                
+                                $formatted_selected_date = date('l, jS \of F, Y', strtotime($selected_alternative['date']));
+                                $formatted_selected_time = date('g:i A', strtotime($selected_alternative['time']));
+                                
+                                echo '<div class="alert alert-success">';
+                                echo '<p><strong>Confirmed Time:</strong> ' . $formatted_selected_date . ' at ' . $formatted_selected_time . '</p>';
+                                echo '</div>';
+                            }
+                            
+                            echo '</div>'; // End accordion-body
+                            echo '</div>'; // End accordion-collapse
+                            echo '</div>'; // End accordion-item
+                            
+                            $counter++;
+                        }
+                        
+                        echo '</div>'; // End accordion
+                        echo '</div>'; // End card-body
+                        echo '</div>'; // End card
                     }
                     ?>
                 </div>
