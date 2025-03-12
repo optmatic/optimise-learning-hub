@@ -1007,8 +1007,7 @@ if (current_user_can('tutor')) {
         ?>
     </div>
 
-    </div>           
-            </div> <!-- This div closes the "tab-content" div -->
+    </div>            </div> <!-- This div closes the "tab-content" div -->
         </div>
 
 <?php
@@ -1225,6 +1224,62 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Set up auto-refresh interval for unconfirmed requests
     setInterval(refreshUnconfirmedRequests, 60000); // Refresh every 60 seconds
+    
+    // Toggle alternatives form when "Unavailable" button is clicked
+    document.querySelectorAll('.toggle-alternatives').forEach(button => {
+        button.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-target');
+            const targetForm = document.getElementById(targetId);
+            
+            if (targetForm.style.display === 'none') {
+                targetForm.style.display = 'block';
+                this.classList.remove('btn-danger');
+                this.classList.add('btn-secondary');
+                this.textContent = 'Hide Alternative Times';
+            } else {
+                targetForm.style.display = 'none';
+                this.classList.remove('btn-secondary');
+                this.classList.add('btn-danger');
+                this.textContent = 'Unavailable';
+            }
+        });
+    });
+    
+    // Handle confirming preferred time
+    document.querySelectorAll('.confirm-preferred-time').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            const requestId = this.getAttribute('data-request-id');
+            const preferredIndex = this.getAttribute('data-index');
+            
+            if (confirm('Are you sure you want to confirm this preferred time?')) {
+                // Create form data
+                const formData = new FormData();
+                formData.append('confirm_preferred_time', '1');
+                formData.append('request_id', requestId);
+                formData.append('preferred_index', preferredIndex);
+                
+                // Submit via fetch
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Reload the page to show the updated status
+                        window.location.reload();
+                    } else {
+                        alert('There was an error confirming the preferred time. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('There was an error confirming the preferred time. Please try again.');
+                });
+            }
+        });
+    });
 });
 </script>
 
@@ -1695,7 +1750,42 @@ function display_tutor_requests_tab() {
                 echo '<p>The student is unavailable for all previously suggested alternative times.</p>';
             }
             
-            // Form to provide new alternative times
+            // Add confirm and unavailable buttons
+            echo '<div class="d-flex gap-2 mb-4">';
+            
+            // Confirm button (for student_reschedule requests with preferred times)
+            if ($request_type == 'student_reschedule' && !empty($preferred_times)) {
+                echo '<div class="dropdown">';
+                echo '<button class="btn btn-success dropdown-toggle" type="button" id="confirmDropdown' . $request_id . '" data-bs-toggle="dropdown" aria-expanded="false">';
+                echo 'Confirm Preferred Time';
+                echo '</button>';
+                echo '<ul class="dropdown-menu" aria-labelledby="confirmDropdown' . $request_id . '">';
+                
+                foreach ($preferred_times as $index => $preferred_time) {
+                    $pref_date = $preferred_time['date'];
+                    $pref_time = $preferred_time['time'];
+                    
+                    $formatted_pref_date = date('D, M j, Y', strtotime($pref_date));
+                    $formatted_pref_time = date('g:i A', strtotime($pref_time));
+                    
+                    echo '<li><a class="dropdown-item confirm-preferred-time" href="#" data-request-id="' . $request_id . '" data-index="' . $index . '">';
+                    echo 'Option ' . ($index + 1) . ': ' . $formatted_pref_date . ' at ' . $formatted_pref_time;
+                    echo '</a></li>';
+                }
+                
+                echo '</ul>';
+                echo '</div>';
+            } else {
+                // For requests without preferred times, show a disabled button
+                echo '<button class="btn btn-success" disabled>Confirm Preferred Time</button>';
+            }
+            
+            // Unavailable button
+            echo '<button class="btn btn-danger toggle-alternatives" data-target="alternatives-form-' . $request_id . '">Unavailable</button>';
+            echo '</div>';
+            
+            // Form to provide new alternative times (initially hidden)
+            echo '<div id="alternatives-form-' . $request_id . '" style="display: none;">';
             echo '<form method="post" class="mt-3">';
             echo '<input type="hidden" name="provide_alternatives" value="1">';
             echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
@@ -1750,6 +1840,7 @@ function display_tutor_requests_tab() {
             
             echo '<button type="submit" class="btn btn-primary">Submit Alternative Times</button>';
             echo '</form>';
+            echo '</div>'; // End alternatives form
             
             echo '</div>'; // End accordion-body
             echo '</div>'; // End accordion-collapse
@@ -1816,6 +1907,71 @@ if (isset($_POST['provide_alternatives']) && $_POST['provide_alternatives'] === 
     } else {
         global $submission_message;
         $submission_message = 'Error: ' . $new_request_id->get_error_message();
+    }
+}
+?>
+
+<?php
+// Add this with the other form handlers
+// Process confirming a preferred time
+if (isset($_POST['confirm_preferred_time']) && $_POST['confirm_preferred_time'] === '1') {
+    $request_id = intval($_POST['request_id']);
+    $preferred_index = intval($_POST['preferred_index']);
+    
+    // Get the request details
+    $student_id = get_post_meta($request_id, 'student_id', true);
+    $tutor_name = get_post_meta($request_id, 'tutor_name', true);
+    $original_date = get_post_meta($request_id, 'original_date', true);
+    $original_time = get_post_meta($request_id, 'original_time', true);
+    $preferred_times = get_post_meta($request_id, 'preferred_times', true);
+    
+    if (!empty($preferred_times) && isset($preferred_times[$preferred_index])) {
+        $selected = $preferred_times[$preferred_index];
+        
+        // Create a new confirmed reschedule request
+        $new_request = array(
+            'post_title'   => 'Confirmed Reschedule Request',
+            'post_content' => '',
+            'post_status'  => 'publish',
+            'post_type'    => 'progress_report',
+        );
+        
+        $new_request_id = wp_insert_post($new_request);
+        
+        if (!is_wp_error($new_request_id)) {
+            // Save the request details
+            update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+            update_post_meta($new_request_id, 'student_id', $student_id);
+            update_post_meta($new_request_id, 'request_type', 'reschedule');
+            update_post_meta($new_request_id, 'original_date', $original_date);
+            update_post_meta($new_request_id, 'original_time', $original_time);
+            update_post_meta($new_request_id, 'new_date', $selected['date']);
+            update_post_meta($new_request_id, 'new_time', $selected['time']);
+            update_post_meta($new_request_id, 'status', 'confirmed');
+            
+            // Mark the original request as confirmed
+            update_post_meta($request_id, 'status', 'confirmed');
+            update_post_meta($request_id, 'selected_preferred_index', $preferred_index);
+            
+            // Set a global message to display to the user
+            global $submission_message;
+            $submission_message = 'Preferred time has been confirmed successfully.';
+            
+            // If this is an AJAX request, return success
+            if (wp_doing_ajax()) {
+                wp_send_json_success();
+                exit;
+            }
+        } else {
+            global $submission_message;
+            $submission_message = 'Error: ' . $new_request_id->get_error_message();
+            
+            // If this is an AJAX request, return error
+            if (wp_doing_ajax()) {
+                wp_send_json_error();
+                exit;
+            }
+        }
     }
 }
 ?>

@@ -778,13 +778,16 @@ if (isset($_POST['submit_student_reschedule_request']) && $_POST['submit_student
                                             <div id="rescheduleRequestSuccessMessage" class="alert alert-success" style="display: none;">
                                                 <p>Your reschedule request has been successfully submitted. Your tutor will be notified.</p>
                                             </div>
+                                            <div id="rescheduleRequestErrorMessage" class="alert alert-danger" style="display: none;">
+                                                <p>Please fill in all required fields (tutor, date, and time).</p>
+                                            </div>
                                             <form id="rescheduleRequestForm" method="post">
                                                 <input type="hidden" name="submit_student_reschedule_request" value="1">
                                                 <input type="hidden" name="student_id" value="<?php echo get_current_user_id(); ?>">
                                                 
                                                 <div class="mb-3">
-                                                    <label for="tutor_select" class="form-label">Select Tutor</label>
-                                                    <?php
+                                                    <label for="tutor_select" class="form-label">Select Tutor <span class="text-danger">*</span></label>
+                    <?php
                                                     // Get the student's assigned tutors
                                                     $current_user_id = get_current_user_id();
                                                     $tutors = array();
@@ -826,17 +829,17 @@ if (isset($_POST['submit_student_reschedule_request']) && $_POST['submit_student
                                                 </div>
                                                 
                                                 <div class="mb-3">
-                                                    <label for="lesson_date" class="form-label">Lesson Date to Reschedule</label>
+                                                    <label for="lesson_date" class="form-label">Lesson Date to Reschedule <span class="text-danger">*</span></label>
                                                     <input type="date" class="form-control" id="lesson_date" name="original_date" required>
                                                 </div>
                                                 
                                                 <div class="mb-3">
-                                                    <label for="lesson_time" class="form-label">Lesson Time</label>
+                                                    <label for="lesson_time" class="form-label">Lesson Time <span class="text-danger">*</span></label>
                                                     <input type="time" class="form-control" id="lesson_time" name="original_time" required>
                                                 </div>
                                                 
                                                 <div class="mb-3">
-                                                    <label for="reason" class="form-label">Reason for Reschedule</label>
+                                                    <label for="reason" class="form-label">Reason for Reschedule <span class="text-danger">*</span></label>
                                                     <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>
                                                 </div>
                                                 
@@ -910,19 +913,19 @@ if (isset($_POST['submit_student_reschedule_request']) && $_POST['submit_student
                             <?php
                             // Get student's reschedule requests
                             $student_requests_args = array(
-                                'post_type'      => 'progress_report',
-                                'posts_per_page' => -1,
-                                'meta_query'     => array(
-                                    'relation' => 'AND',
-                                    array(
-                                        'key'     => 'student_id',
-                                        'value'   => get_current_user_id(),
-                                        'compare' => '=',
-                                    ),
-                                    array(
-                                        'key'     => 'request_type',
+                            'post_type'      => 'progress_report',
+                            'posts_per_page' => -1,
+                            'meta_query'     => array(
+                                'relation' => 'AND',
+                                array(
+                                    'key'     => 'student_id',
+                                    'value'   => get_current_user_id(),
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'request_type',
                                         'value'   => 'student_reschedule',
-                                        'compare' => '=',
+                                    'compare' => '=',
                                     )
                                 ),
                                 'order'          => 'DESC',
@@ -1280,6 +1283,22 @@ document.addEventListener('DOMContentLoaded', function() {
         submitStudentRescheduleButton.addEventListener('click', function() {
             // Get form data
             const form = document.getElementById('rescheduleRequestForm');
+            
+            // Validate required fields
+            const tutorSelect = document.getElementById('tutor_select');
+            const lessonDate = document.getElementById('lesson_date');
+            const lessonTime = document.getElementById('lesson_time');
+            const reason = document.getElementById('reason');
+            const errorMessage = document.getElementById('rescheduleRequestErrorMessage');
+            
+            // Check if required fields are filled
+            if (!tutorSelect.value || !lessonDate.value || !lessonTime.value || !reason.value) {
+                errorMessage.style.display = 'block';
+                return; // Stop form submission
+            } else {
+                errorMessage.style.display = 'none';
+            }
+            
             const formData = new FormData(form);
             
             // Submit the form using fetch
@@ -1307,6 +1326,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Hide the form
                     form.style.display = 'none';
+                    errorMessage.style.display = 'none';
                     
                     // Set a timeout to close the modal after 3 seconds
                     setTimeout(function() {
