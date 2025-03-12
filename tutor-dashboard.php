@@ -1527,7 +1527,7 @@ function add_requests_tab_to_navigation() {
             ),
             array(
                 'key'     => 'request_type',
-                'value'   => array('reschedule_unavailable_all'),
+                'value'   => array('reschedule_unavailable_all', 'student_reschedule'),
                 'compare' => 'IN',
             ),
             array(
@@ -1548,7 +1548,9 @@ function add_requests_tab_to_navigation() {
     
     // Return the tab HTML
     return '<li class="nav-item">
-        <a class="nav-link" id="requests-tab" data-bs-toggle="tab" href="#requests">Requests ' . $notification_badge . '</a>
+        <a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests">
+            Requests ' . $notification_badge . '
+        </a>
     </li>';
 }
 
@@ -1572,7 +1574,7 @@ function display_tutor_requests_tab() {
             ),
             array(
                 'key'     => 'request_type',
-                'value'   => array('reschedule_unavailable_all'),
+                'value'   => array('reschedule_unavailable_all', 'student_reschedule'),
                 'compare' => 'IN',
             ),
             array(
@@ -1611,6 +1613,7 @@ function display_tutor_requests_tab() {
         foreach ($reschedule_requests as $request) {
             $request_id = $request->ID;
             $student_id = get_post_meta($request_id, 'student_id', true);
+            $request_type = get_post_meta($request_id, 'request_type', true);
             $original_request_id = get_post_meta($request_id, 'original_request_id', true);
             $alternatives_request_id = get_post_meta($request_id, 'alternatives_request_id', true);
             $request_date = get_the_date('F j, Y', $request_id);
@@ -1620,17 +1623,32 @@ function display_tutor_requests_tab() {
             $student_name = $student ? $student->display_name : 'Unknown Student';
             
             // Get original lesson details
-            $original_date = get_post_meta($original_request_id, 'original_date', true);
-            $original_time = get_post_meta($original_request_id, 'original_time', true);
+            if ($request_type == 'student_reschedule') {
+                $original_date = get_post_meta($request_id, 'original_date', true);
+                $original_time = get_post_meta($request_id, 'original_time', true);
+                $reason = get_post_meta($request_id, 'reason', true);
+                $preferred_times = get_post_meta($request_id, 'preferred_times', true);
+            } else {
+                $original_date = get_post_meta($original_request_id, 'original_date', true);
+                $original_time = get_post_meta($original_request_id, 'original_time', true);
+            }
             
             // Format the original date for display
             $formatted_original_date = !empty($original_date) ? date('l, jS \of F, Y', strtotime($original_date)) : 'N/A';
             $formatted_original_time = !empty($original_time) ? date('g:i A', strtotime($original_time)) : '';
             
+            // Set request type label
+            $request_type_label = '';
+            if ($request_type == 'student_reschedule') {
+                $request_type_label = '<span class="badge bg-info me-2">Student Request</span>';
+            } else {
+                $request_type_label = '<span class="badge bg-warning me-2">Unavailable for Alternatives</span>';
+            }
+            
             echo '<div class="accordion-item">';
             echo '<h2 class="accordion-header" id="requestHeading' . $counter . '">';
             echo '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#requestCollapse' . $counter . '" aria-expanded="false" aria-controls="requestCollapse' . $counter . '">';
-            echo 'Request from ' . esc_html($student_name) . ' - ' . $request_date;
+            echo $request_type_label . 'Request from ' . esc_html($student_name) . ' - ' . $request_date;
             echo '</button>';
             echo '</h2>';
             
@@ -1645,20 +1663,47 @@ function display_tutor_requests_tab() {
             if (!empty($formatted_original_time)) {
                 echo '<p><strong>Time:</strong> ' . $formatted_original_time . '</p>';
             }
+            
+            // Show reason for student reschedule requests
+            if ($request_type == 'student_reschedule' && !empty($reason)) {
+                echo '<p><strong>Reason for Reschedule:</strong> ' . esc_html($reason) . '</p>';
+            }
             echo '</div>';
             echo '</div>';
             
-            echo '<p>The student is unavailable for all previously suggested alternative times.</p>';
+            // Show preferred times for student reschedule requests
+            if ($request_type == 'student_reschedule' && !empty($preferred_times)) {
+                echo '<div class="card mb-3">';
+                echo '<div class="card-header bg-light">Student\'s Preferred Times</div>';
+                echo '<div class="card-body">';
+                echo '<ul class="list-group">';
+                foreach ($preferred_times as $index => $preferred_time) {
+                    $pref_date = $preferred_time['date'];
+                    $pref_time = $preferred_time['time'];
+                    
+                    $formatted_pref_date = date('l, jS \of F, Y', strtotime($pref_date));
+                    $formatted_pref_time = date('g:i A', strtotime($pref_time));
+                    
+                    echo '<li class="list-group-item">';
+                    echo 'Option ' . ($index + 1) . ': ' . $formatted_pref_date . ' at ' . $formatted_pref_time;
+                    echo '</li>';
+                }
+                echo '</ul>';
+                echo '</div>';
+                echo '</div>';
+            } else if ($request_type == 'reschedule_unavailable_all') {
+                echo '<p>The student is unavailable for all previously suggested alternative times.</p>';
+            }
             
             // Form to provide new alternative times
             echo '<form method="post" class="mt-3">';
             echo '<input type="hidden" name="provide_alternatives" value="1">';
             echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
             echo '<input type="hidden" name="student_id" value="' . $student_id . '">';
-            echo '<input type="hidden" name="original_request_id" value="' . $original_request_id . '">';
+            echo '<input type="hidden" name="original_request_id" value="' . ($request_type == 'student_reschedule' ? $request_id : $original_request_id) . '">';
             
             echo '<div class="mb-3">';
-            echo '<label class="form-label"><strong>Provide New Alternative Times:</strong></label>';
+            echo '<label class="form-label"><strong>Provide Alternative Times:</strong></label>';
             
             // Alternative 1
             echo '<div class="row mb-2">';
@@ -1728,6 +1773,9 @@ if (isset($_POST['provide_alternatives']) && $_POST['provide_alternatives'] === 
     $original_request_id = intval($_POST['original_request_id']);
     $message = sanitize_textarea_field($_POST['message']);
     
+    // Get the request type
+    $request_type = get_post_meta($request_id, 'request_type', true);
+    
     // Collect the alternatives
     $alternatives = array();
     for ($i = 0; $i < 3; $i++) {
@@ -1759,7 +1807,7 @@ if (isset($_POST['provide_alternatives']) && $_POST['provide_alternatives'] === 
         update_post_meta($new_request_id, 'message', $message);
         update_post_meta($new_request_id, 'status', 'pending');
         
-        // Mark the original unavailable_all request as handled
+        // Mark the original request as handled
         update_post_meta($request_id, 'status', 'handled');
         
         // Set a global message to display to the user
