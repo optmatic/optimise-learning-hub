@@ -95,6 +95,44 @@ if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
         echo '<div class="alert alert-success">Your selection has been confirmed.</div>';
     }
 }
+
+// Process "Unavailable for All" selection
+if (isset($_POST['unavailable_all']) && isset($_POST['request_id'])) {
+    $request_id = intval($_POST['request_id']);
+    
+    // Update the request status
+    update_post_meta($request_id, 'status', 'unavailable');
+    
+    // Get the original request ID
+    $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+    
+    // Create a notification for the tutor
+    $new_request = array(
+        'post_title'   => 'Student Unavailable for All Alternatives',
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
+    
+    $new_request_id = wp_insert_post($new_request);
+    
+    if (!is_wp_error($new_request_id)) {
+        // Copy over the original details
+        $student_id = get_post_meta($request_id, 'student_id', true);
+        $tutor_name = get_post_meta($request_id, 'tutor_name', true);
+        
+        // Save the request details
+        update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'request_type', 'reschedule_unavailable_all');
+        update_post_meta($new_request_id, 'original_request_id', $original_request_id);
+        update_post_meta($new_request_id, 'alternatives_request_id', $request_id);
+        update_post_meta($new_request_id, 'status', 'pending');
+        
+        // Show confirmation message
+        echo '<div class="alert alert-info">You have marked yourself as unavailable for all alternative times. Your tutor will be notified.</div>';
+    }
+}
 ?>
 
 <div class="container mt-4">
@@ -178,6 +216,36 @@ if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
             );
             $pending_count = count(get_posts($pending_args));
             
+            // Count pending alternative reschedule requests
+            $alternative_args = array(
+                'post_type'      => 'progress_report',
+                'posts_per_page' => -1,
+                'meta_query'     => array(
+                    'relation' => 'AND',
+                    array(
+                        'key'     => 'student_id',
+                        'value'   => get_current_user_id(),
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'request_type',
+                        'value'   => 'reschedule_alternatives',
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'status',
+                        'value'   => 'pending',
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'viewed_by_student',
+                        'compare' => 'NOT EXISTS',
+                    )
+                )
+            );
+
+            $alternative_count = count(get_posts($alternative_args));
+            
             // Create notification badges
             $schedule_notification = $confirmed_count > 0 ? '<span class="badge rounded-pill bg-danger">' . $confirmed_count . '</span>' : '';
             $comms_notification = $pending_count > 0 ? '<span class="badge rounded-pill bg-danger">' . $pending_count . '</span>' : '';
@@ -199,7 +267,15 @@ if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
                     <a class="nav-link" id="my-progress-tab" data-bs-toggle="tab" href="#my-progress">Your Learning Overviews</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" id="tutor-comms-tab" data-bs-toggle="tab" href="#tutor-comms">Tutor Comms <?php echo $comms_notification; ?></a>
+                    <a class="nav-link position-relative" id="tutor-comms-tab" data-bs-toggle="tab" href="#tutor-comms">
+                        Tutor Comms
+                        <?php if ($alternative_count > 0): ?>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                            <?php echo $alternative_count; ?>
+                            <span class="visually-hidden">alternative times</span>
+                        </span>
+                        <?php endif; ?>
+                    </a>
                 </li>
             </ul>
         </div>
@@ -623,220 +699,40 @@ if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
 
                 <!-- Tutor Comms Tab -->
                 <div class="tab-pane fade" id="tutor-comms" role="tabpanel" aria-labelledby="tutor-comms-tab">
-                    <h5>Tutor Communications</h5>
+                    <h4>Communications from Your Tutor</h4>
                     
                     <?php
-                    $current_user = wp_get_current_user();
-                    $user_id = $current_user->ID;
-                    
-                    // Process reschedule response if submitted
-                    if (isset($_POST['reschedule_response']) && isset($_POST['request_id'])) {
-                        $request_id = intval($_POST['request_id']);
-                        $response = sanitize_text_field($_POST['reschedule_response']);
-                        
-                        // Update the request status
-                        update_post_meta($request_id, 'status', $response);
-                        
-                        // If confirmed, add notification for the schedule tab
-                        if ($response === 'confirmed') {
-                            // Make sure it's not marked as viewed yet
-                            delete_post_meta($request_id, 'viewed_by_student');
-                        }
-                        
-                        // Show confirmation message
-                        echo '<div class="alert alert-success">Your response has been submitted.</div>';
-                        
-                        // Add JavaScript to reload the page and stay on the Tutor Comms tab
-                        echo '<script>
-                            // Reload the page after a short delay
-                            setTimeout(function() {
-                                window.location.href = window.location.pathname + "?tab=tutor-comms";
-                            }, 1500);
-                        </script>';
-                    }
-                    
-                    // Check if we need to activate a specific tab
-                    if (isset($_GET['tab']) && $_GET['tab'] === 'tutor-comms') {
-                        echo '<script>
-                            document.addEventListener("DOMContentLoaded", function() {
-                                // Activate the Tutor Comms tab
-                                var tutorCommsTab = document.getElementById("tutor-comms-tab");
-                                if (tutorCommsTab) {
-                                    tutorCommsTab.click();
-                                }
-                            });
-                        </script>';
-                    }
-                    
-                    // Query for reschedule requests
-                    $args = array(
-                        'post_type'      => 'progress_report',
-                        'posts_per_page' => -1,
-                        'meta_query'     => array(
-                            'relation' => 'AND',
-                            array(
-                                'key'     => 'student_id',
-                                'value'   => $user_id,
-                                'compare' => '=',
-                            ),
-                            array(
-                                'key'     => 'request_type',
-                                'value'   => 'reschedule',
-                                'compare' => '=',
+                    // Mark alternative reschedule requests as viewed when tab is opened
+                    if (isset($_GET['mark_alternatives_viewed']) && $_GET['mark_alternatives_viewed'] == '1') {
+                        $viewed_args = array(
+                            'post_type'      => 'progress_report',
+                            'posts_per_page' => -1,
+                            'meta_query'     => array(
+                                'relation' => 'AND',
+                                array(
+                                    'key'     => 'student_id',
+                                    'value'   => get_current_user_id(),
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'request_type',
+                                    'value'   => 'reschedule_alternatives',
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'viewed_by_student',
+                                    'compare' => 'NOT EXISTS',
+                                )
                             )
-                        ),
-                        'order'          => 'DESC',
-                        'orderby'        => 'date'
-                    );
-                    
-                    $reschedule_requests = get_posts($args);
-                    
-                    if (!empty($reschedule_requests)) {
-                        echo '<div class="card mb-4">';
-                        echo '<div class="card-header bg-light">Lesson Reschedule Requests</div>';
-                        echo '<div class="card-body">';
-                        echo '<div class="accordion" id="rescheduleAccordion">';
-                        $counter = 1;
+                        );
                         
-                        foreach ($reschedule_requests as $request) {
-                            $request_id = $request->ID;
-                            $tutor_username = get_post_meta($request_id, 'tutor_name', true);
-                            $original_date = get_post_meta($request_id, 'original_date', true);
-                            $original_time = get_post_meta($request_id, 'original_time', true);
-                            $new_date = get_post_meta($request_id, 'new_date', true);
-                            $new_time = get_post_meta($request_id, 'new_time', true);
-                            $status = get_post_meta($request_id, 'status', true);
-                            $request_date = get_the_date('F j, Y', $request_id);
-                            
-                            // Get the tutor's full name
-                            $tutor_full_name = $tutor_username;
-                            
-                            // Try to find the tutor user by their stored username
-                            $tutor_user = get_user_by('login', $tutor_username);
-                            if ($tutor_user) {
-                                // Get first and last name
-                                $first_name = get_user_meta($tutor_user->ID, 'first_name', true);
-                                $last_name = get_user_meta($tutor_user->ID, 'last_name', true);
-                                
-                                // If both first and last name exist, use them
-                                if (!empty($first_name) && !empty($last_name)) {
-                                    $tutor_full_name = $first_name . ' ' . $last_name;
-                                } else {
-                                    // Otherwise use display name
-                                    $tutor_full_name = $tutor_user->display_name;
-                                }
-                            }
-                            
-                            // Format the dates for display
-                            $formatted_original_date = !empty($original_date) ? date('l, jS \of F, Y', strtotime($original_date)) : 'N/A';
-                            $formatted_original_time = !empty($original_time) ? date('g:i A', strtotime($original_time)) : '';
-                            $formatted_new_date = !empty($new_date) ? date('l, jS \of F, Y', strtotime($new_date)) : 'N/A';
-                            $formatted_new_time = !empty($new_time) ? date('g:i A', strtotime($new_time)) : '';
-                            
-                            // Set button classes based on status
-                            $status_badge = '';
-                            if ($status === 'confirmed') {
-                                $status_badge = '<span class="badge bg-success">Confirmed</span>';
-                            } elseif ($status === 'unavailable') {
-                                $status_badge = '<span class="badge bg-danger">Unavailable</span>';
-                            } else {
-                                $status_badge = '<span class="badge bg-warning">Pending</span>';
-                            }
-                            
-                            echo '<div class="accordion-item">';
-                            echo '<h2 class="accordion-header" id="rescheduleHeading' . $counter . '">';
-                            echo '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#rescheduleCollapse' . $counter . '" aria-expanded="false" aria-controls="rescheduleCollapse' . $counter . '">';
-                            echo 'Reschedule Request - ' . $request_date . ' ' . $status_badge;
-                            echo '</button>';
-                            echo '</h2>';
-                            echo '<div id="rescheduleCollapse' . $counter . '" class="accordion-collapse collapse" aria-labelledby="rescheduleHeading' . $counter . '" data-bs-parent="#rescheduleAccordion">';
-                            echo '<div class="accordion-body">';
-                            echo '<div class="row">';
-                            
-                            // Left column - Original lesson details
-                            echo '<div class="col-md-6">';
-                            echo '<div class="card mb-3">';
-                            echo '<div class="card-header bg-light">Original Lesson</div>';
-                            echo '<div class="card-body">';
-                            if (!empty($original_date)) {
-                                echo '<p><strong>Date:</strong> ' . $formatted_original_date . '</p>';
-                                if (!empty($original_time)) {
-                                    echo '<p><strong>Time:</strong> ' . $formatted_original_time . '</p>';
-                                }
-                            } else {
-                                echo '<p>Original lesson details not specified.</p>';
-                            }
-                            echo '</div>';
-                            echo '</div>';
-                            echo '</div>';
-                            
-                            // Right column - Proposed new lesson details
-                            echo '<div class="col-md-6">';
-                            echo '<div class="card mb-3">';
-                            echo '<div class="card-header bg-light">Proposed New Lesson</div>';
-                            echo '<div class="card-body">';
-                            echo '<p><strong>Date:</strong> ' . $formatted_new_date . '</p>';
-                            if (!empty($new_time)) {
-                                echo '<p><strong>Time:</strong> ' . $formatted_new_time . '</p>';
-                            }
-                            echo '</div>';
-                            echo '</div>';
-                            echo '</div>';
-                            
-                            // Full width - Additional details
-                            echo '<div class="col-12">';
-                            echo '<div class="card">';
-                            echo '<div class="card-header bg-light">Request Details</div>';
-                            echo '<div class="card-body">';
-                            echo '<p><strong>Tutor:</strong> ' . esc_html($tutor_full_name) . '</p>';
-                            echo '<p><strong>Request Submitted:</strong> ' . $request_date . '</p>';
-                            
-                            // Show response buttons if not already responded
-                            if (empty($status) || $status === 'pending') {
-                                echo '<form method="post" class="mt-3">';
-                                echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                                echo '<div class="d-flex gap-2">';
-                                echo '<button type="submit" name="reschedule_response" value="confirmed" class="btn btn-success">Confirm</button>';
-                                echo '<button type="submit" name="reschedule_response" value="unavailable" class="btn btn-danger">Unavailable</button>';
-                                echo '</div>';
-                                echo '</form>';
-                            } else {
-                                echo '<p><strong>Status:</strong> ';
-                                if ($status === 'confirmed') {
-                                    echo '<span class="badge bg-success">Confirmed</span>';
-                                    
-                                    // Add a link to view in schedule
-                                    echo '<div class="mt-3">';
-                                    echo '<a href="#schedule" class="btn btn-sm btn-outline-primary" onclick="document.getElementById(\'schedule-tab\').click();">View in Schedule</a>';
-                                    echo '</div>';
-                                } else {
-                                    echo '<span class="badge bg-danger">Unavailable</span>';
-                                }
-                                echo '</p>';
-                            }
-                            
-                            echo '</div>';
-                            echo '</div>';
-                            echo '</div>';
-                            
-                            echo '</div>'; // End row
-                            echo '</div>'; // End accordion-body
-                            echo '</div>'; // End accordion-collapse
-                            echo '</div>'; // End accordion-item
-                            
-                            $counter++;
+                        $viewed_requests = get_posts($viewed_args);
+                        foreach ($viewed_requests as $request) {
+                            update_post_meta($request->ID, 'viewed_by_student', '1');
                         }
-                        
-                        echo '</div>'; // End accordion
-                        echo '</div>'; // End card-body
-                        echo '</div>'; // End card
-                    } else {
-                        echo '<div class="alert alert-info">No reschedule requests found.</div>';
                     }
-                    ?>
-
-                    <!-- Alternative Reschedule Requests -->
-                    <?php
+                    
+                    // Get alternative reschedule requests
                     $alternative_args = array(
                         'post_type'      => 'progress_report',
                         'posts_per_page' => -1,
@@ -856,13 +752,32 @@ if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
                         'order'          => 'DESC',
                         'orderby'        => 'date'
                     );
-
+                    
                     $alternative_requests = get_posts($alternative_args);
-
+                    
                     if (!empty($alternative_requests)) {
                         echo '<div class="card mb-4 mt-4">';
                         echo '<div class="card-header bg-primary text-white">Alternative Lesson Times</div>';
                         echo '<div class="card-body">';
+                        
+                        // Check for new (unviewed) alternatives
+                        $has_new_alternatives = false;
+                        foreach ($alternative_requests as $request) {
+                            $viewed = get_post_meta($request->ID, 'viewed_by_student', true);
+                            $status = get_post_meta($request->ID, 'status', true);
+                            if (empty($viewed) && $status === 'pending') {
+                                $has_new_alternatives = true;
+                                break;
+                            }
+                        }
+                        
+                        // Show notification for new alternatives
+                        if ($has_new_alternatives) {
+                            echo '<div class="alert alert-info">';
+                            echo '<i class="fas fa-bell me-2"></i> <strong>New!</strong> Your tutor has provided alternative lesson times for you to review.';
+                            echo '</div>';
+                        }
+                        
                         echo '<p>Your tutor has provided alternative times for lessons you were unavailable for. Please select one of the options below:</p>';
                         
                         echo '<div class="accordion" id="alternativeAccordion">';
@@ -876,6 +791,20 @@ if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
                             $message = get_post_meta($request_id, 'message', true);
                             $status = get_post_meta($request_id, 'status', true);
                             $request_date = get_the_date('F j, Y', $request_id);
+                            $viewed = get_post_meta($request_id, 'viewed_by_student', true);
+                            
+                            // Get tutor's first and last name
+                            $tutor_user = get_user_by('login', $tutor_name);
+                            $tutor_display_name = $tutor_name;
+                            if ($tutor_user) {
+                                $first_name = get_user_meta($tutor_user->ID, 'first_name', true);
+                                $last_name = get_user_meta($tutor_user->ID, 'last_name', true);
+                                if (!empty($first_name) && !empty($last_name)) {
+                                    $tutor_display_name = $first_name . ' ' . $last_name;
+                                } else {
+                                    $tutor_display_name = $tutor_user->display_name;
+                                }
+                            }
                             
                             // Get original request details
                             $original_date = get_post_meta($original_request_id, 'original_date', true);
@@ -893,14 +822,20 @@ if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
                                 $status_badge = '<span class="badge bg-warning">Pending</span>';
                             }
                             
-                            echo '<div class="accordion-item">';
+                            // Add "New" badge for unviewed alternatives
+                            $new_badge = '';
+                            if (empty($viewed) && $status === 'pending') {
+                                $new_badge = '<span class="badge bg-danger ms-2">New</span>';
+                            }
+                            
+                            echo '<div class="accordion-item' . (empty($viewed) && $status === 'pending' ? ' border-danger' : '') . '">';
                             echo '<h2 class="accordion-header" id="alternativeHeading' . $counter . '">';
-                            echo '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#alternativeCollapse' . $counter . '" aria-expanded="false" aria-controls="alternativeCollapse' . $counter . '">';
-                            echo 'Alternative Times - ' . $request_date . ' ' . $status_badge;
+                            echo '<button class="accordion-button' . (empty($viewed) && $status === 'pending' ? '' : ' collapsed') . '" type="button" data-bs-toggle="collapse" data-bs-target="#alternativeCollapse' . $counter . '" aria-expanded="' . (empty($viewed) && $status === 'pending' ? 'true' : 'false') . '" aria-controls="alternativeCollapse' . $counter . '">';
+                            echo 'Alternative Times - ' . $request_date . ' ' . $status_badge . $new_badge;
                             echo '</button>';
                             echo '</h2>';
                             
-                            echo '<div id="alternativeCollapse' . $counter . '" class="accordion-collapse collapse" aria-labelledby="alternativeHeading' . $counter . '" data-bs-parent="#alternativeAccordion">';
+                            echo '<div id="alternativeCollapse' . $counter . '" class="accordion-collapse collapse' . (empty($viewed) && $status === 'pending' ? ' show' : '') . '" aria-labelledby="alternativeHeading' . $counter . '" data-bs-parent="#alternativeAccordion">';
                             echo '<div class="accordion-body">';
                             
                             echo '<div class="card mb-3">';
@@ -910,7 +845,7 @@ if (isset($_POST['select_alternative']) && isset($_POST['request_id'])) {
                             if (!empty($formatted_original_time)) {
                                 echo '<p><strong>Time:</strong> ' . $formatted_original_time . '</p>';
                             }
-                            echo '<p><strong>Tutor:</strong> ' . esc_html($tutor_name) . '</p>';
+                            echo '<p><strong>Tutor:</strong> ' . esc_html($tutor_display_name) . '</p>';
                             echo '</div>';
                             echo '</div>';
                             
@@ -1065,6 +1000,35 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+    
+    // Mark alternative times as viewed when Tutor Comms tab is opened
+    const tutorCommsTab = document.getElementById('tutor-comms-tab');
+    if (tutorCommsTab) {
+        tutorCommsTab.addEventListener('click', function() {
+            // Send AJAX request to mark alternatives as viewed
+            fetch('<?php echo add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()); ?>', {
+                method: 'GET',
+                credentials: 'same-origin'
+            }).then(response => {
+                // Remove the notification badge after viewing
+                const badge = this.querySelector('.badge');
+                if (badge) {
+                    badge.style.display = 'none';
+                }
+            }).catch(error => {
+                console.error('Error marking alternatives as viewed:', error);
+            });
+        });
+    }
+    
+    // Handle unavailable for all button
+    document.querySelectorAll('button[name="unavailable_all"]').forEach(button => {
+        button.addEventListener('click', function(e) {
+            if (!confirm('Are you sure you are unavailable for all these alternative times?')) {
+                e.preventDefault();
+            }
+        });
+    });
 });
 </script>
 

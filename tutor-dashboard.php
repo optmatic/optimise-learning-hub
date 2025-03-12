@@ -34,35 +34,59 @@ if (current_user_can('tutor')) {
             'post_type'      => 'progress_report',
             'posts_per_page' => -1,
             'meta_query'     => array(
-                'relation' => 'AND',
+                'relation' => 'OR',
                 array(
-                    'key'     => 'tutor_name',
-                    'value'   => wp_get_current_user()->display_name,
-                    'compare' => '=',
+                    'relation' => 'AND',
+                    array(
+                        'key'     => 'tutor_name',
+                        'value'   => wp_get_current_user()->display_name,
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'request_type',
+                        'value'   => 'reschedule',
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'status',
+                        'value'   => 'unavailable',
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'alternatives_provided',
+                        'compare' => 'NOT EXISTS',
+                    )
                 ),
                 array(
-                    'key'     => 'request_type',
-                    'value'   => 'reschedule',
-                    'compare' => '=',
-                ),
-                array(
-                    'key'     => 'status',
-                    'value'   => 'unavailable',
-                    'compare' => '=',
-                ),
-                array(
-                    'key'     => 'alternatives_provided',
-                    'compare' => 'NOT EXISTS',
+                    'relation' => 'AND',
+                    array(
+                        'key'     => 'tutor_name',
+                        'value'   => wp_get_current_user()->display_name,
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'request_type',
+                        'value'   => 'reschedule_unavailable_all',
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'status',
+                        'value'   => 'pending',
+                        'compare' => '=',
+                    )
                 )
             )
         );
         
-        $unavailable_count = count(get_posts($unavailable_args));
+        $unavailable_requests = get_posts($unavailable_args);
+        $unavailable_count = count($unavailable_requests);
         ?>
+        <?php if ($unavailable_count > 0): ?>
         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
             <?php echo $unavailable_count; ?>
             <span class="visually-hidden">unconfirmed requests</span>
         </span>
+        <?php endif; ?>
     </a>
   </li>
             
@@ -791,25 +815,46 @@ if (current_user_can('tutor')) {
                     'post_type'      => 'progress_report',
                     'posts_per_page' => -1,
                     'meta_query'     => array(
-                        'relation' => 'AND',
+                        'relation' => 'OR',
                         array(
-                            'key'     => 'tutor_name',
-                            'value'   => wp_get_current_user()->display_name,
-                            'compare' => '=',
+                            'relation' => 'AND',
+                            array(
+                                'key'     => 'tutor_name',
+                                'value'   => wp_get_current_user()->display_name,
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'request_type',
+                                'value'   => 'reschedule',
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'status',
+                                'value'   => 'unavailable',
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'alternatives_provided',
+                                'compare' => 'NOT EXISTS',
+                            )
                         ),
                         array(
-                            'key'     => 'request_type',
-                            'value'   => 'reschedule',
-                            'compare' => '=',
-                        ),
-                        array(
-                            'key'     => 'status',
-                            'value'   => 'unavailable',
-                            'compare' => '=',
-                        ),
-                        array(
-                            'key'     => 'alternatives_provided',
-                            'compare' => 'NOT EXISTS',
+                            'relation' => 'AND',
+                            array(
+                                'key'     => 'tutor_name',
+                                'value'   => wp_get_current_user()->display_name,
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'request_type',
+                                'value'   => 'reschedule_unavailable_all',
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'status',
+                                'value'   => 'pending',
+                                'compare' => '=',
+                            )
                         )
                     )
                 );
@@ -1254,3 +1299,197 @@ if (isset($_POST['provide_alternatives']) && isset($_POST['request_id'])) {
         background-color: #dc3545 !important;
     }
 </style>
+
+<!-- Add this to the Unconfirmed Requests section in tutor-dashboard.php -->
+<?php
+// Get requests where student is unavailable for all alternatives
+$unavailable_all_args = array(
+    'post_type'      => 'progress_report',
+    'posts_per_page' => -1,
+    'meta_query'     => array(
+        'relation' => 'AND',
+        array(
+            'key'     => 'tutor_name',
+            'value'   => wp_get_current_user()->display_name,
+            'compare' => '=',
+        ),
+        array(
+            'key'     => 'request_type',
+            'value'   => 'reschedule_unavailable_all',
+            'compare' => '=',
+        ),
+        array(
+            'key'     => 'status',
+            'value'   => 'pending',
+            'compare' => '=',
+        )
+    ),
+    'order'          => 'DESC',
+    'orderby'        => 'date'
+);
+
+$unavailable_all_requests = get_posts($unavailable_all_args);
+
+if (!empty($unavailable_all_requests)) {
+    echo '<div class="alert alert-warning mt-3">';
+    echo '<h6><i class="fas fa-exclamation-triangle me-2"></i>Students Unavailable for All Alternatives</h6>';
+    echo '<p>The following students are unavailable for all alternative times you provided:</p>';
+    echo '<ul class="list-group">';
+    
+    foreach ($unavailable_all_requests as $request) {
+        $request_id = $request->ID;
+        $student_id = get_post_meta($request_id, 'student_id', true);
+        $student = get_userdata($student_id);
+        $student_name = $student ? $student->display_name : 'Unknown Student';
+        $alternatives_request_id = get_post_meta($request_id, 'alternatives_request_id', true);
+        $request_date = get_the_date('F j, Y', $request_id);
+        
+        echo '<li class="list-group-item d-flex justify-content-between align-items-center">';
+        echo '<div>';
+        echo '<strong>' . esc_html($student_name) . '</strong> - ' . $request_date;
+        echo '<br><small class="text-muted">Student is unavailable for all alternative times provided</small>';
+        echo '</div>';
+        echo '<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newAlternativesModal' . $request_id . '">Provide New Alternatives</button>';
+        echo '</li>';
+        
+        // Add modal for providing new alternatives
+        echo '<div class="modal fade" id="newAlternativesModal' . $request_id . '" tabindex="-1" aria-labelledby="newAlternativesModalLabel' . $request_id . '" aria-hidden="true">';
+        echo '<div class="modal-dialog">';
+        echo '<div class="modal-content">';
+        echo '<div class="modal-header">';
+        echo '<h5 class="modal-title" id="newAlternativesModalLabel' . $request_id . '">Provide New Alternatives for ' . esc_html($student_name) . '</h5>';
+        echo '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>';
+        echo '</div>';
+        echo '<div class="modal-body">';
+        echo '<form method="post" id="newAlternativesForm' . $request_id . '">';
+        echo '<input type="hidden" name="provide_new_alternatives" value="1">';
+        echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+        echo '<input type="hidden" name="student_id" value="' . $student_id . '">';
+        
+        echo '<p>Please provide new alternative times for this student:</p>';
+        
+        echo '<div class="mb-3">';
+        echo '<label class="form-label">Alternative 1</label>';
+        echo '<div class="row">';
+        echo '<div class="col-md-6">';
+        echo '<input type="date" class="form-control" name="alt1_date" required>';
+        echo '</div>';
+        echo '<div class="col-md-6">';
+        echo '<input type="time" class="form-control" name="alt1_time" required>';
+        echo '</div>';
+        echo '</div>';
+        echo '</div>';
+        
+        echo '<div class="mb-3">';
+        echo '<label class="form-label">Alternative 2</label>';
+        echo '<div class="row">';
+        echo '<div class="col-md-6">';
+        echo '<input type="date" class="form-control" name="alt2_date">';
+        echo '</div>';
+        echo '<div class="col-md-6">';
+        echo '<input type="time" class="form-control" name="alt2_time">';
+        echo '</div>';
+        echo '</div>';
+        echo '</div>';
+        
+        echo '<div class="mb-3">';
+        echo '<label class="form-label">Alternative 3</label>';
+        echo '<div class="row">';
+        echo '<div class="col-md-6">';
+        echo '<input type="date" class="form-control" name="alt3_date">';
+        echo '</div>';
+        echo '<div class="col-md-6">';
+        echo '<input type="time" class="form-control" name="alt3_time">';
+        echo '</div>';
+        echo '</div>';
+        echo '</div>';
+        
+        echo '<div class="mb-3">';
+        echo '<label class="form-label">Message to Student</label>';
+        echo '<textarea class="form-control" name="message" rows="3" placeholder="Optional message to the student"></textarea>';
+        echo '</div>';
+        
+        echo '<div class="modal-footer">';
+        echo '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
+        echo '<button type="submit" class="btn btn-primary">Submit New Alternatives</button>';
+        echo '</div>';
+        echo '</form>';
+        echo '</div>'; // End modal-body
+        echo '</div>'; // End modal-content
+        echo '</div>'; // End modal-dialog
+        echo '</div>'; // End modal
+    }
+    
+    echo '</ul>';
+    echo '</div>';
+}
+?>
+
+<?php
+// Add this to the top of tutor-dashboard.php
+// Process new alternatives submission
+if (isset($_POST['provide_new_alternatives']) && isset($_POST['request_id'])) {
+    $request_id = intval($_POST['request_id']);
+    $student_id = intval($_POST['student_id']);
+    
+    // Get alternative times
+    $alternatives = array();
+    
+    if (!empty($_POST['alt1_date']) && !empty($_POST['alt1_time'])) {
+        $alternatives[] = array(
+            'date' => sanitize_text_field($_POST['alt1_date']),
+            'time' => sanitize_text_field($_POST['alt1_time'])
+        );
+    }
+    
+    if (!empty($_POST['alt2_date']) && !empty($_POST['alt2_time'])) {
+        $alternatives[] = array(
+            'date' => sanitize_text_field($_POST['alt2_date']),
+            'time' => sanitize_text_field($_POST['alt2_time'])
+        );
+    }
+    
+    if (!empty($_POST['alt3_date']) && !empty($_POST['alt3_time'])) {
+        $alternatives[] = array(
+            'date' => sanitize_text_field($_POST['alt3_date']),
+            'time' => sanitize_text_field($_POST['alt3_time'])
+        );
+    }
+    
+    $message = !empty($_POST['message']) ? sanitize_textarea_field($_POST['message']) : '';
+    
+    // Create a new reschedule request with alternatives
+    $new_request = array(
+        'post_title'   => 'New Alternative Reschedule Request - ' . wp_get_current_user()->display_name,
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
+    
+    $new_request_id = wp_insert_post($new_request);
+    
+    if (!is_wp_error($new_request_id)) {
+        // Get the original request ID
+        $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+        
+        // Save the request details
+        update_post_meta($new_request_id, 'tutor_name', wp_get_current_user()->display_name);
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'request_type', 'reschedule_alternatives');
+        update_post_meta($new_request_id, 'original_request_id', $original_request_id);
+        update_post_meta($new_request_id, 'alternatives', $alternatives);
+        update_post_meta($new_request_id, 'message', $message);
+        update_post_meta($new_request_id, 'status', 'pending');
+        
+        // Mark the original unavailable_all request as handled
+        update_post_meta($request_id, 'status', 'handled');
+        
+        // Set a global message to display to the user
+        global $submission_message;
+        $submission_message = 'New alternative times have been successfully submitted.';
+    } else {
+        global $submission_message;
+        $submission_message = 'Error: ' . $new_request_id->get_error_message();
+    }
+}
+?>
