@@ -1018,7 +1018,7 @@ function get_preferred_times_ajax() {
                     <!-- Outgoing Reschedule Requests (Student-initiated) -->
                     <div class="card mb-4">
                         <div class="card-header bg-info text-white">
-                            <i class="fas fa-arrow-right me-2"></i> Your Outgoing Reschedule Requests
+                            <i class="fas fa-arrow-left me-2"></i> Your Outgoing Reschedule Requests
                         </div>
                         <div class="card-body">
                             <?php
@@ -1798,4 +1798,24 @@ document.addEventListener('DOMContentLoaded', function() {
 .modal-footer {
     justify-content: space-between;
 }
+
+/* Keep the tab active after form submission */
+.requests-tab-return {
+    display: none;
+}
 </style>
+
+<script>
+// Add this script to handle form submissions and maintain the active tab
+jQuery(document).ready(function($) {
+    // Add hidden input to edit and delete forms
+    $('.edit-request-btn, .delete-request-form button').closest('form').append('<input type="hidden" name="active_tab" value="requests" class="requests-tab-return">');
+    
+    // If URL has active_tab parameter, activate that tab
+    const urlParams = new URLSearchParams(window.location.search);
+    const activeTab = urlParams.get('active_tab');
+    if (activeTab === 'requests') {
+        $('#requests-tab').tab('show');
+    }
+});
+</script>
