@@ -103,6 +103,7 @@ if (current_user_can('tutor')) {
     <li class="nav-item">
         <a class="nav-link" id="sample-reports-tab" data-bs-toggle="tab" href="#sample-reports">Sample Progress Comments</a>
     </li>
+    <?php echo add_requests_tab_to_navigation(); ?>
             </ul>
         </div>
         <!-- Main Content -->
@@ -479,7 +480,7 @@ if (current_user_can('tutor')) {
   <li>I am pleased to see outstanding growth in (Student's name)'s ability to evaluate their own progress and seek additional support when needed during our online sessions.</li>
   <li>(Student's name) has shown remarkable dedication to the learning process, actively seeking opportunities to extend their knowledge beyond the online lessons.</li>
   <li>I appreciate (Student's name)'s willingness to take risks and explore new ideas, which has led to exceptional progress in our individualised online sessions.</li>
-  <li>Remarkable progress has been made by (Student's name) in their ability to reflect on their learning journey and set goals for future growth in our online lessons.</li>
+  <li>Remarkable progress has been made by (Student's name) in terms of their ability to reflect on their learning journey and set goals for future growth in our online lessons.</li>
   <li>(Student's name) consistently exhibits exceptional problem-solving skills and a resourceful approach to challenges encountered during our online sessions.</li>
   <li>I am impressed with (Student's name)'s ability to maintain a positive and growth-oriented mindset, even when faced with difficult concepts in our online lessons.</li>
         </ol>
@@ -993,6 +994,19 @@ if (current_user_can('tutor')) {
         </div>
     </div>
 
+    <!-- Requests Tab -->
+    <div class="tab-pane fade" id="requests" role="tabpanel" aria-labelledby="requests-tab">
+        <?php 
+        // Display any submission messages
+        if (isset($submission_message)) {
+            echo '<div class="alert alert-success">' . esc_html($submission_message) . '</div>';
+        }
+        
+        // Display the requests tab content
+        display_tutor_requests_tab(); 
+        ?>
+    </div>
+
     </div>           
             </div> <!-- This div closes the "tab-content" div -->
         </div>
@@ -1472,6 +1486,270 @@ if (isset($_POST['provide_new_alternatives']) && isset($_POST['request_id'])) {
         // Get the original request ID
         $original_request_id = get_post_meta($request_id, 'original_request_id', true);
         
+        // Save the request details
+        update_post_meta($new_request_id, 'tutor_name', wp_get_current_user()->display_name);
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'request_type', 'reschedule_alternatives');
+        update_post_meta($new_request_id, 'original_request_id', $original_request_id);
+        update_post_meta($new_request_id, 'alternatives', $alternatives);
+        update_post_meta($new_request_id, 'message', $message);
+        update_post_meta($new_request_id, 'status', 'pending');
+        
+        // Mark the original unavailable_all request as handled
+        update_post_meta($request_id, 'status', 'handled');
+        
+        // Set a global message to display to the user
+        global $submission_message;
+        $submission_message = 'New alternative times have been successfully submitted.';
+    } else {
+        global $submission_message;
+        $submission_message = 'Error: ' . $new_request_id->get_error_message();
+    }
+}
+?>
+
+<?php
+// Add this function definition before line 106 where it's being called
+function add_requests_tab_to_navigation() {
+    $current_user = wp_get_current_user();
+    $tutor_name = $current_user->display_name;
+    
+    // Count unread requests
+    $unread_requests = get_posts(array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'tutor_name',
+                'value'   => $tutor_name,
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => array('reschedule_unavailable_all'),
+                'compare' => 'IN',
+            ),
+            array(
+                'key'     => 'status',
+                'value'   => 'pending',
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'viewed_by_tutor',
+                'compare' => 'NOT EXISTS',
+            )
+        ),
+        'fields'         => 'ids'
+    ));
+    
+    $unread_count = count($unread_requests);
+    $notification_badge = $unread_count > 0 ? '<span class="badge rounded-pill bg-danger">' . $unread_count . '</span>' : '';
+    
+    // Return the tab HTML
+    return '<li class="nav-item">
+        <a class="nav-link" id="requests-tab" data-bs-toggle="tab" href="#requests">Requests ' . $notification_badge . '</a>
+    </li>';
+}
+
+/**
+ * Displays the Requests tab content for tutors
+ */
+function display_tutor_requests_tab() {
+    $current_user = wp_get_current_user();
+    $tutor_name = $current_user->display_name;
+    
+    // Get all pending reschedule requests for this tutor
+    $reschedule_requests = get_posts(array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'tutor_name',
+                'value'   => $tutor_name,
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => array('reschedule_unavailable_all'),
+                'compare' => 'IN',
+            ),
+            array(
+                'key'     => 'status',
+                'value'   => 'pending',
+                'compare' => '=',
+            )
+        ),
+        'order'          => 'DESC',
+        'orderby'        => 'date'
+    ));
+    
+    // Count unread requests
+    $unread_count = 0;
+    foreach ($reschedule_requests as $request) {
+        $viewed = get_post_meta($request->ID, 'viewed_by_tutor', true);
+        if (empty($viewed)) {
+            $unread_count++;
+        }
+    }
+    
+    // Mark all requests as viewed when tab is opened
+    foreach ($reschedule_requests as $request) {
+        update_post_meta($request->ID, 'viewed_by_tutor', '1');
+    }
+    
+    // Display requests
+    if (!empty($reschedule_requests)) {
+        echo '<div class="card mb-4">';
+        echo '<div class="card-header bg-primary text-white">Student Reschedule Requests</div>';
+        echo '<div class="card-body">';
+        
+        echo '<div class="accordion" id="requestsAccordion">';
+        $counter = 1;
+        
+        foreach ($reschedule_requests as $request) {
+            $request_id = $request->ID;
+            $student_id = get_post_meta($request_id, 'student_id', true);
+            $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+            $alternatives_request_id = get_post_meta($request_id, 'alternatives_request_id', true);
+            $request_date = get_the_date('F j, Y', $request_id);
+            
+            // Get student name
+            $student = get_user_by('id', $student_id);
+            $student_name = $student ? $student->display_name : 'Unknown Student';
+            
+            // Get original lesson details
+            $original_date = get_post_meta($original_request_id, 'original_date', true);
+            $original_time = get_post_meta($original_request_id, 'original_time', true);
+            
+            // Format the original date for display
+            $formatted_original_date = !empty($original_date) ? date('l, jS \of F, Y', strtotime($original_date)) : 'N/A';
+            $formatted_original_time = !empty($original_time) ? date('g:i A', strtotime($original_time)) : '';
+            
+            echo '<div class="accordion-item">';
+            echo '<h2 class="accordion-header" id="requestHeading' . $counter . '">';
+            echo '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#requestCollapse' . $counter . '" aria-expanded="false" aria-controls="requestCollapse' . $counter . '">';
+            echo 'Request from ' . esc_html($student_name) . ' - ' . $request_date;
+            echo '</button>';
+            echo '</h2>';
+            
+            echo '<div id="requestCollapse' . $counter . '" class="accordion-collapse collapse" aria-labelledby="requestHeading' . $counter . '" data-bs-parent="#requestsAccordion">';
+            echo '<div class="accordion-body">';
+            
+            echo '<div class="card mb-3">';
+            echo '<div class="card-header bg-light">Original Lesson</div>';
+            echo '<div class="card-body">';
+            echo '<p><strong>Student:</strong> ' . esc_html($student_name) . '</p>';
+            echo '<p><strong>Date:</strong> ' . $formatted_original_date . '</p>';
+            if (!empty($formatted_original_time)) {
+                echo '<p><strong>Time:</strong> ' . $formatted_original_time . '</p>';
+            }
+            echo '</div>';
+            echo '</div>';
+            
+            echo '<p>The student is unavailable for all previously suggested alternative times.</p>';
+            
+            // Form to provide new alternative times
+            echo '<form method="post" class="mt-3">';
+            echo '<input type="hidden" name="provide_alternatives" value="1">';
+            echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+            echo '<input type="hidden" name="student_id" value="' . $student_id . '">';
+            echo '<input type="hidden" name="original_request_id" value="' . $original_request_id . '">';
+            
+            echo '<div class="mb-3">';
+            echo '<label class="form-label"><strong>Provide New Alternative Times:</strong></label>';
+            
+            // Alternative 1
+            echo '<div class="row mb-2">';
+            echo '<div class="col-md-6">';
+            echo '<label class="form-label">Alternative 1 - Date:</label>';
+            echo '<input type="date" class="form-control" name="alt_date_0" required>';
+            echo '</div>';
+            echo '<div class="col-md-6">';
+            echo '<label class="form-label">Alternative 1 - Time:</label>';
+            echo '<input type="time" class="form-control" name="alt_time_0" required>';
+            echo '</div>';
+            echo '</div>';
+            
+            // Alternative 2
+            echo '<div class="row mb-2">';
+            echo '<div class="col-md-6">';
+            echo '<label class="form-label">Alternative 2 - Date:</label>';
+            echo '<input type="date" class="form-control" name="alt_date_1" required>';
+            echo '</div>';
+            echo '<div class="col-md-6">';
+            echo '<label class="form-label">Alternative 2 - Time:</label>';
+            echo '<input type="time" class="form-control" name="alt_time_1" required>';
+            echo '</div>';
+            echo '</div>';
+            
+            // Alternative 3
+            echo '<div class="row mb-2">';
+            echo '<div class="col-md-6">';
+            echo '<label class="form-label">Alternative 3 - Date:</label>';
+            echo '<input type="date" class="form-control" name="alt_date_2" required>';
+            echo '</div>';
+            echo '<div class="col-md-6">';
+            echo '<label class="form-label">Alternative 3 - Time:</label>';
+            echo '<input type="time" class="form-control" name="alt_time_2" required>';
+            echo '</div>';
+            echo '</div>';
+            
+            echo '</div>';
+            
+            echo '<div class="mb-3">';
+            echo '<label class="form-label"><strong>Message to Student:</strong></label>';
+            echo '<textarea class="form-control" name="message" rows="3" placeholder="Optional message to the student"></textarea>';
+            echo '</div>';
+            
+            echo '<button type="submit" class="btn btn-primary">Submit Alternative Times</button>';
+            echo '</form>';
+            
+            echo '</div>'; // End accordion-body
+            echo '</div>'; // End accordion-collapse
+            echo '</div>'; // End accordion-item
+            
+            $counter++;
+        }
+        
+        echo '</div>'; // End accordion
+        echo '</div>'; // End card-body
+        echo '</div>'; // End card
+    } else {
+        echo '<div class="alert alert-info">No pending reschedule requests at this time.</div>';
+    }
+}
+
+// Process the submission of new alternative times
+if (isset($_POST['provide_alternatives']) && $_POST['provide_alternatives'] === '1') {
+    $request_id = intval($_POST['request_id']);
+    $student_id = intval($_POST['student_id']);
+    $original_request_id = intval($_POST['original_request_id']);
+    $message = sanitize_textarea_field($_POST['message']);
+    
+    // Collect the alternatives
+    $alternatives = array();
+    for ($i = 0; $i < 3; $i++) {
+        if (isset($_POST['alt_date_' . $i]) && isset($_POST['alt_time_' . $i])) {
+            $alternatives[] = array(
+                'date' => sanitize_text_field($_POST['alt_date_' . $i]),
+                'time' => sanitize_text_field($_POST['alt_time_' . $i])
+            );
+        }
+    }
+    
+    // Create a new reschedule alternatives request
+    $new_request = array(
+        'post_title'   => 'Reschedule Alternatives',
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
+    
+    $new_request_id = wp_insert_post($new_request);
+    
+    if (!is_wp_error($new_request_id)) {
         // Save the request details
         update_post_meta($new_request_id, 'tutor_name', wp_get_current_user()->display_name);
         update_post_meta($new_request_id, 'student_id', $student_id);
