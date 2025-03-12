@@ -1975,3 +1975,84 @@ if (isset($_POST['confirm_preferred_time']) && $_POST['confirm_preferred_time'] 
     }
 }
 ?>
+
+<?php
+// Add this function to create reschedule requests that will be visible to students
+function create_tutor_reschedule_request($student_id, $tutor_name, $original_date, $original_time, $new_date, $new_time, $reason = '') {
+    // Create a new reschedule request post
+    $new_request = array(
+        'post_title'   => 'Tutor Reschedule Request',
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
+    
+    $new_request_id = wp_insert_post($new_request);
+    
+    if (!is_wp_error($new_request_id)) {
+        // Save the request details with the exact meta keys expected by student dashboard
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+        update_post_meta($new_request_id, 'request_type', 'reschedule'); // This is the key meta field
+        update_post_meta($new_request_id, 'original_date', $original_date);
+        update_post_meta($new_request_id, 'original_time', $original_time);
+        update_post_meta($new_request_id, 'new_date', $new_date);
+        update_post_meta($new_request_id, 'new_time', $new_time);
+        update_post_meta($new_request_id, 'reason', $reason);
+        update_post_meta($new_request_id, 'status', 'pending');
+        
+        return $new_request_id;
+    }
+    
+    return false;
+}
+
+// When a tutor submits a reschedule request form
+if (isset($_POST['submit_tutor_reschedule'])) {
+    $student_id = intval($_POST['student_id']);
+    $tutor_name = get_the_author_meta('display_name', get_current_user_id()); // Get current tutor's name
+    $original_date = sanitize_text_field($_POST['original_date']);
+    $original_time = sanitize_text_field($_POST['original_time']);
+    $new_date = sanitize_text_field($_POST['new_date']);
+    $new_time = sanitize_text_field($_POST['new_time']);
+    $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
+    
+    // Debug: Log the form submission
+    error_log("Tutor reschedule form submitted: Student ID: $student_id, Tutor: $tutor_name, Original: $original_date $original_time, New: $new_date $new_time");
+    
+    // Create a new reschedule request post
+    $new_request = array(
+        'post_title'   => 'Tutor Reschedule Request',
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
+    
+    $new_request_id = wp_insert_post($new_request);
+    
+    if (!is_wp_error($new_request_id)) {
+        // Save the request details
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+        update_post_meta($new_request_id, 'request_type', 'reschedule');
+        update_post_meta($new_request_id, 'original_date', $original_date);
+        update_post_meta($new_request_id, 'original_time', $original_time);
+        update_post_meta($new_request_id, 'new_date', $new_date);
+        update_post_meta($new_request_id, 'new_time', $new_time);
+        update_post_meta($new_request_id, 'reason', $reason);
+        update_post_meta($new_request_id, 'status', 'pending');
+        
+        // Debug: Log the successful creation
+        error_log("Reschedule request created successfully: ID: $new_request_id");
+        
+        // Success message
+        echo '<div class="alert alert-success">Reschedule request sent to student.</div>';
+    } else {
+        // Debug: Log the error
+        error_log("Error creating reschedule request: " . $new_request_id->get_error_message());
+        
+        // Error message
+        echo '<div class="alert alert-danger">Error creating reschedule request.</div>';
+    }
+}
+?>

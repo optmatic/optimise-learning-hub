@@ -298,6 +298,128 @@ function get_preferred_times_ajax() {
     $preferred_times = get_post_meta($request_id, 'preferred_times', true);
     wp_send_json_success(array('preferred_times' => $preferred_times));
 }
+
+/**
+ * AJAX handler to check for incoming reschedule requests
+ */
+function check_incoming_reschedule_requests_ajax() {
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'check_incoming_reschedule_requests_nonce')) {
+        wp_send_json_error('Invalid nonce');
+        return;
+    }
+    
+    // Get student ID
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+    if (!$student_id) {
+        wp_send_json_error('Invalid student ID');
+        return;
+    }
+    
+    // Query for incoming reschedule requests
+    $tutor_requests_args = array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array('key' => 'student_id', 'value' => $student_id, 'compare' => '='),
+            array('key' => 'request_type', 'value' => 'reschedule', 'compare' => '='),
+            array('key' => 'status', 'value' => 'pending', 'compare' => '=')
+        ),
+        'order'          => 'DESC',
+        'orderby'        => 'date'
+    );
+    
+    $tutor_requests = get_posts($tutor_requests_args);
+    $count = count($tutor_requests);
+    
+    // Generate HTML for the requests section
+    $html = '';
+    if ($count > 0) {
+        $html .= '<div class="table-responsive">';
+        $html .= '<table class="table table-striped">';
+        $html .= '<thead><tr><th>Date Requested</th><th>Original Lesson</th><th>Proposed New Time</th><th>Tutor</th><th>Action</th></tr></thead>';
+        $html .= '<tbody>';
+        
+        foreach ($tutor_requests as $request) {
+            $request_id = $request->ID;
+            $tutor_name = esc_html(get_post_meta($request_id, 'tutor_name', true));
+            $original_date = esc_html(get_post_meta($request_id, 'original_date', true));
+            $original_time = esc_html(get_post_meta($request_id, 'original_time', true));
+            $new_date = esc_html(get_post_meta($request_id, 'new_date', true));
+            $new_time = esc_html(get_post_meta($request_id, 'new_time', true));
+            $request_date = esc_html(get_the_date('M j, Y', $request_id));
+            
+            $html .= '<tr>';
+            $html .= '<td>' . $request_date . '</td>';
+            $html .= '<td>' . $original_date . ' at ' . $original_time . '</td>';
+            $html .= '<td>' . $new_date . ' at ' . $new_time . '</td>';
+            $html .= '<td>' . $tutor_name . '</td>';
+            $html .= '<td>';
+            $html .= '<form method="post" class="d-inline">';
+            $html .= '<input type="hidden" name="confirm_reschedule" value="1">';
+            $html .= '<input type="hidden" name="request_id" value="' . $request_id . '">';
+            $html .= '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
+            $html .= '</form>';
+            $html .= '<form method="post" class="d-inline">';
+            $html .= '<input type="hidden" name="decline_reschedule" value="1">';
+            $html .= '<input type="hidden" name="request_id" value="' . $request_id . '">';
+            $html .= '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
+            $html .= '</form>';
+            $html .= '</td>';
+            $html .= '</tr>';
+        }
+        
+        $html .= '</tbody></table>';
+        $html .= '</div>';
+    } else {
+        $html = '<p>No incoming reschedule requests from tutors at this time.</p>';
+    }
+    
+    wp_send_json_success(['count' => $count, 'html' => $html]);
+    exit;
+}
+add_action('wp_ajax_check_incoming_reschedule_requests', 'check_incoming_reschedule_requests_ajax');
+
+// Add this function to test if the AJAX endpoint is working
+function test_reschedule_requests() {
+    // Create a test reschedule request
+    $student_id = get_current_user_id();
+    $tutor_name = 'Test Tutor';
+    $original_date = date('Y-m-d');
+    $original_time = '14:00:00';
+    $new_date = date('Y-m-d', strtotime('+1 day'));
+    $new_time = '15:00:00';
+    
+    // Create a new reschedule request post
+    $new_request = array(
+        'post_title'   => 'Test Reschedule Request',
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
+    
+    $new_request_id = wp_insert_post($new_request);
+    
+    if (!is_wp_error($new_request_id)) {
+        // Save the request details
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+        update_post_meta($new_request_id, 'request_type', 'reschedule');
+        update_post_meta($new_request_id, 'original_date', $original_date);
+        update_post_meta($new_request_id, 'original_time', $original_time);
+        update_post_meta($new_request_id, 'new_date', $new_date);
+        update_post_meta($new_request_id, 'new_time', $new_time);
+        update_post_meta($new_request_id, 'status', 'pending');
+        
+        return "Test reschedule request created with ID: $new_request_id";
+    } else {
+        return "Error creating test reschedule request: " . $new_request_id->get_error_message();
+    }
+}
+
+// Uncomment this line to run the test (then comment it out again after testing)
+// echo test_reschedule_requests();
 ?>
 
 <div class="container mt-4">
@@ -1179,12 +1301,14 @@ function get_preferred_times_ajax() {
                                     echo '<form method="post" class="d-inline">';
                                     echo '<input type="hidden" name="confirm_reschedule" value="1">';
                                     echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                    echo '<input type="hidden" name="active_tab" value="tutor-comms">';
                                     echo '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
                                     echo '</form>';
                                     
                                     echo '<form method="post" class="d-inline">';
                                     echo '<input type="hidden" name="decline_reschedule" value="1">';
                                     echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                    echo '<input type="hidden" name="active_tab" value="tutor-comms">';
                                     echo '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
                                     echo '</form>';
                                     echo '</td>';
@@ -1817,5 +1941,67 @@ jQuery(document).ready(function($) {
     if (activeTab === 'requests') {
         $('#requests-tab').tab('show');
     }
+    
+    // Function to check for incoming reschedule requests
+    function checkIncomingRequests() {
+        console.log('Checking for incoming reschedule requests...');
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'check_incoming_reschedule_requests',
+                student_id: <?php echo get_current_user_id(); ?>,
+                nonce: '<?php echo wp_create_nonce('check_incoming_reschedule_requests_nonce'); ?>'
+            },
+            success: function(response) {
+                console.log('AJAX Response:', response);
+                
+                if (response.success) {
+                    // Update the notification bubble
+                    const count = response.data.count;
+                    if (count > 0) {
+                        $('#tutor-comms-tab .notification-bubble').text(count).show();
+                    } else {
+                        $('#tutor-comms-tab .notification-bubble').hide();
+                    }
+                    
+                    // Update the existing incoming requests section
+                    const $requestsSection = $('.card-header:contains("Incoming Reschedule Requests")').closest('.card').find('.card-body');
+                    if ($requestsSection.length > 0) {
+                        $requestsSection.html(response.data.html);
+                    } else {
+                        console.error('Could not find the Incoming Reschedule Requests section');
+                    }
+                } else {
+                    console.error('Error in response:', response.data);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX Error:', status, error);
+            }
+        });
+    }
+    
+    // Initial check and set interval
+    checkIncomingRequests();
+    setInterval(checkIncomingRequests, 60000); // Check every minute
 });
 </script>
+
+<style>
+/* Add notification bubble styling */
+.notification-bubble {
+    display: inline-block;
+    background-color: #ff5252;
+    color: white;
+    border-radius: 50%;
+    min-width: 18px;
+    height: 18px;
+    text-align: center;
+    line-height: 18px;
+    font-size: 12px;
+    margin-left: 5px;
+    padding: 0 4px;
+}
+</style>
