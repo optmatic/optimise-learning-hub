@@ -1358,7 +1358,21 @@ function display_tutor_requests_content() {
             echo '<tr>';
             echo '<td>' . esc_html($student_name) . '</td>';
             echo '<td>' . esc_html($original_datetime) . '</td>';
-            echo '<td>' . esc_html($new_datetime) . '</td>';
+            echo '<td>';
+            // Display preferred times if they exist
+            $preferred_times = get_post_meta($request_id, 'preferred_times', true);
+            if (!empty($preferred_times)) {
+                foreach ($preferred_times as $index => $time) {
+                    if (!empty($time['date']) && !empty($time['time'])) {
+                        $formatted_time = date('M j, Y', strtotime($time['date'])) . ' at ' . 
+                                        date('g:i A', strtotime($time['time']));
+                        echo 'Option ' . ($index + 1) . ': ' . esc_html($formatted_time) . '<br>';
+                    }
+                }
+            } else {
+                echo 'No preferred times specified';
+            }
+            echo '</td>';
             echo '<td><span class="badge bg-' . $status_class . '">' . $status_text . '</span></td>';
             echo '</tr>';
         }

@@ -142,18 +142,27 @@ if (isset($_POST['submit_student_reschedule_request']) && $_POST['submit_student
     $original_time = sanitize_text_field($_POST['original_time']);
     $reason = sanitize_textarea_field($_POST['reason']);
     
-    // Process preferred times
+    // Process preferred times - make sure we're getting the correct format
     $preferred_times = array();
     for ($i = 1; $i <= 3; $i++) {
-        if (!empty($_POST['preferred_date_' . $i]) && !empty($_POST['preferred_time_' . $i])) {
-            $preferred_times[] = array(
-                'date' => sanitize_text_field($_POST['preferred_date_' . $i]),
-                'time' => sanitize_text_field($_POST['preferred_time_' . $i])
-            );
+        $date_key = 'preferred_date_' . $i;
+        $time_key = 'preferred_time_' . $i;
+        
+        if (!empty($_POST[$date_key]) && !empty($_POST[$time_key])) {
+            // Ensure proper date/time format
+            $date = sanitize_text_field($_POST[$date_key]);
+            $time = sanitize_text_field($_POST[$time_key]);
+            
+            // Validate date and time format
+            if (strtotime($date) && strtotime($time)) {
+                $preferred_times[] = array(
+                    'date' => $date,
+                    'time' => $time
+                );
+            }
         }
     }
-    
-    // Create a new reschedule request
+
     $new_request = array(
         'post_title'   => 'Student Reschedule Request',
         'post_content' => '',
@@ -171,20 +180,16 @@ if (isset($_POST['submit_student_reschedule_request']) && $_POST['submit_student
         update_post_meta($new_request_id, 'original_date', $original_date);
         update_post_meta($new_request_id, 'original_time', $original_time);
         update_post_meta($new_request_id, 'reason', $reason);
-        update_post_meta($new_request_id, 'preferred_times', $preferred_times);
+        
+        // Only save preferred times if we have valid ones
+        if (!empty($preferred_times)) {
+            update_post_meta($new_request_id, 'preferred_times', $preferred_times);
+        }
+        
         update_post_meta($new_request_id, 'status', 'pending');
         
-        // If this is an AJAX request, return success
-        if (wp_doing_ajax()) {
-            wp_send_json_success();
-            exit;
-        }
-    } else {
-        // If this is an AJAX request, return error
-        if (wp_doing_ajax()) {
-            wp_send_json_error();
-            exit;
-        }
+        // Debug log to check what's being saved
+        error_log('Preferred times saved: ' . print_r($preferred_times, true));
     }
 }
 
@@ -1170,7 +1175,7 @@ function test_reschedule_requests() {
                             if (!empty($student_requests)) {
                                 echo '<div class="table-responsive">';
                                 echo '<table class="table table-striped">';
-                                echo '<thead><tr><th>Date Requested</th><th>Lesson Date</th><th>Tutor</th><th>Status</th><th>Actions</th></tr></thead>';
+                                echo '<thead><tr><th>Date Requested</th><th>Lesson Date</th><th>Preferred Times</th><th>Tutor</th><th>Status</th><th>Actions</th></tr></thead>';
                                 echo '<tbody>';
                                 
                                 foreach ($student_requests as $request) {
@@ -1186,6 +1191,20 @@ function test_reschedule_requests() {
                                     // Format the original date for display
                                     $formatted_original = !empty($original_date) ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
                                     
+                                    // Get tutor's full name
+                                    $tutor_full_name = $tutor_name;
+                                    $tutor_user = get_user_by('login', $tutor_name);
+                                    if ($tutor_user) {
+                                        $first_name = get_user_meta($tutor_user->ID, 'first_name', true);
+                                        $last_name = get_user_meta($tutor_user->ID, 'last_name', true);
+                                        
+                                        if (!empty($first_name) && !empty($last_name)) {
+                                            $tutor_full_name = $first_name . ' ' . $last_name;
+                                        } else {
+                                            $tutor_full_name = $tutor_user->display_name;
+                                        }
+                                    }
+                                    
                                     // Set status badge
                                     $status_badge = '';
                                     if ($status === 'confirmed') {
@@ -1199,7 +1218,23 @@ function test_reschedule_requests() {
                                     echo '<tr>';
                                     echo '<td>' . esc_html($request_date) . '</td>';
                                     echo '<td>' . esc_html($formatted_original) . '</td>';
-                                    echo '<td>' . esc_html($tutor_name) . '</td>';
+                                    
+                                    // Display preferred times
+                                    echo '<td>';
+                                    if (!empty($preferred_times) && is_array($preferred_times)) {
+                                        foreach ($preferred_times as $index => $time) {
+                                            if (!empty($time['date']) && !empty($time['time'])) {
+                                                $formatted_time = date('M j, Y \a\t g:i A', 
+                                                    strtotime($time['date'] . ' ' . $time['time']));
+                                                echo 'Option ' . ($index + 1) . ': ' . esc_html($formatted_time) . '<br>';
+                                            }
+                                        }
+                                    } else {
+                                        echo 'No preferred times specified';
+                                    }
+                                    echo '</td>';
+                                    
+                                    echo '<td>' . esc_html($tutor_full_name) . '</td>';
                                     echo '<td>' . $status_badge . '</td>';
                                     echo '<td>';
                                     
