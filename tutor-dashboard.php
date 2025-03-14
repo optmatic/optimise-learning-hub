@@ -1196,6 +1196,8 @@ if (isset($_POST['provide_new_alternatives']) && isset($_POST['request_id'])) {
         update_post_meta($new_request_id, 'message', $message);
         update_post_meta($new_request_id, 'status', 'pending');
         
+                
+                // If it's a decline action, validate the reason
         // Mark the original unavailable_all request as handled
         update_post_meta($request_id, 'status', 'handled');
         
@@ -1466,20 +1468,14 @@ function display_tutor_requests_content() {
                 // Action buttons
                 echo '<td>';
                 if ($status === 'pending') {
-                    echo '<form method="post" class="d-inline me-2">';
-                    echo '<input type="hidden" name="request_action" value="confirm">';
-                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                    echo '<input type="hidden" name="tutor_request_nonce" value="' . wp_create_nonce('tutor_request_action') . '">';
-                    echo '<button type="submit" class="btn btn-sm btn-success">Confirm</button>';
-                    echo '</form> ';
+                    // Confirm button
+                    echo '<button type="button" class="btn btn-sm btn-success confirm-action" data-request-id="' . $request_id . '">Confirm</button> ';
                     
-                    echo '<form method="post" class="d-inline">';
-                    echo '<input type="hidden" name="request_action" value="decline">';
-                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                    echo '<input type="hidden" name="tutor_request_nonce" value="' . wp_create_nonce('tutor_request_action') . '">';
-                    echo '<input type="text" name="decline_reason" placeholder="Reason" required>';
-                    echo '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
-                    echo '</form>';
+                    // Decline form
+                    echo '<div class="decline-form d-inline-block">';
+                    echo '<input type="text" class="decline-reason form-control form-control-sm d-inline-block" style="width: 150px;" placeholder="Reason">';
+                    echo '<button type="button" class="btn btn-sm btn-danger decline-action" data-request-id="' . $request_id . '">Decline</button>';
+                    echo '</div>';
                 } elseif ($status === 'declined') {
                     echo 'Reason: ' . esc_html($reason);
                 } else {
@@ -1629,76 +1625,100 @@ function display_tutor_requests_content() {
  * Handle request actions (confirm/decline)
  */
 function handle_tutor_request_actions() {
-    // Check if this is a request action
-    if (isset($_POST['request_action']) && isset($_POST['request_id'])) {
-        $action = sanitize_text_field($_POST['request_action']);
-        $request_id = intval($_POST['request_id']);
-        $reason = isset($_POST['decline_reason']) ? sanitize_text_field($_POST['decline_reason']) : '';
-        
-        // Verify nonce for security
-        if (!isset($_POST['tutor_request_nonce']) || !wp_verify_nonce($_POST['tutor_request_nonce'], 'tutor_request_action')) {
-            wp_die('Security check failed');
-        }
-        
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'tutor_requests';
-        
-        if ($action === 'confirm') {
-            $wpdb->update(
-                $table_name,
-                ['status' => 'confirmed'],
-                ['id' => $request_id],
-                ['%s'],
-                ['%d']
-            );
-        } elseif ($action === 'decline') {
-            $wpdb->update(
-                $table_name,
-                [
-                    'status' => 'declined',
-                    'decline_reason' => $reason
-                ],
-                ['id' => $request_id],
-                ['%s', '%s'],
-                ['%d']
-            );
-        }
-        
-        // Redirect back to the same page to prevent form resubmission
-        wp_redirect(add_query_arg('tab', 'requests', remove_query_arg(['request_action', 'request_id'])));
-        exit;
+    if (!isset($_POST['action'])) {
+        return;
     }
-}
-add_action('init', 'handle_tutor_request_actions');
 
-/**
- * Modify display_tutor_requests_tab function to include form handling
- */
+    $action = sanitize_text_field($_POST['action']);
+    
+    if (!isset($_POST['tutor_request_nonce']) || !wp_verify_nonce($_POST['tutor_request_nonce'], 'tutor_request_action')) {
+        wp_die('Security check failed');
+    }
+    
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'tutor_requests';
+    
+    // Check if this is an AJAX request
+    $is_ajax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+               strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest';
+    
+    if ($action === 'confirm' && isset($_POST['request_id'])) {
+        $request_id = intval($_POST['request_id']);
+        
+        // Update the request status to confirmed
+        $wpdb->update(
+            $table_name,
+            ['status' => 'confirmed'],
+            ['id' => $request_id],
+            ['%s'],
+            ['%d']
+        );
+        
+        if ($is_ajax) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Request confirmed successfully'
+            ]);
+            exit;
+        }
+    }
+    
+    if ($action === 'decline' && isset($_POST['request_id']) && isset($_POST['decline_reason'])) {
+        $request_id = intval($_POST['request_id']);
+        $decline_reason = sanitize_text_field($_POST['decline_reason']);
+        
+        // Update the request status to declined and store the reason
+        $wpdb->update(
+            $table_name,
+            [
+                'status' => 'declined',
+                'decline_reason' => $decline_reason
+            ],
+            ['id' => $request_id],
+            ['%s', '%s'],
+            ['%d']
+        );
+        
+        if ($is_ajax) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Request declined successfully'
+            ]);
+            exit;
+        }
+    }
+    
+    // Redirect back to the requests page if not AJAX
+    wp_redirect(add_query_arg('tab', 'requests', get_permalink()));
+    exit;
+}
+
 function display_tutor_requests_ui() {
     // ... existing code ...
     
-    // Add this inside the function where you display the table rows
     function render_action_buttons($request) {
-        $nonce = wp_create_nonce('tutor_request_action');
         $output = '';
         
         if ($request->status === 'pending') {
-            $output .= '<form method="post" style="display:inline-block;">';
-            $output .= '<input type="hidden" name="request_action" value="confirm">';
-            $output .= '<input type="hidden" name="request_id" value="' . esc_attr($request->id) . '">';
-            $output .= '<input type="hidden" name="tutor_request_nonce" value="' . $nonce . '">';
-            $output .= '<button type="submit" class="btn btn-success">Confirm</button>';
-            $output .= '</form> ';
+            // Generate a unique ID for this row's actions
+            $unique_id = 'request_' . $request->id;
             
-            $output .= '<form method="post" style="display:inline-block;" onsubmit="return validateDeclineReason(this);">';
-            $output .= '<input type="hidden" name="request_action" value="decline">';
-            $output .= '<input type="hidden" name="request_id" value="' . esc_attr($request->id) . '">';
-            $output .= '<input type="hidden" name="tutor_request_nonce" value="' . $nonce . '">';
-            $output .= '<input type="text" name="decline_reason" placeholder="Reason" required>';
-            $output .= '<button type="submit" class="btn btn-danger">Decline</button>';
-            $output .= '</form>';
-        } elseif ($request->status === 'declined') {
-            $output .= 'Reason: ' . esc_html($request->decline_reason);
+            // Create a container for this row's actions
+            $output .= '<div id="' . $unique_id . '_container">';
+            
+            // Confirm button with inline onclick handler
+            $output .= '<button type="button" onclick="confirmRequest(' . $request->id . ', \'' . $unique_id . '\')" class="button button-primary">Confirm</button>';
+            
+            // Decline section
+            $output .= '<div style="margin-top: 5px;">';
+            $output .= '<input type="text" id="' . $unique_id . '_reason" placeholder="Reason" style="width: 150px; margin-right: 5px;">';
+            $output .= '<button type="button" onclick="declineRequest(' . $request->id . ', \'' . $unique_id . '\')" class="button button-secondary">Decline</button>';
+            $output .= '</div>';
+            
+            $output .= '</div>';
+            
+            // Hidden "No actions available" text that will be shown after action
+            $output .= '<div id="' . $unique_id . '_no_actions" style="display: none;">No actions available</div>';
         } else {
             $output .= 'No actions available';
         }
@@ -1706,19 +1726,195 @@ function display_tutor_requests_ui() {
         return $output;
     }
     
-    // Add this JavaScript to validate the decline reason
+    // Add this JavaScript at the end of the function
     ?>
     <script>
-    function validateDeclineReason(form) {
-        const reasonInput = form.querySelector('input[name="decline_reason"]');
-        if (!reasonInput.value.trim()) {
-            alert('Please provide a reason for declining the request.');
-            return false;
-        }
-        return true;
-    }
+    jQuery(document).ready(function($) {
+        // Handle confirm button click
+        $('.confirm-request').on('click', function() {
+            var button = $(this);
+            var requestId = button.data('id');
+            var row = button.closest('tr');
+            
+            // Disable the button to prevent multiple clicks
+            button.prop('disabled', true).text('Processing...');
+            
+            // Send AJAX request
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'handle_tutor_request',
+                    request_action: 'confirm',
+                    request_id: requestId,
+                    security: '<?php echo wp_create_nonce("tutor_request_ajax_nonce"); ?>'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Update the status cell
+                        row.find('td:nth-child(4)').html('<span class="status-confirmed">Confirmed</span>');
+                        
+                        // Replace action buttons with "No actions available"
+                        row.find('td:nth-child(5)').html('No actions available');
+                        
+                        // Show success message
+                        $('<div class="notice notice-success is-dismissible"><p>Request confirmed successfully!</p></div>')
+                            .insertBefore('.requests-table')
+                            .delay(3000)
+                            .fadeOut(500, function() { $(this).remove(); });
+                    } else {
+                        alert('Error: ' + response.data.message);
+                        button.prop('disabled', false).text('Confirm');
+                    }
+                },
+                error: function() {
+                    alert('An error occurred. Please try again.');
+                    button.prop('disabled', false).text('Confirm');
+                }
+            });
+        });
+        
+        // Handle decline button click
+        $('.decline-request').on('click', function() {
+            var button = $(this);
+            var requestId = button.data('id');
+            var row = button.closest('tr');
+            var reason = button.prev('.decline-reason').val().trim();
+            
+            // Validate reason
+            if (!reason) {
+                alert('Please provide a reason for declining the request.');
+                return;
+            }
+            
+            // Disable the button to prevent multiple clicks
+            button.prop('disabled', true).text('Processing...');
+            
+            // Send AJAX request
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'handle_tutor_request',
+                    request_action: 'decline',
+                    request_id: requestId,
+                    decline_reason: reason,
+                    security: '<?php echo wp_create_nonce("tutor_request_ajax_nonce"); ?>'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Update the status cell
+                        row.find('td:nth-child(4)').html('<span class="status-declined">Declined</span>');
+                        
+                        // Replace action buttons with "No actions available"
+                        row.find('td:nth-child(5)').html('No actions available');
+                        
+                        // Show success message
+                        $('<div class="notice notice-success is-dismissible"><p>Request declined successfully!</p></div>')
+                            .insertBefore('.requests-table')
+                            .delay(3000)
+                            .fadeOut(500, function() { $(this).remove(); });
+                    } else {
+                        alert('Error: ' + response.data.message);
+                        button.prop('disabled', false).text('Decline');
+                    }
+                },
+                error: function() {
+                    alert('An error occurred. Please try again.');
+                    button.prop('disabled', false).text('Decline');
+                }
+            });
+        });
+    });
     </script>
     <?php
 }
-
 ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle confirm action
+    document.querySelectorAll('.confirm-action').forEach(button => {
+        button.addEventListener('click', function() {
+            const requestId = this.dataset.requestId;
+            const row = this.closest('tr');
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('action', 'handle_tutor_request');
+            formData.append('request_action', 'confirm');
+            formData.append('request_id', requestId);
+            formData.append('security', '<?php echo wp_create_nonce("tutor_request_ajax_nonce"); ?>');
+            
+            // Send AJAX request
+            fetch(ajaxurl, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update status cell
+                    row.querySelector('td:nth-child(4)').innerHTML = '<span class="badge bg-success">Confirmed</span>';
+                    // Update actions cell
+                    row.querySelector('td:nth-child(5)').innerHTML = '<span class="text-muted">No actions available</span>';
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+    });
+
+    // Handle decline action
+    document.querySelectorAll('.decline-action').forEach(button => {
+        button.addEventListener('click', function() {
+            const requestId = this.dataset.requestId;
+            const row = this.closest('tr');
+            const reasonInput = row.querySelector('.decline-reason');
+            const reason = reasonInput.value.trim();
+            
+            // Validate reason
+            if (!reason) {
+                alert('Please provide a reason for declining the request.');
+                reasonInput.focus();
+                return;
+            }
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('action', 'handle_tutor_request');
+            formData.append('request_action', 'decline');
+            formData.append('request_id', requestId);
+            formData.append('decline_reason', reason);
+            formData.append('security', '<?php echo wp_create_nonce("tutor_request_ajax_nonce"); ?>');
+            
+            // Send AJAX request
+            fetch(ajaxurl, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update status cell
+                    row.querySelector('td:nth-child(4)').innerHTML = '<span class="badge bg-danger">Declined</span>';
+                    // Update actions cell
+                    row.querySelector('td:nth-child(5)').innerHTML = 'Reason: ' + reason;
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+    });
+});
+</script>

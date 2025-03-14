@@ -1080,3 +1080,31 @@ function my_custom_to_admin_emails( $args ) {
 
     return $args;
 }
+
+// AJAX handler for tutor requests
+add_action('wp_ajax_handle_tutor_request', 'handle_tutor_request_ajax');
+function handle_tutor_request_ajax() {
+    check_ajax_referer('tutor_request_ajax_nonce', 'security');
+    
+    if (!isset($_POST['request_action']) || !isset($_POST['request_id'])) {
+        wp_send_json_error('Missing required fields');
+    }
+    
+    $request_id = intval($_POST['request_id']);
+    $action = sanitize_text_field($_POST['request_action']);
+    
+    if ($action === 'confirm') {
+        update_post_meta($request_id, 'status', 'confirmed');
+        wp_send_json_success();
+    } elseif ($action === 'decline') {
+        if (empty($_POST['decline_reason'])) {
+            wp_send_json_error('Decline reason is required');
+        }
+        $reason = sanitize_text_field($_POST['decline_reason']);
+        update_post_meta($request_id, 'status', 'declined');
+        update_post_meta($request_id, 'reason', $reason);
+        wp_send_json_success();
+    } else {
+        wp_send_json_error('Invalid action');
+    }
+}
