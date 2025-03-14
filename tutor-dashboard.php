@@ -651,7 +651,7 @@ if (current_user_can('tutor')) {
 
     <!-- Requests Tab -->
     <div class="tab-pane fade" id="requests" role="tabpanel" aria-labelledby="requests-tab">
-        <?php display_tutor_requests_tab(); ?>
+        <?php display_tutor_requests_content(); ?>
     </div>
     </div>            </div> <!-- This div closes the "tab-content" div -->
         <div>
@@ -1258,7 +1258,7 @@ function add_requests_tab_to_navigation() {
 /**
  * Displays the Requests tab content for tutors
  */
-function display_tutor_requests_tab() {
+function display_tutor_requests_content() {
     // Get current user's display name
     $current_user = wp_get_current_user();
     $tutor_display_name = $current_user->display_name;
@@ -1469,18 +1469,19 @@ function display_tutor_requests_tab() {
                     echo '<form method="post" class="d-inline me-2">';
                     echo '<input type="hidden" name="request_action" value="confirm">';
                     echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                    echo '<input type="hidden" name="tutor_request_nonce" value="' . wp_create_nonce('tutor_request_action') . '">';
                     echo '<button type="submit" class="btn btn-sm btn-success">Confirm</button>';
-                    echo '</form>';
+                    echo '</form> ';
                     
                     echo '<form method="post" class="d-inline">';
                     echo '<input type="hidden" name="request_action" value="decline">';
                     echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                    echo '<button type="submit" class="btn btn-sm btn-outline-danger">Decline</button>';
+                    echo '<input type="hidden" name="tutor_request_nonce" value="' . wp_create_nonce('tutor_request_action') . '">';
+                    echo '<input type="text" name="decline_reason" placeholder="Reason" required>';
+                    echo '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
                     echo '</form>';
-                    
-                    if (!empty($reason)) {
-                        echo '<div class="mt-2 small text-muted"><strong>Reason:</strong> ' . esc_html($reason) . '</div>';
-                    }
+                } elseif ($status === 'declined') {
+                    echo 'Reason: ' . esc_html($reason);
                 } else {
                     echo '<span class="text-muted">No actions available</span>';
                 }
@@ -1624,5 +1625,100 @@ function display_tutor_requests_tab() {
     echo '</div>'; // End container
 }
 
-// ... existing code ...
+/**
+ * Handle request actions (confirm/decline)
+ */
+function handle_tutor_request_actions() {
+    // Check if this is a request action
+    if (isset($_POST['request_action']) && isset($_POST['request_id'])) {
+        $action = sanitize_text_field($_POST['request_action']);
+        $request_id = intval($_POST['request_id']);
+        $reason = isset($_POST['decline_reason']) ? sanitize_text_field($_POST['decline_reason']) : '';
+        
+        // Verify nonce for security
+        if (!isset($_POST['tutor_request_nonce']) || !wp_verify_nonce($_POST['tutor_request_nonce'], 'tutor_request_action')) {
+            wp_die('Security check failed');
+        }
+        
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'tutor_requests';
+        
+        if ($action === 'confirm') {
+            $wpdb->update(
+                $table_name,
+                ['status' => 'confirmed'],
+                ['id' => $request_id],
+                ['%s'],
+                ['%d']
+            );
+        } elseif ($action === 'decline') {
+            $wpdb->update(
+                $table_name,
+                [
+                    'status' => 'declined',
+                    'decline_reason' => $reason
+                ],
+                ['id' => $request_id],
+                ['%s', '%s'],
+                ['%d']
+            );
+        }
+        
+        // Redirect back to the same page to prevent form resubmission
+        wp_redirect(add_query_arg('tab', 'requests', remove_query_arg(['request_action', 'request_id'])));
+        exit;
+    }
+}
+add_action('init', 'handle_tutor_request_actions');
+
+/**
+ * Modify display_tutor_requests_tab function to include form handling
+ */
+function display_tutor_requests_ui() {
+    // ... existing code ...
+    
+    // Add this inside the function where you display the table rows
+    function render_action_buttons($request) {
+        $nonce = wp_create_nonce('tutor_request_action');
+        $output = '';
+        
+        if ($request->status === 'pending') {
+            $output .= '<form method="post" style="display:inline-block;">';
+            $output .= '<input type="hidden" name="request_action" value="confirm">';
+            $output .= '<input type="hidden" name="request_id" value="' . esc_attr($request->id) . '">';
+            $output .= '<input type="hidden" name="tutor_request_nonce" value="' . $nonce . '">';
+            $output .= '<button type="submit" class="btn btn-success">Confirm</button>';
+            $output .= '</form> ';
+            
+            $output .= '<form method="post" style="display:inline-block;" onsubmit="return validateDeclineReason(this);">';
+            $output .= '<input type="hidden" name="request_action" value="decline">';
+            $output .= '<input type="hidden" name="request_id" value="' . esc_attr($request->id) . '">';
+            $output .= '<input type="hidden" name="tutor_request_nonce" value="' . $nonce . '">';
+            $output .= '<input type="text" name="decline_reason" placeholder="Reason" required>';
+            $output .= '<button type="submit" class="btn btn-danger">Decline</button>';
+            $output .= '</form>';
+        } elseif ($request->status === 'declined') {
+            $output .= 'Reason: ' . esc_html($request->decline_reason);
+        } else {
+            $output .= 'No actions available';
+        }
+        
+        return $output;
+    }
+    
+    // Add this JavaScript to validate the decline reason
+    ?>
+    <script>
+    function validateDeclineReason(form) {
+        const reasonInput = form.querySelector('input[name="decline_reason"]');
+        if (!reasonInput.value.trim()) {
+            alert('Please provide a reason for declining the request.');
+            return false;
+        }
+        return true;
+    }
+    </script>
+    <?php
+}
+
 ?>
