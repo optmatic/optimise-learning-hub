@@ -1017,7 +1017,7 @@ function test_reschedule_requests() {
                                                 <p>Your reschedule request has been successfully submitted. Your tutor will be notified.</p>
                                             </div>
                                             <div id="rescheduleRequestErrorMessage" class="alert alert-danger" style="display: none;">
-                                                <p>Please fill in all required fields (tutor, date, and time).</p>
+                                                <p>Please fill in all required fields (tutor, lesson, and reason).</p>
                                             </div>
                                             <form id="rescheduleRequestForm" method="post">
                                                 <input type="hidden" name="submit_student_reschedule_request" value="1">
@@ -1067,13 +1067,71 @@ function test_reschedule_requests() {
                                                 </div>
                                                 
                                                 <div class="mb-3">
-                                                    <label for="lesson_date" class="form-label">Lesson Date to Reschedule <span class="text-danger">*</span></label>
-                                                    <input type="date" class="form-control" id="lesson_date" name="original_date" required>
-                                                </div>
-                                                
-                                                <div class="mb-3">
-                                                    <label for="lesson_time" class="form-label">Lesson Time <span class="text-danger">*</span></label>
-                                                    <input type="time" class="form-control" id="lesson_time" name="original_time" required>
+                                                    <label for="lesson_select" class="form-label">Lesson Date to Reschedule <span class="text-danger">*</span></label>
+                                                    <select class="form-select" id="lesson_select" name="lesson_select" required>
+                                                        <option value="">--Select a scheduled lesson--</option>
+                            <?php
+                                                        // Get current date for comparison
+                                                        $now = new DateTime('now', new DateTimeZone('Australia/Brisbane'));
+                                                        
+                                                        // Get the student's lesson schedule
+                                                        $lesson_schedule = get_user_meta(get_current_user_id(), 'lesson_schedule_list', true);
+                                                        
+                                                        if (!empty($lesson_schedule)) {
+                                                            $lessons = explode("\n", $lesson_schedule);
+                                                            $upcoming_lessons = [];
+                                                            
+                                                            // Process each lesson in the schedule
+                                                            foreach ($lessons as $lesson) {
+                                                                if (!empty(trim($lesson))) {
+                                                                    // Extract date and time using regex
+                                                                    if (preg_match('/on ([A-Za-z]+) (\d+) ([A-Za-z]+) (\d{4}) at (\d{2}:\d{2})/', $lesson, $matches)) {
+                                                                        $date_string = $matches[1] . ' ' . $matches[2] . ' ' . $matches[3] . ' ' . $matches[4] . ' ' . $matches[5];
+                                                                        $lesson_date = DateTime::createFromFormat('l d F Y H:i', $date_string, new DateTimeZone('Australia/Brisbane'));
+                                                                        
+                                                                        // Only include future lessons
+                                                                        if ($lesson_date > $now) {
+                                                                            // Determine subject
+                                                                            $subject = 'Lesson';
+                                                                            if (stripos($lesson, 'mathematics') !== false) {
+                                                                                $subject = 'Mathematics';
+                                                                            } elseif (stripos($lesson, 'english') !== false) {
+                                                                                $subject = 'English';
+                                                                            } elseif (stripos($lesson, 'chemistry') !== false) {
+                                                                                $subject = 'Chemistry';
+                                                                            } elseif (stripos($lesson, 'physics') !== false) {
+                                                                                $subject = 'Physics';
+                                                                            }
+                                                                            
+                                                                            $upcoming_lessons[] = [
+                                                                                'date' => $lesson_date,
+                                                                                'formatted' => $lesson_date->format('l, jS \of F Y \a\t g:i A'),
+                                                                                'subject' => $subject,
+                                                                                'date_value' => $lesson_date->format('Y-m-d'),
+                                                                                'time_value' => $lesson_date->format('H:i:s')
+                                                                            ];
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            
+                                                            // Sort lessons by date
+                                                            usort($upcoming_lessons, function($a, $b) {
+                                                                return $a['date']->getTimestamp() - $b['date']->getTimestamp();
+                                                            });
+                                                            
+                                                            // Output options for the select dropdown
+                                                            foreach ($upcoming_lessons as $lesson) {
+                                                                echo '<option value="' . $lesson['date_value'] . '|' . $lesson['time_value'] . '">' 
+                                                                    . $lesson['subject'] . ' - ' . $lesson['formatted'] . '</option>';
+                                                            }
+                                                        }
+                                                        ?>
+                                                    </select>
+                                                    
+                                                    <!-- Hidden fields to store the selected date and time -->
+                                                    <input type="hidden" id="original_date" name="original_date">
+                                                    <input type="hidden" id="original_time" name="original_time">
                                                 </div>
                                                 
                                                 <div class="mb-3">
@@ -1082,8 +1140,8 @@ function test_reschedule_requests() {
                                                 </div>
                                                 
                                                 <div class="mb-3">
-                                                    <label class="form-label">Preferred Alternative Times (Optional)</label>
-                                                    <p class="text-muted small">Please select up to 3 preferred alternative dates and times.</p>
+                                                    <label class="form-label">Preferred Alternative Times <span class="text-danger">*</span></label>
+                                                    <p class="text-muted small">Please select at least one preferred alternative date and time.</p>
                                                     
                                                     <div id="preferred-times-container">
                                                         <!-- Preferred Time 1 -->
@@ -1091,11 +1149,11 @@ function test_reschedule_requests() {
                                                             <div class="row">
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Date 1:</label>
-                                                                    <input type="date" class="form-control" name="preferred_date_1">
+                                                                    <input type="date" class="form-control" name="preferred_date_1" id="preferred_date_1" required>
                                                                 </div>
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Time 1:</label>
-                                                                    <input type="time" class="form-control" name="preferred_time_1">
+                                                                    <input type="time" class="form-control" name="preferred_time_1" id="preferred_time_1" required>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1105,11 +1163,11 @@ function test_reschedule_requests() {
                                                             <div class="row">
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Date 2:</label>
-                                                                    <input type="date" class="form-control" name="preferred_date_2">
+                                                                    <input type="date" class="form-control" name="preferred_date_2" id="preferred_date_2">
                                                                 </div>
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Time 2:</label>
-                                                                    <input type="time" class="form-control" name="preferred_time_2">
+                                                                    <input type="time" class="form-control" name="preferred_time_2" id="preferred_time_2">
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1119,11 +1177,11 @@ function test_reschedule_requests() {
                                                             <div class="row">
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Date 3:</label>
-                                                                    <input type="date" class="form-control" name="preferred_date_3">
+                                                                    <input type="date" class="form-control" name="preferred_date_3" id="preferred_date_3">
                                                                 </div>
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Time 3:</label>
-                                                                    <input type="time" class="form-control" name="preferred_time_3">
+                                                                    <input type="time" class="form-control" name="preferred_time_3" id="preferred_time_3">
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1760,13 +1818,12 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Validate required fields
             const tutorSelect = document.getElementById('tutor_select');
-            const lessonDate = document.getElementById('lesson_date');
-            const lessonTime = document.getElementById('lesson_time');
+            const lessonSelect = document.getElementById('lesson_select');
             const reason = document.getElementById('reason');
             const errorMessage = document.getElementById('rescheduleRequestErrorMessage');
             
             // Check if required fields are filled
-            if (!tutorSelect.value || !lessonDate.value || !lessonTime.value || !reason.value) {
+            if (!tutorSelect.value || !lessonSelect.value || !reason.value) {
                 errorMessage.style.display = 'block';
                 return; // Stop form submission
             } else {
@@ -1788,8 +1845,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Clear form fields
                     document.getElementById('tutor_select').value = '';
-                    document.getElementById('lesson_date').value = '';
-                    document.getElementById('lesson_time').value = '';
                     document.getElementById('reason').value = '';
                     
                     // Clear preferred times
@@ -2040,3 +2095,25 @@ jQuery(document).ready(function($) {
     padding: 0 4px;
 }
 </style>
+
+<script>
+// Update hidden fields when a lesson is selected
+document.addEventListener('DOMContentLoaded', function() {
+    const lessonSelect = document.getElementById('lesson_select');
+    const originalDate = document.getElementById('original_date');
+    const originalTime = document.getElementById('original_time');
+    
+    if (lessonSelect) {
+        lessonSelect.addEventListener('change', function() {
+            if (this.value) {
+                const [date, time] = this.value.split('|');
+                originalDate.value = date;
+                originalTime.value = time;
+            } else {
+                originalDate.value = '';
+                originalTime.value = '';
+            }
+        });
+    }
+});
+</script>
