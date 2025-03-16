@@ -1160,11 +1160,11 @@ function test_reschedule_requests() {
                                                             <div class="row">
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Date 1:</label>
-                                                                    <input type="date" class="form-control" name="preferred_date_1" id="preferred_date_1" required>
+                                                                    <input type="date" class="form-control preferred-date" name="preferred_date_1" id="preferred_date_1" required>
                                                                 </div>
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Time 1:</label>
-                                                                    <input type="time" class="form-control" name="preferred_time_1" id="preferred_time_1" required>
+                                                                    <input type="time" class="form-control preferred-time" name="preferred_time_1" id="preferred_time_1" required>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1174,11 +1174,11 @@ function test_reschedule_requests() {
                                                             <div class="row">
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Date 2:</label>
-                                                                    <input type="date" class="form-control" name="preferred_date_2" id="preferred_date_2">
+                                                                    <input type="date" class="form-control preferred-date" name="preferred_date_2" id="preferred_date_2">
                                                                 </div>
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Time 2:</label>
-                                                                    <input type="time" class="form-control" name="preferred_time_2" id="preferred_time_2">
+                                                                    <input type="time" class="form-control preferred-time" name="preferred_time_2" id="preferred_time_2">
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1188,15 +1188,18 @@ function test_reschedule_requests() {
                                                             <div class="row">
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Date 3:</label>
-                                                                    <input type="date" class="form-control" name="preferred_date_3" id="preferred_date_3">
+                                                                    <input type="date" class="form-control preferred-date" name="preferred_date_3" id="preferred_date_3">
                                                                 </div>
                                                                 <div class="col-md-6">
                                                                     <label class="form-label small">Preferred Time 3:</label>
-                                                                    <input type="time" class="form-control" name="preferred_time_3" id="preferred_time_3">
+                                                                    <input type="time" class="form-control preferred-time" name="preferred_time_3" id="preferred_time_3">
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     </div>
+                                                </div>
+                                                <div id="preferred-times-error" class="text-danger mt-2" style="display: none;">
+                                                    Please provide at least one preferred alternative time.
                                                 </div>
                                                 
                                                 <div class="modal-footer">
@@ -1654,11 +1657,11 @@ function test_reschedule_requests() {
                                 <div class="row">
                                     <div class="col-md-6">
                                         <label class="form-label small">Preferred Date 1:</label>
-                                        <input type="date" class="form-control" name="preferred_date_1" id="edit_preferred_date_1">
+                                        <input type="date" class="form-control preferred-date" name="preferred_date_1" id="edit_preferred_date_1">
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label small">Preferred Time 1:</label>
-                                        <input type="time" class="form-control" name="preferred_time_1" id="edit_preferred_time_1">
+                                        <input type="time" class="form-control preferred-time" name="preferred_time_1" id="edit_preferred_time_1">
                                     </div>
                                 </div>
                             </div>
@@ -1668,11 +1671,11 @@ function test_reschedule_requests() {
                                 <div class="row">
                                     <div class="col-md-6">
                                         <label class="form-label small">Preferred Date 2:</label>
-                                        <input type="date" class="form-control" name="preferred_date_2" id="edit_preferred_date_2">
+                                        <input type="date" class="form-control preferred-date" name="preferred_date_2" id="edit_preferred_date_2">
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label small">Preferred Time 2:</label>
-                                        <input type="time" class="form-control" name="preferred_time_2" id="edit_preferred_time_2">
+                                        <input type="time" class="form-control preferred-time" name="preferred_time_2" id="edit_preferred_time_2">
                                     </div>
                                 </div>
                             </div>
@@ -1682,11 +1685,11 @@ function test_reschedule_requests() {
                                 <div class="row">
                                     <div class="col-md-6">
                                         <label class="form-label small">Preferred Date 3:</label>
-                                        <input type="date" class="form-control" name="preferred_date_3" id="edit_preferred_date_3">
+                                        <input type="date" class="form-control preferred-date" name="preferred_date_3" id="edit_preferred_date_3">
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label small">Preferred Time 3:</label>
-                                        <input type="time" class="form-control" name="preferred_time_3" id="edit_preferred_time_3">
+                                        <input type="time" class="form-control preferred-time" name="preferred_time_3" id="edit_preferred_time_3">
                                     </div>
                                 </div>
                             </div>
@@ -1823,7 +1826,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle student reschedule request submission
     const submitStudentRescheduleButton = document.getElementById('submitStudentReschedule');
     if (submitStudentRescheduleButton) {
-        submitStudentRescheduleButton.addEventListener('click', function() {
+        submitStudentRescheduleButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            
             // Get form data
             const form = document.getElementById('rescheduleRequestForm');
             
@@ -1832,13 +1837,34 @@ document.addEventListener('DOMContentLoaded', function() {
             const lessonSelect = document.getElementById('lesson_select');
             const reason = document.getElementById('reason');
             const errorMessage = document.getElementById('rescheduleRequestErrorMessage');
+            const preferredTimesError = document.getElementById('preferred-times-error');
             
-            // Check if required fields are filled
+            // Check if basic required fields are filled
             if (!tutorSelect.value || !lessonSelect.value || !reason.value) {
                 errorMessage.style.display = 'block';
+                errorMessage.querySelector('p').textContent = 'Please fill in all required fields (tutor, lesson, and reason).';
                 return; // Stop form submission
             } else {
                 errorMessage.style.display = 'none';
+            }
+            
+            // Check if at least one preferred time is provided
+            let hasPreferredTime = false;
+            for (let i = 1; i <= 3; i++) {
+                const dateInput = document.getElementById(`preferred_date_${i}`);
+                const timeInput = document.getElementById(`preferred_time_${i}`);
+                
+                if (dateInput && timeInput && dateInput.value && timeInput.value) {
+                    hasPreferredTime = true;
+                    break;
+                }
+            }
+            
+            if (!hasPreferredTime) {
+                preferredTimesError.style.display = 'block';
+                return; // Stop form submission
+            } else {
+                preferredTimesError.style.display = 'none';
             }
             
             const formData = new FormData(form);
@@ -1853,16 +1879,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Show success message
                     const successMessage = document.getElementById('rescheduleRequestSuccessMessage');
                     successMessage.style.display = 'block';
-                    
-                    // Clear form fields
-                    document.getElementById('tutor_select').value = '';
-                    document.getElementById('reason').value = '';
-                    
-                    // Clear preferred times
-                    for (let i = 1; i <= 3; i++) {
-                        document.querySelector(`input[name="preferred_date_${i}"]`).value = '';
-                        document.querySelector(`input[name="preferred_time_${i}"]`).value = '';
-                    }
                     
                     // Hide the form
                     form.style.display = 'none';
@@ -1887,6 +1903,36 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+    
+    // Add event listeners to preferred time inputs to hide error when filled
+    const preferredDateInputs = document.querySelectorAll('.preferred-date');
+    const preferredTimeInputs = document.querySelectorAll('.preferred-time');
+    const preferredTimesError = document.getElementById('preferred-times-error');
+    
+    function checkPreferredTimes() {
+        let hasPreferredTime = false;
+        for (let i = 1; i <= 3; i++) {
+            const dateInput = document.getElementById(`preferred_date_${i}`);
+            const timeInput = document.getElementById(`preferred_time_${i}`);
+            
+            if (dateInput && timeInput && dateInput.value && timeInput.value) {
+                hasPreferredTime = true;
+                break;
+            }
+        }
+        
+        if (hasPreferredTime) {
+            preferredTimesError.style.display = 'none';
+        }
+    }
+    
+    preferredDateInputs.forEach(input => {
+        input.addEventListener('change', checkPreferredTimes);
+    });
+    
+    preferredTimeInputs.forEach(input => {
+        input.addEventListener('change', checkPreferredTimes);
+    });
     
     // Handle edit request button clicks
     const editButtons = document.querySelectorAll('.edit-request-btn');
