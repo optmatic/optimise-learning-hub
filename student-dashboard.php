@@ -1025,7 +1025,7 @@ function test_reschedule_requests() {
                                                 
                                                 <div class="mb-3">
                                                     <label for="tutor_select" class="form-label">Select Tutor <span class="text-danger">*</span></label>
-                    <?php
+                                                    <?php
                                                     // Get the student's assigned tutors
                                                     $current_user_id = get_current_user_id();
                                                     $tutors = array();
@@ -1033,7 +1033,7 @@ function test_reschedule_requests() {
                                                     // Query for users with the tutor role
                                                     $tutor_query = new WP_User_Query(array(
                                                         'role' => 'tutor',
-                                                        'fields' => array('ID', 'display_name')
+                                                        'fields' => array('ID', 'user_login', 'display_name')
                                                     ));
                                                     
                                                     // Get all tutors
@@ -1045,9 +1045,19 @@ function test_reschedule_requests() {
                                                         if (!empty($assigned_students)) {
                                                             $student_ids = explode(',', $assigned_students);
                                                             if (in_array($current_user_id, $student_ids)) {
+                                                                // Get tutor's first and last name
+                                                                $first_name = get_user_meta($tutor->ID, 'first_name', true);
+                                                                $last_name = get_user_meta($tutor->ID, 'last_name', true);
+                                                                
+                                                                // Use full name if available, otherwise use display name
+                                                                $display_name = (!empty($first_name) && !empty($last_name)) 
+                                                                    ? $first_name . ' ' . $last_name 
+                                                                    : $tutor->display_name;
+                                                                
                                                                 $tutors[] = array(
                                                                     'id' => $tutor->ID,
-                                                                    'name' => $tutor->display_name
+                                                                    'username' => $tutor->user_login,
+                                                                    'display_name' => $display_name
                                                                 );
                                                             }
                                                         }
@@ -1057,7 +1067,8 @@ function test_reschedule_requests() {
                                                         echo '<select name="tutor_name" id="tutor_select" class="form-select" required>';
                                                         echo '<option value="">--Select tutor--</option>';
                                                         foreach ($tutors as $tutor) {
-                                                            echo '<option value="' . esc_attr($tutor['name']) . '">' . esc_html($tutor['name']) . '</option>';
+                                                            // Store username as value but display full name to user
+                                                            echo '<option value="' . esc_attr($tutor['username']) . '">' . esc_html($tutor['display_name']) . '</option>';
                                                         }
                                                         echo '</select>';
                                                     } else {
