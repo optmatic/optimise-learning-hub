@@ -575,7 +575,7 @@ function test_reschedule_requests() {
         <div class="col-12">
             <div class="tab-content" id="myTabContent" style="padding-top: 20px;">
 
-                <!-- Home Tab -->
+                <!-- =========================== HOME TAB =========================== -->
                 <div class="tab-pane fade show active" id="home-tab" role="tabpanel" aria-labelledby="home">
                     <h3>Welcome to the Optimise Learning Hub!</h3>
                     <p>Welcome to the <strong>Optimise Learning Hub</strong>, an innovative and interactive platform designed to keep you actively informed in regard to your child's tutoring and their academic progress.</p>
@@ -585,7 +585,7 @@ function test_reschedule_requests() {
 </p>
                 </div>
 
-                <!-- Learning Goals Tab -->
+                <!-- =========================== YOUR LEARNING PLAN TAB =========================== -->
                 <div class="tab-pane fade" id="learning-goals" role="tabpanel" aria-labelledby="learning-goals-tab">
                   <!--  <h3>Your Learning Plan</h3> -->
 <p>Please see your child's <strong>Individual Learning Plan</strong> below, which provides an overview of the curriculum content your child will be studying during their tutoring lessons, and their specific learning goals. This plan is based upon the goals you have for your child's learning and the academic objectives we have developed based on our initial observations and assessments.</p>
@@ -626,7 +626,7 @@ function test_reschedule_requests() {
                     ?> 
                 </div>
     
-               <!--Your Schedule Tab -->
+<!-- =========================== YOUR LESSON SCHEDULE TAB =========================== -->
 <div class="tab-pane fade" id="schedule" role="tabpanel" aria-labelledby="your-schedule-tab">
     <?php
     // Mark confirmed reschedule requests as viewed when this tab is opened
@@ -886,7 +886,7 @@ function test_reschedule_requests() {
         ?>
     </div>
 </div>
-                <!-- Classroom Tab -->
+                <!-- =========================== YOUR CLASSROOMS TAB =========================== -->
                 <div class="tab-pane fade" id="classroom" role="tabpanel" aria-labelledby="classroom-tab">
                 <h3>Please note</h3>
                     <ul>
@@ -926,7 +926,7 @@ function test_reschedule_requests() {
                     </div>
                 </div>
 
-                <!-- My Progress Tab -->
+                <!-- =========================== YOUR LEARNING OVERVIEWS =========================== -->
 <div class="tab-pane fade" id="my-progress" role="tabpanel" aria-labelledby="my-progress-tab">
     <?php
     $current_user = wp_get_current_user();
@@ -988,7 +988,7 @@ function test_reschedule_requests() {
     ?>
 </div>
 
-                <!-- Tutor Comms Tab -->
+                <!-- =========================== REQUESTS TAB =========================== -->
                 <div class="tab-pane fade" id="tutor-comms" role="tabpanel" aria-labelledby="tutor-comms-tab">
                     <h4>Reschedule Requests</h4>
                     
