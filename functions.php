@@ -1081,30 +1081,290 @@ function my_custom_to_admin_emails( $args ) {
     return $args;
 }
 
-// AJAX handler for tutor requests
-add_action('wp_ajax_handle_tutor_request', 'handle_tutor_request_ajax');
-function handle_tutor_request_ajax() {
-    check_ajax_referer('tutor_request_ajax_nonce', 'security');
+// // AJAX handler for tutor requests
+// add_action('wp_ajax_handle_tutor_request', 'handle_tutor_request_ajax');
+// function handle_tutor_request_ajax() {
+//     check_ajax_referer('tutor_request_ajax_nonce', 'security');
     
-    if (!isset($_POST['request_action']) || !isset($_POST['request_id'])) {
-        wp_send_json_error('Missing required fields');
+//     if (!isset($_POST['request_action']) || !isset($_POST['request_id'])) {
+//         wp_send_json_error('Missing required fields');
+//     }
+    
+//     $request_id = intval($_POST['request_id']);
+//     $action = sanitize_text_field($_POST['request_action']);
+    
+//     if ($action === 'confirm') {
+//         update_post_meta($request_id, 'status', 'confirmed');
+//         wp_send_json_success();
+//     } elseif ($action === 'decline') {
+//         if (empty($_POST['decline_reason'])) {
+//             wp_send_json_error('Decline reason is required');
+//         }
+//         $reason = sanitize_text_field($_POST['decline_reason']);
+//         update_post_meta($request_id, 'status', 'declined');
+//         update_post_meta($request_id, 'reason', $reason);
+//         wp_send_json_success();
+//     } else {
+//         wp_send_json_error('Invalid action');
+//     }
+// }
+
+// // wp_localize_script('jquery', 'tutorRequestsData', array(
+// //     'nonce' => wp_create_nonce('tutor_request_action')
+// // ));
+
+// Include the custom request handler
+// require_once get_stylesheet_directory() . '/tutor-request-handler.php';
+
+// Add custom scripts for handling tutor requests
+add_action('wp_footer', 'add_custom_tutor_request_scripts');
+
+function add_custom_tutor_request_scripts() {
+    if (!is_page('tutor-dashboard')) return;
+    
+    // Localize the script with new data
+    wp_localize_script('jquery', 'customTutorData', array(
+        'ajaxurl' => admin_url('admin-ajax.php'),
+        'security' => wp_create_nonce('custom_tutor_request_action')
+    ));
+    
+    ?>
+    <script>
+    console.log('Custom tutor request scripts loaded');
+    
+    // Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM loaded, initializing custom handlers');
+        
+        // Replace all decline buttons with our custom implementation
+        replaceDeclineButtons();
+        
+        // Add mutation observer to handle dynamically added elements
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length) {
+                    replaceDeclineButtons();
+                }
+            });
+        });
+        
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+    
+    function replaceDeclineButtons() {
+        // Find all decline buttons
+        const declineButtons = document.querySelectorAll('button.btn-danger, button:contains("Decline")');
+        console.log('Found decline buttons:', declineButtons.length);
+        
+        declineButtons.forEach(function(button, index) {
+            // Skip if already processed
+            if (button.hasAttribute('data-custom-processed')) {
+                return;
+            }
+            
+            console.log('Processing button:', button);
+            
+            // Mark as processed
+            button.setAttribute('data-custom-processed', 'true');
+            
+            // Find the request ID
+            let requestId = button.getAttribute('data-request-id');
+            if (!requestId) {
+                // Try to find it from a parent form
+                const parentForm = button.closest('form');
+                if (parentForm) {
+                    const requestIdInput = parentForm.querySelector('input[name="request_id"]');
+                    if (requestIdInput) {
+                        requestId = requestIdInput.value;
+                    }
+                }
+            }
+            
+            if (!requestId) {
+                // Generate a fallback ID based on position
+                requestId = 'unknown-' + index;
+            }
+            
+            console.log('Request ID for button:', requestId);
+            
+            // Find or create reason input
+            let reasonInput = null;
+            const parentContainer = button.parentNode;
+            
+            // Look for existing input
+            reasonInput = parentContainer.querySelector('input[type="text"]');
+            
+            if (!reasonInput) {
+                // Create a new input if none exists
+                reasonInput = document.createElement('input');
+                reasonInput.type = 'text';
+                reasonInput.className = 'form-control form-control-sm d-inline-block custom-reason-input';
+                reasonInput.style.width = '150px';
+                reasonInput.placeholder = 'Reason';
+                reasonInput.id = 'custom-reason-' + requestId;
+                
+                // Insert before the button
+                parentContainer.insertBefore(reasonInput, button);
+            }
+            
+            // Create error message container
+            const errorContainer = document.createElement('div');
+            errorContainer.className = 'text-danger small mt-1 custom-error-message';
+            errorContainer.style.display = 'none';
+            errorContainer.textContent = 'Please provide a reason for declining';
+            errorContainer.id = 'custom-error-' + requestId;
+            
+            // Add after the button
+            if (button.nextSibling) {
+                parentContainer.insertBefore(errorContainer, button.nextSibling);
+            } else {
+                parentContainer.appendChild(errorContainer);
+            }
+            
+            // Replace the button's click handler
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                console.log('Custom decline button clicked');
+                
+                // Get the reason
+                const reason = reasonInput.value.trim();
+                console.log('Reason:', reason);
+                
+                // Validate reason
+                if (!reason) {
+                    console.log('No reason provided, showing error');
+                    errorContainer.style.display = 'block';
+                    reasonInput.focus();
+                    return;
+                }
+                
+                // Hide error if shown
+                errorContainer.style.display = 'none';
+                
+                // Show loading state
+                button.disabled = true;
+                button.textContent = 'Processing...';
+                
+                // Send AJAX request
+                jQuery.ajax({
+                    url: customTutorData.ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'custom_decline_request',
+                        request_id: requestId,
+                        reason: reason,
+                        security: customTutorData.security
+                    },
+                    success: function(response) {
+                        console.log('AJAX response:', response);
+                        
+                        if (response.success) {
+                            console.log('Request declined successfully');
+                            
+                            // Update UI
+                            const row = button.closest('tr');
+                            if (row) {
+                                // Update status cell
+                                const statusCell = row.querySelector('td:nth-child(4)');
+                                if (statusCell) {
+                                    statusCell.innerHTML = '<span class="badge bg-danger">Declined</span>';
+                                }
+                                
+                                // Update actions cell
+                                const actionsCell = row.querySelector('td:nth-child(5)');
+                                if (actionsCell) {
+                                    actionsCell.innerHTML = 'Reason: ' + reason;
+                                }
+                            } else {
+                                // Fallback: reload the page
+                                window.location.reload();
+                            }
+                        } else {
+                            console.error('Error:', response.data.message);
+                            alert('Error: ' + response.data.message);
+                            
+                            // Reset button
+                            button.disabled = false;
+                            button.textContent = 'Decline';
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('AJAX error:', status, error);
+                        alert('An error occurred. Please try again.');
+                        
+                        // Reset button
+                        button.disabled = false;
+                        button.textContent = 'Decline';
+                    }
+                });
+            });
+            
+            // Add input handler to hide error when typing
+            reasonInput.addEventListener('input', function() {
+                if (this.value.trim()) {
+                    errorContainer.style.display = 'none';
+                }
+            });
+        });
     }
+    </script>
     
-    $request_id = intval($_POST['request_id']);
-    $action = sanitize_text_field($_POST['request_action']);
-    
-    if ($action === 'confirm') {
-        update_post_meta($request_id, 'status', 'confirmed');
-        wp_send_json_success();
-    } elseif ($action === 'decline') {
-        if (empty($_POST['decline_reason'])) {
-            wp_send_json_error('Decline reason is required');
-        }
-        $reason = sanitize_text_field($_POST['decline_reason']);
-        update_post_meta($request_id, 'status', 'declined');
-        update_post_meta($request_id, 'reason', $reason);
-        wp_send_json_success();
-    } else {
-        wp_send_json_error('Invalid action');
+    <style>
+    .custom-error-message {
+        font-size: 12px;
+        margin-top: 5px;
     }
+    </style>
+    <?php
 }
+
+// Add custom JavaScript to override the browser alert/prompt functions
+add_action('wp_head', function() {
+    if (!is_page('tutor-dashboard')) return;
+    ?>
+    <script>
+    // Override the browser's alert, prompt, and confirm functions
+    (function() {
+        // Store original functions
+        const originalAlert = window.alert;
+        const originalPrompt = window.prompt;
+        const originalConfirm = window.confirm;
+        
+        // Override alert function
+        window.alert = function(message) {
+            console.log('Alert intercepted:', message);
+            // If it's the decline reason prompt, don't show it
+            if (message && message.includes('reason for declining')) {
+                console.log('Decline reason alert suppressed');
+                return;
+            }
+            // Otherwise, use the original alert
+            return originalAlert.apply(this, arguments);
+        };
+        
+        // Override prompt function
+        window.prompt = function(message, defaultValue) {
+            console.log('Prompt intercepted:', message);
+            // If it's the decline reason prompt, return a default reason
+            if (message && message.includes('reason for declining')) {
+                console.log('Decline reason prompt intercepted, returning default reason');
+                return "No specific reason provided";
+            }
+            // Otherwise, use the original prompt
+            return originalPrompt.apply(this, arguments);
+        };
+        
+        // Override confirm function
+        window.confirm = function(message) {
+            console.log('Confirm intercepted:', message);
+            // Always return true for confirms
+            return true;
+        };
+        
+        console.log('Browser dialog functions overridden');
+    })();
+    </script>
+    <?php
+});
