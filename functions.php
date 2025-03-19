@@ -43,7 +43,7 @@ function add_classroom_url_field($user) {
         <h3>Tutor Classroom URL</h3>
         <table class="form-table" id="classroom-fields">
             <tr>
-                <th><label for="custom_classroom_name">Classroom URL</label></th>    
+                <th><label for="tutor_classroom_name">Classroom URL</label></th>    
                 <td>
                     <input type="url" name="tutor_classroom_url" id="tutor_classroom_url" value="<?php echo esc_attr(get_user_meta($user->ID, 'tutor_classroom_url', true)); ?>" class="regular-text">
                 </td>
@@ -485,23 +485,12 @@ function save_classroom_url_field($user_id) {
     if (!current_user_can('edit_user', $user_id)) {
         return false;
     }
-
-    // Save Mathematics classroom URL
-    if (isset($_POST['mathematics_classroom'])) {
-        update_field('mathematics_classroom', sanitize_url($_POST['mathematics_classroom']), 'user_' . $user_id);
+    // Save Tutor classroom details
+    if (isset($_POST['tutor_classroom_name'])) {
+        update_field('tutor_classroom_name', sanitize_text_field($_POST['tutor_classroom_name']), 'user_' . $user_id);
     }
-
-    // Save English classroom URL
-    if (isset($_POST['english_classroom'])) {
-        update_field('english_classroom', sanitize_url($_POST['english_classroom']), 'user_' . $user_id);
-    }
-
-    // Save Custom classroom details
-    if (isset($_POST['custom_classroom_name'])) {
-        update_field('custom_classroom_name', sanitize_text_field($_POST['custom_classroom_name']), 'user_' . $user_id);
-    }
-    if (isset($_POST['custom_classroom_url'])) {
-        update_field('custom_classroom_url', sanitize_url($_POST['custom_classroom_url']), 'user_' . $user_id);
+    if (isset($_POST['tutor_classroom_url'])) {
+        update_field('tutor_classroom_url', sanitize_url($_POST['tutor_classroom_url']), 'user_' . $user_id);
     }
 }
 add_action('personal_options_update', 'save_classroom_url_field');
