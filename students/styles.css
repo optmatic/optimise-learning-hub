@@ -1,0 +1,59 @@
+.nav-tabs .nav-link .badge {
+  margin-left: 5px;
+  font-size: 0.7em;
+  vertical-align: top;
+  position: relative;
+  top: -1px;
+}
+
+/* Styling for request cards */
+.card-header.bg-info {
+  background-color: #17a2b8 !important;
+}
+
+.card-header.bg-warning {
+  background-color: #ffc107 !important;
+}
+
+/* Icons for direction */
+.fas.fa-arrow-right,
+.fas.fa-arrow-left,
+.fas.fa-exchange-alt {
+  margin-right: 5px;
+}
+
+/* Action buttons styling */
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.edit-request-btn,
+.delete-request-form button {
+  white-space: nowrap;
+}
+
+/* Confirmation dialog styling */
+.modal-footer {
+  justify-content: space-between;
+}
+
+/* Keep the tab active after form submission */
+.requests-tab-return {
+  display: none;
+}
+
+/* Add notification bubble styling */
+.notification-bubble {
+  display: inline-block;
+  background-color: #ff5252;
+  color: white;
+  border-radius: 50%;
+  min-width: 18px;
+  height: 18px;
+  text-align: center;
+  line-height: 18px;
+  font-size: 12px;
+  margin-left: 5px;
+  padding: 0 4px;
+}

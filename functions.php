@@ -4,90 +4,48 @@
  * @package UnderstrapChild
  */
 
-// ================ Start of changes January 2025 ============== //
-
-
-// Classroom URL
-
-// Remove the classroom URL field for students
-/*
-function add_student_classroom_url_field($user) { 
-    if (in_array('student', (array)$user->roles)) {
-        ?>
-        <h3>Student Classroom URL</h3>
-        <table class="form-table">
-            <tr>
-                <th><label for="classroom_url">Student Classroom URL</label></th>
-                <td>
-                    <input type="url" 
-                           name="classroom_url" 
-                           id="classroom_url" 
-                           value="<?php echo esc_attr(get_user_meta($user->ID, 'classroom_url', true)); ?>" 
-                           class="regular-text"
-                    />
-                    <p class="description">Enter student classroom URL here.</p>
-                </td>
-            </tr>
-        </table>
-        <?php
+ // Enqueue student dashboard styles and scripts
+function enqueue_student_dashboard_styles() {
+    if (is_page('student-dashboard')) {
+        wp_enqueue_style(
+            'student-dashboard-styles', 
+            get_stylesheet_directory_uri() . '/students/styles.css',
+            array(),
+            filemtime(get_stylesheet_directory() . '/students/styles.css')
+        );
+             
+        // Enqueue JavaScript
+        wp_enqueue_script(
+            'student-dashboard-scripts',
+            get_stylesheet_directory_uri() . '/students/index.js',
+            array('jquery'),
+            filemtime(get_stylesheet_directory() . '/students/index.js'),
+            true
+        );
+        
+        // Pass PHP variables to JavaScript
+        wp_localize_script('student-dashboard-scripts', 'studentDashboardData', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'student_id' => get_current_user_id(),
+            'nonce' => wp_create_nonce('check_incoming_reschedule_requests_nonce'),
+            'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
+        ));
     }
 }
-add_action('show_user_profile', 'add_student_classroom_url_field');
-add_action('edit_user_profile', 'add_student_classroom_url_field');
-*/
+add_action('wp_enqueue_scripts', 'enqueue_student_dashboard_styles');
+
 
 // Add classroom URL field to user profile // THIS IS THE TUTOR DASHBOARD //
 function add_classroom_url_field($user) {
     if (in_array('tutor', (array)$user->roles)) {
         ?>
-        <h3>Classroom URLs</h3>
+        <hr style="margin-top: 20px; margin-bottom: 20px;">
+        <h3>Tutor Classroom URL</h3>
         <table class="form-table" id="classroom-fields">
             <tr>
-                <th><label for="mathematics_classroom">Mathematics Classroom URL</label></th>
+                <th><label for="custom_classroom_name">Classroom URL</label></th>    
                 <td>
-                    <input type="url" 
-                           name="mathematics_classroom" 
-                           id="mathematics_classroom" 
-                           value="<?php echo esc_attr(get_field('mathematics_classroom', 'user_' . $user->ID)); ?>" 
-                           class="regular-text"
-                    />
-                </td>
-            </tr>
-            <tr>
-                <th><label for="english_classroom">English Classroom URL</label></th>
-                <td>
-                    <input type="url" 
-                           name="english_classroom" 
-                           id="english_classroom" 
-                           value="<?php echo esc_attr(get_field('english_classroom', 'user_' . $user->ID)); ?>" 
-                           class="regular-text"
-                    />
-                </td>
-            </tr>
-            
-            <!-- Custom Classrooms Section -->
-            <tr>
-                <th><label for="custom_classroom_name">Custom Classroom</label></th>
-                <td>
-                    <input type="text" 
-                           name="custom_classroom_name" 
-                           id="custom_classroom_name" 
-                           value="<?php echo esc_attr(get_field('custom_classroom_name', 'user_' . $user->ID)); ?>" 
-                           class="regular-text"
-                           placeholder="e.g. Science"
-                    />
-
-                </td>
-            </tr>
-            <tr>
-                <th><label for="custom_classroom_url">Custom Classroom URL</label></th>
-                <td>
-                    <input type="url" 
-                           name="custom_classroom_url" 
-                           id="custom_classroom_url" 
-                           value="<?php echo esc_attr(get_field('custom_classroom_url', 'user_' . $user->ID)); ?>" 
-                           class="regular-text"
-                    />
+                    <input type="url" name="tutor_classroom_url" id="tutor_classroom_url" value="<?php echo esc_attr(get_user_meta($user->ID, 'tutor_classroom_url', true)); ?>" class="regular-text">
                 </td>
             </tr>
         </table>
@@ -546,8 +504,6 @@ function save_classroom_url_field($user_id) {
         update_field('custom_classroom_url', sanitize_url($_POST['custom_classroom_url']), 'user_' . $user_id);
     }
 }
-add_action('show_user_profile', 'add_classroom_url_field');
-add_action('edit_user_profile', 'add_classroom_url_field');
 add_action('personal_options_update', 'save_classroom_url_field');
 add_action('edit_user_profile_update', 'save_classroom_url_field');
 
@@ -1368,3 +1324,26 @@ add_action('wp_head', function() {
     </script>
     <?php
 });
+
+// Add a function to migrate old classroom_url to the new fields
+function migrate_old_classroom_url() {
+    // Only run for logged-in tutors
+    if (!is_user_logged_in() || !current_user_can('tutor')) {
+        return;
+    }
+    
+    $user_id = get_current_user_id();
+    $old_url = get_user_meta($user_id, 'classroom_url', true);
+    
+    // If there's an old URL and no new URLs set, migrate it
+    if (!empty($old_url)) {
+        $math_classroom = get_field('mathematics_classroom', 'user_' . $user_id);
+        
+        if (empty($math_classroom)) {
+            update_field('mathematics_classroom', $old_url, 'user_' . $user_id);
+            // Optionally, you can delete the old field after migration
+            // delete_user_meta($user_id, 'classroom_url');
+        }
+    }
+}
+add_action('wp', 'migrate_old_classroom_url');
