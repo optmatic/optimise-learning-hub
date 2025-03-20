@@ -1,0 +1,18 @@
+/* Add this to the existing style section or create a new one */
+.nav-link .badge {
+  font-size: 0.65rem;
+  transform: translate(-50%, -30%) !important;
+}
+
+/* Style for the unconfirmed requests section */
+#unconfirmedRequestsSection {
+  background-color: #f8f9fa;
+  border-radius: 0.25rem;
+  padding: 1rem;
+  margin-top: 0.5rem;
+}
+
+/* Make the badge more visible */
+.badge.bg-danger {
+  background-color: #dc3545 !important;
+}

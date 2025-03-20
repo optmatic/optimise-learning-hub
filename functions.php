@@ -35,6 +35,37 @@ function enqueue_student_dashboard_styles() {
 add_action('wp_enqueue_scripts', 'enqueue_student_dashboard_styles');
 
 
+
+
+function enqueue_tutor_dashboard_styles() {
+    if (is_page('tutor-dashboard')) {
+        wp_enqueue_style(
+            'tutor-dashboard-styles', 
+            get_stylesheet_directory_uri() . '/tutors/styles.css',
+            array(),
+            filemtime(get_stylesheet_directory() . '/tutors/styles.css')
+        );
+
+        wp_enqueue_script(
+            'tutor-dashboard-scripts',
+            get_stylesheet_directory_uri() . '/tutors/index.js',
+            array('jquery'),
+            filemtime(get_stylesheet_directory() . '/tutors/index.js'),
+            true
+        );
+
+        // Pass PHP variables to JavaScript
+        wp_localize_script('tutor-dashboard-scripts', 'tutorDashboardData', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'tutor_id' => get_current_user_id(),
+            'nonce' => wp_create_nonce('check_incoming_reschedule_requests_nonce'),
+            'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
+        ));
+    }
+}
+add_action('wp_enqueue_scripts', 'enqueue_tutor_dashboard_styles');
+    
+
 // Add classroom URL field to user profile // THIS IS THE TUTOR DASHBOARD //
 function add_classroom_url_field($user) {
     if (in_array('tutor', (array)$user->roles)) {
