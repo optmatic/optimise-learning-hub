@@ -6,47 +6,10 @@
 // Function to add the requests tab to the navigation
 if (!function_exists('add_requests_tab_to_navigation')) {
     function add_requests_tab_to_navigation() {
-        $current_user = wp_get_current_user();
-        $tutor_name = $current_user->display_name;
-        
-        // Count unread requests
-        $unread_requests = get_posts(array(
-            'post_type'      => 'progress_report',
-            'posts_per_page' => -1,
-            'meta_query'     => array(
-                'relation' => 'AND',
-                array(
-                    'key'     => 'tutor_name',
-                    'value'   => $tutor_name,
-                    'compare' => '=',
-                ),
-                array(
-                    'key'     => 'request_type',
-                    'value'   => array('reschedule_unavailable_all', 'student_reschedule'),
-                    'compare' => 'IN',
-                ),
-                array(
-                    'key'     => 'status',
-                    'value'   => 'pending',
-                    'compare' => '=',
-                ),
-                array(
-                    'key'     => 'viewed_by_tutor',
-                    'compare' => 'NOT EXISTS',
-                )
-            ),
-            'fields'         => 'ids'
-        ));
-        
-        $unread_count = count($unread_requests);
-        $notification_badge = $unread_count > 0 ? '<span class="badge rounded-pill bg-danger">' . $unread_count . '</span>' : '';
-        
-        // Return the tab HTML
-        return '<li class="nav-item">
-            <a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests">
-                Requests ' . $notification_badge . '
-            </a>
-        </li>';
+        // For testing - force a badge to appear
+        return '<a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests">
+            Requests <span class="badge rounded-pill bg-danger">1</span>
+        </a>';
     }
 }
 

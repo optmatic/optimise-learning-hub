@@ -3,6 +3,63 @@
                      =========================== -->
                 <div class="tab-pane fade" id="classroom-url" role="tabpanel" aria-labelledby="classroom-url-tab">
                 
+                    <?php
+                    // Count unavailable reschedule requests that need alternatives
+                    $unavailable_args = array(
+                        'post_type'      => 'progress_report',
+                        'posts_per_page' => -1,
+                        'meta_query'     => array(
+                            'relation' => 'OR',
+                            array(
+                                'relation' => 'AND',
+                                array(
+                                    'key'     => 'tutor_name',
+                                    'value'   => wp_get_current_user()->display_name,
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'request_type',
+                                    'value'   => 'reschedule',
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'status',
+                                    'value'   => 'unavailable',
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'alternatives_provided',
+                                    'compare' => 'NOT EXISTS',
+                                )
+                            ),
+                            array(
+                                'relation' => 'AND',
+                                array(
+                                    'key'     => 'tutor_name',
+                                    'value'   => wp_get_current_user()->display_name,
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'request_type',
+                                    'value'   => 'reschedule_unavailable_all',
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'status',
+                                    'value'   => 'pending',
+                                    'compare' => '=',
+                                )
+                            )
+                        )
+                    );
+                    
+                    $unavailable_requests = get_posts($unavailable_args);
+                    $unavailable_count = count($unavailable_requests);
+                    
+                    // Make the variable available for the badge in the main template
+                    $GLOBALS['unavailable_count'] = $unavailable_count;
+                    ?>
+
                     <h5>Access your classrooms here</h5>
                     <?php
                     $user_id = get_current_user_id();
