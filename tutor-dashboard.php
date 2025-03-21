@@ -99,7 +99,9 @@ if (current_user_can('tutor')) {
                 <li class="nav-item">
                     <a class="nav-link" id="sample-reports-tab" data-bs-toggle="tab" href="#sample-reports">Sample Progress Comments</a>
                 </li>
-                <?php echo add_requests_tab_to_navigation(); ?>
+                <li class="nav-item">
+                    <a class="nav-link" id="requests-tab" data-bs-toggle="tab" href="#requests">Requests</a>
+                </li>
             </ul>
         </div>
         <!-- ===========================
@@ -118,7 +120,7 @@ if (current_user_can('tutor')) {
             include 'tutors/requests.php';
 ?>
 
-            </div> <!-- This div closes the "tab-content" div -->
+            </div>
         <div>
 
 <?php
@@ -177,4 +179,3 @@ function add_requests_tab_to_navigation() {
 }
 ?>
 
-<?php get_footer(); ?>
