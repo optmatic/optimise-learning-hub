@@ -1,582 +1,717 @@
 <!-- =========================== REQUESTS TAB =========================== -->
-<div class="tab-pane fade" id="requests" role="tabpanel" aria-labelledby="requests-tab">
-      
-      
-      
-      <?php
-        // Display messages from form processing
-        $success_message = get_transient('tutor_request_message');
-        $error_message = get_transient('tutor_request_error');
-
-        if ($success_message) {
-            echo '<div class="alert alert-success">' . esc_html($success_message) . '</div>';
-            delete_transient('tutor_request_message');
-        }
-
-        if ($error_message) {
-            echo '<div class="alert alert-danger">' . esc_html($error_message) . '</div>';
-            delete_transient('tutor_request_error');
-        }
-
-        // Get current user's display name
-        $current_user = wp_get_current_user();
-        $tutor_display_name = $current_user->display_name;
-    $tutor_username = $current_user->user_login;
-    ?>
-
-    <div class="container-fluid">
-        <h3>Request Management</h3>
-        
-        <!-- Minimalist Tab Navigation -->
-        <ul class="nav nav-pills mb-4" id="requestTabs" role="tablist" style="padding-bottom: 10px; padding-left: 0px !important;">
-            <li class="nav-item"><a class="nav-link active" id="outgoing-tab" data-bs-toggle="tab" href="#outgoing" role="tab" style="border-radius: 4px; margin-right: 10px;">Outgoing Requests</a></li>
-            <li class="nav-item"><a class="nav-link" id="incoming-tab" data-bs-toggle="tab" href="#incoming" role="tab" style="border-radius: 4px;">Incoming Requests</a></li>
-        </ul>
-        
-        <!-- Tab Content -->
-        <div class="tab-content" id="requestTabContent">
-            
-            <!-- Outgoing Requests Tab -->
-            <div class="tab-pane fade show active" id="outgoing" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6>Requests You've Sent</h6>
-                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newRescheduleModal">Create New Request</button>
-                </div>
-                
-                <!-- Outgoing Requests Table -->
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead><tr><th>Student</th><th>Original Time</th><th>Proposed Time</th><th>Status</th></tr></thead>
-                        <tbody>
-                        <?php
-        // Query for outgoing reschedule requests
-        $args = array(
-            'post_type'      => 'progress_report',
-            'posts_per_page' => -1,
-            'meta_query'     => array(
-                'relation' => 'AND',
-                array(
-                    'key'     => 'tutor_name',
-                    'value'   => $tutor_display_name, // Use display name here
-                    'compare' => '=',
-                ),
-                array(
-                    'key'     => 'request_type',
-                    'value'   => 'reschedule',
-                    'compare' => '=',
-                )
-            ),
-            'order'          => 'DESC',
-            'orderby'        => 'date'
-        );
-        
-        $outgoing_requests = get_posts($args);
-        
-        if (!empty($outgoing_requests)) {
-            foreach ($outgoing_requests as $request) {
-                $request_id = $request->ID;
-                $student_id = get_post_meta($request_id, 'student_id', true);
-                $student = get_userdata($student_id);
-                
-                // Get the student's first and last name instead of username
-                $student_name = '';
-                if ($student) {
-                    // Try to get first and last name
-                    if (!empty($student->first_name) && !empty($student->last_name)) {
-                        $student_name = $student->first_name . ' ' . $student->last_name;
-                    } else {
-                        // Fall back to display name
-                        $student_name = $student->display_name;
-                    }
-                } else {
-                    $student_name = 'Unknown Student';
-                }
-                
-                $original_date = get_post_meta($request_id, 'original_date', true);
-                $original_time = get_post_meta($request_id, 'original_time', true);
-                $status = get_post_meta($request_id, 'status', true);
-                
-                // Format dates for display
-                $original_datetime = date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time));
-                
-                // Status badge
-                $status_class = 'warning';
-                $status_text = 'Pending';
-                
-                if ($status === 'confirmed') {
-                    $status_class = 'success';
-                    $status_text = 'Confirmed';
-                } elseif ($status === 'unavailable') {
-                    $status_class = 'danger';
-                    $status_text = 'Unavailable';
-                }
-                
-                echo '<tr>';
-                echo '<td>' . esc_html($student_name) . '</td>';
-                echo '<td>' . esc_html($original_datetime) . '</td>';
-                echo '<td>';
-                // Display preferred times if they exist
-                $preferred_times = get_post_meta($request_id, 'preferred_times', true);
-                if (!empty($preferred_times)) {
-                    foreach ($preferred_times as $index => $time) {
-                        if (!empty($time['date']) && !empty($time['time'])) {
-                            $formatted_time = date('M j, Y', strtotime($time['date'])) . ' at ' . 
-                                            date('g:i A', strtotime($time['time']));
-                            echo 'Option ' . ($index + 1) . ': ' . esc_html($formatted_time) . '<br>';
-                        }
-                    }
-                } else {
-                    echo 'No preferred times specified';
-                }
-                echo '</td>';
-                echo '<td><span class="badge bg-' . $status_class . '">' . $status_text . '</span></td>';
-                echo '</tr>';
-            }
-        } else {
-            echo '<tr><td colspan="4" class="text-center text-muted">No outgoing requests found.</td></tr>';
-        }
-                        ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            
-            <!-- Incoming Requests Tab -->
-            <div class="tab-pane fade" id="incoming" role="tabpanel">
-                <h6 class="mb-3">Requests From Students</h6>
-                
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead><tr><th>Student</th><th>Original Time</th><th>Requested Time</th><th>Status</th><th>Actions</th></tr></thead>
-                        <tbody>
-                        <?php
-                        // Query for incoming student-initiated reschedule requests
-        $incoming_requests = get_posts(array(
-            'post_type'      => 'progress_report',
-            'posts_per_page' => -1,
-            'meta_query'     => array(
-                'relation' => 'AND',
-                array(
-                    'key'     => 'request_type',
-                    'value'   => array('reschedule', 'student_reschedule'), // Include both types
-                    'compare' => 'IN',
-                ),
-                array(
-                    'key'     => 'tutor_name',
-                                    'value'   => $tutor_username, // Match current tutor's username
-                    'compare' => '=',
-                ),
-                array(
-                    'relation' => 'OR',
-                    array(
-                        'key'     => 'status',
-                        'compare' => 'NOT EXISTS',
-                    ),
-                    array(
-                        'key'     => 'status',
-                        'value'   => 'pending',
-                        'compare' => '=',
-                    )
-                )
-            ),
-            'order'          => 'DESC',
-            'orderby'        => 'date'
-        ));
-        
-        if (!empty($incoming_requests)) {
-            foreach ($incoming_requests as $request) {
-                $request_id = $request->ID;
-                $student_id = get_post_meta($request_id, 'student_id', true);
-                $student = get_userdata($student_id);
-                $student_name = $student ? $student->display_name : 'Unknown Student';
-                
-                $original_date = get_post_meta($request_id, 'original_date', true);
-                $original_time = get_post_meta($request_id, 'original_time', true);
-                $status = get_post_meta($request_id, 'status', true);
-                $reason = get_post_meta($request_id, 'reason', true);
-                
-                // Get preferred times array
-                $preferred_times = get_post_meta($request_id, 'preferred_times', true);
-                
-                // Format original datetime
-                $original_datetime = date('M j, Y \a\t g:i A', strtotime("$original_date $original_time"));
-                
-                // Status badge
-                $status_class = 'warning';
-                $status_text = 'Pending';
-                if ($status === 'confirmed') {
-                    $status_class = 'success';
-                    $status_text = 'Confirmed';
-                } elseif ($status === 'declined') {
-                    $status_class = 'danger';
-                    $status_text = 'Declined';
-                }
-                
-                echo '<tr data-request-id="' . $request_id . '">';
-                echo '<td>' . esc_html($student_name) . '</td>';
-                echo '<td>' . esc_html($original_datetime) . '</td>';
-                
-                // Display preferred times
-                echo '<td>';
-                if (!empty($preferred_times) && is_array($preferred_times)) {
-                    foreach ($preferred_times as $index => $time) {
-                        if (!empty($time['date']) && !empty($time['time'])) {
-                            $formatted_time = date('M j, Y \a\t g:i A', 
-                                strtotime($time['date'] . ' ' . $time['time']));
-                            echo 'Option ' . ($index + 1) . ': ' . esc_html($formatted_time) . '<br>';
-                        }
-                    }
-                } else {
-                    echo 'No preferred times specified';
-                }
-                echo '</td>';
-                
-                echo '<td><span class="badge bg-' . $status_class . '">' . $status_text . '</span></td>';
-                echo '<td>';
-                
-                                // Direct action buttons (no JavaScript needed)
-                                if ($status === 'pending') {
-                                    // Use direct forms similar to student implementation
-                                    echo '<div class="d-flex align-items-center action-btns">';
+<div class="tab-pane fade" id="student-comms" role="tabpanel" aria-labelledby="student-comms-tab">
+                    <h4>Reschedule Requests</h4>
+                    
+                    <!-- Add Reschedule Request Form -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            Request Lesson Reschedule
+                        </div>
+                        <div class="card-body">
+                            <p>Use this form to request a reschedule for an upcoming lesson.</p>
+                            
+                            <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#newRescheduleRequestModal">
+                                Request Lesson Reschedule
+                            </button>
+                            
+                            <!-- Modal for creating a new reschedule request -->
+                            <div class="modal fade" id="newRescheduleRequestModal" tabindex="-1" aria-labelledby="newRescheduleRequestModalLabel" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="newRescheduleRequestModalLabel">Request Lesson Reschedule</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div id="rescheduleRequestSuccessMessage" class="alert alert-success" style="display: none;">
+                                                <p>Your reschedule request has been successfully submitted. Your student will be notified.</p>
+                                            </div>
+                                            <div id="rescheduleRequestErrorMessage" class="alert alert-danger" style="display: none;">
+                                                <p>Please fill in all required fields (student, lesson, and reason).</p>
+                                            </div>
+                                            <form id="rescheduleRequestForm" method="post">
+                                                <input type="hidden" name="submit_tutor_reschedule_request" value="1">
+                                                <input type="hidden" name="tutor_id" value="<?php echo get_current_user_id(); ?>">
+                                                
+                                                <div class="mb-3">
+                                                    <label for="student_select" class="form-label">Select Student <span class="text-danger">*</span></label>
+                                                    <?php
+                                                    // Get the tutor's assigned students
+                                                    $current_user_id = get_current_user_id();
+                                                    $students = array();
+                                                    
+                                                    // Query for users with the student role
+                                                    $student_query = new WP_User_Query(array(
+                                                        'role' => 'student',
+                                                        'fields' => array('ID', 'user_login', 'display_name')
+                                                    ));
+                                                    
+                                                    // Get all students
+                                                    $all_students = $student_query->get_results();
+                                                    
+                                                    // Check each tutor to see if the current tutor is assigned to them
+                                                    foreach ($all_students as $student) {
+                                                        $assigned_tutors = get_user_meta($tutor->ID, 'assigned_tutors', true);
+                                                        if (!empty($assigned_tutors)) {
+                                                            $tutor_ids = explode(',', $assigned_tutors);
+                                                            if (in_array($current_user_id, $tutor_ids)) {
+                                                                // Get student's first and last name
+                                                                $first_name = get_user_meta($student->ID, 'first_name', true);
+                                                                $last_name = get_user_meta($student->ID, 'last_name', true);
+                                                                
+                                                                // Use full name if available, otherwise use display name
+                                                                $display_name = (!empty($first_name) && !empty($last_name)) 
+                                                                    ? $first_name . ' ' . $last_name 
+                                                                    : $student->display_name;
+                                                                
+                                                                $students[] = array(
+                                                                    'id' => $student->ID,
+                                                                    'username' => $student>user_login,
+                                                                    'display_name' => $display_name
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    if (!empty($student)) {
+                                                        echo '<select name="student_name" id="student_select" class="form-select" required>';
+                                                        echo '<option value="">--Select student--</option>';
+                                                        foreach ($students as $student) {
+                                                            // Store username as value but display full name to user
+                                                            echo '<option value="' . esc_attr($student['username']) . '">' . esc_html($student['display_name']) . '</option>';
+                                                        }
+                                                        echo '</select>';
+                                                    } else {
+                                                        echo '<div class="alert alert-warning">No students assigned to you. Please contact support.</div>';
+                                                    }
+                                                    ?>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="lesson_select" class="form-label">Lesson Date to Reschedule <span class="text-danger">*</span></label>
+                                                    <select class="form-select" id="lesson_select" name="lesson_select" required>
+                                                        <option value="">--Select a scheduled lesson--</option>
+                            <?php
+                                                        // Get current date for comparison
+                                                        $now = new DateTime('now', new DateTimeZone('Australia/Brisbane'));
+                                                        
+                                                        // Get the student's lesson schedule
+                                                        $lesson_schedule = get_user_meta(get_current_user_id(), 'lesson_schedule_list', true);
+                                                        
+                                                        if (!empty($lesson_schedule)) {
+                                                            $lessons = explode("\n", $lesson_schedule);
+                                                            $upcoming_lessons = [];
+                                                            
+                                                            // Process each lesson in the schedule
+                                                            foreach ($lessons as $lesson) {
+                                                                if (!empty(trim($lesson))) {
+                                                                    // Extract date and time using regex
+                                                                    if (preg_match('/on ([A-Za-z]+) (\d+) ([A-Za-z]+) (\d{4}) at (\d{2}:\d{2})/', $lesson, $matches)) {
+                                                                        $date_string = $matches[1] . ' ' . $matches[2] . ' ' . $matches[3] . ' ' . $matches[4] . ' ' . $matches[5];
+                                                                        $lesson_date = DateTime::createFromFormat('l d F Y H:i', $date_string, new DateTimeZone('Australia/Brisbane'));
+                                                                        
+                                                                        // Only include future lessons
+                                                                        if ($lesson_date > $now) {
+                                                                            // Determine subject
+                                                                            $subject = 'Lesson';
+                                                                            if (stripos($lesson, 'mathematics') !== false) {
+                                                                                $subject = 'Mathematics';
+                                                                            } elseif (stripos($lesson, 'english') !== false) {
+                                                                                $subject = 'English';
+                                                                            } elseif (stripos($lesson, 'chemistry') !== false) {
+                                                                                $subject = 'Chemistry';
+                                                                            } elseif (stripos($lesson, 'physics') !== false) {
+                                                                                $subject = 'Physics';
+                                                                            }
+                                                                            
+                                                                            $upcoming_lessons[] = [
+                                                                                'date' => $lesson_date,
+                                                                                'formatted' => $lesson_date->format('l, jS \of F Y \a\t g:i A'),
+                                                                                'subject' => $subject,
+                                                                                'date_value' => $lesson_date->format('Y-m-d'),
+                                                                                'time_value' => $lesson_date->format('H:i:s')
+                                                                            ];
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            
+                                                            // Sort lessons by date
+                                                            usort($upcoming_lessons, function($a, $b) {
+                                                                return $a['date']->getTimestamp() - $b['date']->getTimestamp();
+                                                            });
+                                                            
+                                                            // Output options for the select dropdown
+                                                            foreach ($upcoming_lessons as $lesson) {
+                                                                echo '<option value="' . $lesson['date_value'] . '|' . $lesson['time_value'] . '">' 
+                                                                    . $lesson['subject'] . ' - ' . $lesson['formatted'] . '</option>';
+                                                            }
+                                                        }
+                                                        ?>
+                                                    </select>
+                                                    
+                                                    <!-- Hidden fields to store the selected date and time -->
+                                                    <input type="hidden" id="original_date" name="original_date">
+                                                    <input type="hidden" id="original_time" name="original_time">
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label for="reason" class="form-label">Reason for Reschedule <span class="text-danger">*</span></label>
+                                                    <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>
+                                                </div>
+                                                
+                                                <div class="mb-3">
+                                                    <label class="form-label">Preferred Alternative Times <span class="text-danger">*</span></label>
+                                                    <p class="text-muted small">Please select at least one preferred alternative date and time.</p>
+                                                    
+                                                    <div id="preferred-times-container">
+                                                        <!-- Preferred Time 1 -->
+                                                        <div class="preferred-time-row mb-2">
+                                                            <div class="row">
+                                                                <div class="col-md-6">
+                                                                    <label class="form-label small">Preferred Date 1:</label>
+                                                                    <input type="date" class="form-control preferred-date" name="preferred_date_1" id="preferred_date_1" required>
+                                                                </div>
+                                                                <div class="col-md-6">
+                                                                    <label class="form-label small">Preferred Time 1:</label>
+                                                                    <input type="time" class="form-control preferred-time" name="preferred_time_1" id="preferred_time_1" required>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <!-- Preferred Time 2 -->
+                                                        <div class="preferred-time-row mb-2">
+                                                            <div class="row">
+                                                                <div class="col-md-6">
+                                                                    <label class="form-label small">Preferred Date 2:</label>
+                                                                    <input type="date" class="form-control preferred-date" name="preferred_date_2" id="preferred_date_2">
+                                                                </div>
+                                                                <div class="col-md-6">
+                                                                    <label class="form-label small">Preferred Time 2:</label>
+                                                                    <input type="time" class="form-control preferred-time" name="preferred_time_2" id="preferred_time_2">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <!-- Preferred Time 3 -->
+                                                        <div class="preferred-time-row mb-2">
+                                                            <div class="row">
+                                                                <div class="col-md-6">
+                                                                    <label class="form-label small">Preferred Date 3:</label>
+                                                                    <input type="date" class="form-control preferred-date" name="preferred_date_3" id="preferred_date_3">
+                                                                </div>
+                                                                <div class="col-md-6">
+                                                                    <label class="form-label small">Preferred Time 3:</label>
+                                                                    <input type="time" class="form-control preferred-time" name="preferred_time_3" id="preferred_time_3">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div id="preferred-times-error" class="text-danger mt-2" style="display: none;">
+                                                    Please provide at least one preferred alternative time.
+                                                </div>
+                                                
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                    <button type="button" class="btn btn-primary" id="submitTutorReschedule">Submit Request</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Outgoing Reschedule Requests (Tutor-initiated) -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-info text-white">
+                            <i class="fas fa-arrow-left me-2"></i> Your Outgoing Reschedule Requests
+                        </div>
+                        <div class="card-body">
+                            <?php
+                            // Get tutor's reschedule requests
+                            $tutor_requests_args = array(
+                            'post_type'      => 'progress_report',
+                            'posts_per_page' => -1,
+                            'meta_query'     => array(
+                                'relation' => 'AND',
+                                array(
+                                    'key'     => 'tutor_id',
+                                    'value'   => get_current_user_id(),
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'request_type',
+                                        'value'   => 'tutor_reschedule',
+                                    'compare' => '=',
+                                    )
+                                ),
+                                'order'          => 'DESC',
+                                'orderby'        => 'date'
+                            );
+                            
+                            $tutor_requests = get_posts($tutor_requests_args);
+                            
+                            if (!empty($tutor_requests)) {
+                                echo '<div class="table-responsive">';
+                                echo '<table class="table table-striped">';
+                                echo '<thead><tr><th>Date Requested</th><th>Lesson Date</th><th>Preferred Times</th><th>Student</th><th>Status</th><th>Actions</th></tr></thead>';
+                                echo '<tbody>';
+                                
+                                foreach ($tutor_requests as $request) {
+                                    $request_id = $request->ID;
+                                    $student_name = get_post_meta($request_id, 'student_name', true);
+                                    $original_date = get_post_meta($request_id, 'original_date', true);
+                                    $original_time = get_post_meta($request_id, 'original_time', true);
+                                    $status = get_post_meta($request_id, 'status', true);
+                                    $request_date = get_the_date('M j, Y', $request_id);
+                                    $reason = get_post_meta($request_id, 'reason', true);
+                                    $preferred_times = get_post_meta($request_id, 'preferred_times', true);
                                     
-                                    // Confirm form
-                                    echo '<form method="post" class="d-inline me-2">';
-                                    echo '<input type="hidden" name="confirm_tutor_request" value="1">';
-                                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                                    echo '<input type="hidden" name="active_tab" value="requests">';
-                                    echo '<button type="submit" class="btn btn-sm btn-success">Confirm</button>';
-                                    echo '</form>';
+                                    // Format the original date for display
+                                    $formatted_original = !empty($original_date) ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
                                     
-                                    // Decline form
-                                    echo '<form method="post" class="d-inline">';
-                                    echo '<div class="input-group input-group-sm">';
-                                    echo '<input type="text" class="form-control form-control-sm" name="reason" placeholder="Reason" required>';
-                                    echo '<input type="hidden" name="decline_tutor_request" value="1">';
-                                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                                    echo '<input type="hidden" name="active_tab" value="requests">';
-                                    echo '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
-                                    echo '</div>';
-                                    echo '</form>';
+                                    // Get student's full name
+                                    $student_full_name = $student_name;
+                                    $student_user = get_user_by('login', $student_name);
+                                    if ($student_user) {
+                                        $first_name = get_user_meta($student_user->ID, 'first_name', true);
+                                        $last_name = get_user_meta($student_user->ID, 'last_name', true);
+                                        
+                                        if (!empty($first_name) && !empty($last_name)) {
+                                            $student_full_name = $first_name . ' ' . $last_name;
+                                        } else {
+                                            $student_full_name = $student_user->display_name;
+                                        }
+                                    }
                                     
-                                    echo '</div>';
-                                } elseif ($status === 'declined') {
-                                    echo 'Reason: ' . esc_html($reason);
-                                } else {
-                                    echo '<span class="text-muted">No actions available</span>';
+                                    // Set status badge
+                                    $status_badge = '';
+                                    if ($status === 'confirmed') {
+                                        $status_badge = '<span class="badge bg-success">Confirmed</span>';
+                                    } elseif ($status === 'denied') {
+                                        $status_badge = '<span class="badge bg-danger">Denied</span>';
+                                    } else {
+                                        $status_badge = '<span class="badge bg-warning">Pending</span>';
+                                    }
+                                    
+                                    echo '<tr>';
+                                    echo '<td>' . esc_html($request_date) . '</td>';
+                                    echo '<td>' . esc_html($formatted_original) . '</td>';
+                                    
+                                    // Display preferred times
+                                    echo '<td>';
+                                    if (!empty($preferred_times) && is_array($preferred_times)) {
+                                        foreach ($preferred_times as $index => $time) {
+                                            if (!empty($time['date']) && !empty($time['time'])) {
+                                                $formatted_time = date('M j, Y \a\t g:i A', 
+                                                    strtotime($time['date'] . ' ' . $time['time']));
+                                                echo 'Option ' . ($index + 1) . ': ' . esc_html($formatted_time) . '<br>';
+                                            }
+                                        }
+                                    } else {
+                                        echo 'No preferred times specified';
+                                    }
+                                    echo '</td>';
+                                    
+                                    echo '<td>' . esc_html($student_full_name) . '</td>';
+                                    echo '<td>' . $status_badge . '</td>';
+                                    echo '<td>';
+                                    
+                                    // Only show edit/delete buttons for pending requests
+                                    if ($status !== 'confirmed' && $status !== 'denied') {
+                                        echo '<button type="button" class="btn btn-sm btn-primary me-1 edit-request-btn" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#editRescheduleRequestModal" 
+                                            data-request-id="' . $request_id . '"
+                                            data-student-name="' . esc_attr($student_name) . '"
+                                            data-original-date="' . esc_attr($original_date) . '"
+                                            data-original-time="' . esc_attr($original_time) . '"
+                                            data-reason="' . esc_attr($reason) . '">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </button>';
+                                        
+                                        echo '<form method="post" class="d-inline delete-request-form">';
+                                        echo '<input type="hidden" name="delete_tutor_request" value="1">';
+                                        echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                        echo '<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> Delete</button>';
+                                        echo '</form>';
+                                    } else {
+                                        echo '<span class="text-muted">No actions available</span>';
+                                    }
+                                    
+                                    echo '</td>';
+                                    echo '</tr>';
                                 }
-                
-                echo '</td>';
-                echo '</tr>';
-            }
-        } else {
-            echo '<tr><td colspan="5" class="text-center">No incoming requests found.</td></tr>';
-        }
-                        ?>
-                        </tbody>
-                    </table>
+                                
+                                echo '</tbody></table>';
+                                echo '</div>';
+                            } else {
+                                echo '<p>You have not submitted any reschedule requests yet.</p>';
+                            }
+                            ?>
+                        </div>
+                    </div>
+                    
+                    <!-- Incoming Reschedule Requests (Student-initiated) -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-warning text-dark">
+                            <i class="fas fa-arrow-right me-2"></i> Incoming Reschedule Requests
+                        </div>
+                        <div class="card-body">
+                            <?php
+                            // Get student-initiated reschedule requests
+                            $student_requests_args = array(
+                                'post_type'      => 'progress_report',
+                                'posts_per_page' => -1,
+                                'meta_query'     => array(
+                                    'relation' => 'AND',
+                                array(
+                                        'key'     => 'tutor_id',
+                                        'value'   => get_current_user_id(),
+                                        'compare' => '=',
+                                    ),
+                                    array(
+                                        'key'     => 'request_type',
+                                        'value'   => 'reschedule',
+                                        'compare' => '=',
+                                    ),
+                                    array(
+                                        'key'     => 'status',
+                                        'value'   => 'pending',
+                                        'compare' => '=',
+                                    )
+                                ),
+                                'order'          => 'DESC',
+                                'orderby'        => 'date'
+                            );
+                            
+                            $student_requests = get_posts($student_requests_args);
+                            
+                            if (!empty($student_requests)) {
+                                echo '<div class="table-responsive">';
+                                echo '<table class="table table-striped">';
+                                echo '<thead><tr><th>Date Requested</th><th>Original Lesson</th><th>Proposed New Time</th><th>Tutor</th><th>Action</th></tr></thead>';
+                                echo '<tbody>';
+                                
+                                foreach ($tutor_requests as $request) {
+                                    $request_id = $request->ID;
+                                    $student_name = get_post_meta($request_id, 'student_name', true);
+                                    $original_date = get_post_meta($request_id, 'original_date', true);
+                                    $original_time = get_post_meta($request_id, 'original_time', true);
+                                    $new_date = get_post_meta($request_id, 'new_date', true);
+                                    $new_time = get_post_meta($request_id, 'new_time', true);
+                                    $request_date = get_the_date('M j, Y', $request_id);
+                                    
+                                    // Format dates for display
+                                    $formatted_original = !empty($original_date) ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
+                                    $formatted_new = !empty($new_date) ? date('M j, Y', strtotime($new_date)) . ' at ' . date('g:i A', strtotime($new_time)) : 'N/A';
+                                    
+                                    echo '<tr>';
+                                    echo '<td>' . esc_html($request_date) . '</td>';
+                                    echo '<td>' . esc_html($formatted_original) . '</td>';
+                                    echo '<td>' . esc_html($formatted_new) . '</td>';
+                                    echo '<td>' . esc_html($student_name) . '</td>';
+                                    echo '<td>';
+                                    echo '<form method="post" class="d-inline">';
+                                    echo '<input type="hidden" name="confirm_reschedule" value="1">';
+                                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                    echo '<input type="hidden" name="active_tab" value="student-comms">';
+                                    echo '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
+                                    echo '</form>';
+                                    
+                                    echo '<form method="post" class="d-inline">';
+                                    echo '<input type="hidden" name="decline_reschedule" value="1">';
+                                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                    echo '<input type="hidden" name="active_tab" value="student-comms">';
+                                    echo '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
+                                    echo '</form>';
+                                    echo '</td>';
+                                    echo '</tr>';
+                                }
+                                
+                                echo '</tbody></table>';
+                                echo '</div>';
+                            } else {
+                                echo '<p>No incoming reschedule requests from students at this time.</p>';
+                            }
+                            ?>
+                        </div>
+                    </div>
+                    
+                    <!-- Alternative Times Section -->
+                    <?php
+                    // Get alternative reschedule requests
+                    $alternative_args = array(
+                        'post_type'      => 'progress_report',
+                        'posts_per_page' => -1,
+                        'meta_query'     => array(
+                            'relation' => 'AND',
+                            array(
+                                'key'     => 'tutor_id',
+                                'value'   => get_current_user_id(),
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'request_type',
+                                'value'   => 'reschedule_alternatives',
+                                'compare' => '=',
+                            )
+                        ),
+                        'order'          => 'DESC',
+                        'orderby'        => 'date'
+                    );
+                    
+                    $alternative_requests = get_posts($alternative_args);
+                    
+                    if (!empty($alternative_requests)) {
+                        echo '<div class="card mb-4">';
+                        echo '<div class="card-header bg-primary text-white">';
+                        echo '<i class="fas fa-exchange-alt me-2"></i> Alternative Lesson Times';
+                        echo '</div>';
+                        echo '<div class="card-body">';
+                        
+                        // Check for new (unviewed) alternatives
+                        $has_new_alternatives = false;
+                        foreach ($alternative_requests as $request) {
+                            $viewed = get_post_meta($request->ID, 'viewed_by_tutor', true);
+                            $status = get_post_meta($request->ID, 'status', true);
+                            if (empty($viewed) && $status === 'pending') {
+                                $has_new_alternatives = true;
+                                break;
+                            }
+                        }
+                        
+                        // Show notification for new alternatives
+                        if ($has_new_alternatives) {
+                            echo '<div class="alert alert-info">';
+                            echo '<i class="fas fa-bell me-2"></i> <strong>New!</strong> Your student has provided alternative lesson times for you to review.';
+                            echo '</div>';
+                        }
+                        
+                        echo '<p>Your student has provided alternative times for lessons you were unavailable for. Please select one of the options below:</p>';
+                        
+                        echo '<div class="accordion" id="alternativeAccordion">';
+                        $counter = 1;
+                        
+                        foreach ($alternative_requests as $request) {
+                            $request_id = $request->ID;
+                            $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+                            $student_name = get_post_meta($request_id, 'student_name', true);
+                            $alternatives = get_post_meta($request_id, 'alternatives', true);
+                            $message = get_post_meta($request_id, 'message', true);
+                            $status = get_post_meta($request_id, 'status', true);
+                            $request_date = get_the_date('F j, Y', $request_id);
+                            $viewed = get_post_meta($request_id, 'viewed_by_tutor', true);
+                            
+                            // Get student's first and last name
+                            $student_user = get_user_by('login', $student_name);
+                            $student_display_name = $student_name;
+                            if ($student_user) {
+                                $first_name = get_user_meta($student_user->ID, 'first_name', true);
+                                $last_name = get_user_meta($student_user->ID, 'last_name', true);
+                                if (!empty($first_name) && !empty($last_name)) {
+                                    $student_display_name = $first_name . ' ' . $last_name;
+                                } else {
+                                    $student_display_name = $student_user->display_name;
+                                }
+                            }
+                            
+                            // Get original request details
+                            $original_date = get_post_meta($original_request_id, 'original_date', true);
+                            $original_time = get_post_meta($original_request_id, 'original_time', true);
+                            
+                            // Format the original date for display
+                            $formatted_original_date = !empty($original_date) ? date('l, jS \of F, Y', strtotime($original_date)) : 'N/A';
+                            $formatted_original_time = !empty($original_time) ? date('g:i A', strtotime($original_time)) : '';
+                            
+                            // Set status badge
+                            $status_badge = '';
+                            if ($status === 'confirmed') {
+                                $status_badge = '<span class="badge bg-success">Confirmed</span>';
+                            } else {
+                                $status_badge = '<span class="badge bg-warning">Pending</span>';
+                            }
+                            
+                            // Add "New" badge for unviewed alternatives
+                            $new_badge = '';
+                            if (empty($viewed) && $status === 'pending') {
+                                $new_badge = '<span class="badge bg-danger ms-2">New</span>';
+                            }
+                            
+                            echo '<div class="accordion-item' . (empty($viewed) && $status === 'pending' ? ' border-danger' : '') . '">';
+                            echo '<h2 class="accordion-header" id="alternativeHeading' . $counter . '">';
+                            echo '<button class="accordion-button' . (empty($viewed) && $status === 'pending' ? '' : ' collapsed') . '" type="button" data-bs-toggle="collapse" data-bs-target="#alternativeCollapse' . $counter . '" aria-expanded="' . (empty($viewed) && $status === 'pending' ? 'true' : 'false') . '" aria-controls="alternativeCollapse' . $counter . '">';
+                            echo 'Alternative Times - ' . $request_date . ' ' . $status_badge . $new_badge;
+                            echo '</button>';
+                            echo '</h2>';
+                            
+                            echo '<div id="alternativeCollapse' . $counter . '" class="accordion-collapse collapse' . (empty($viewed) && $status === 'pending' ? ' show' : '') . '" aria-labelledby="alternativeHeading' . $counter . '" data-bs-parent="#alternativeAccordion">';
+                            echo '<div class="accordion-body">';
+                            
+                            echo '<div class="card mb-3">';
+                            echo '<div class="card-header bg-light">Original Lesson</div>';
+                            echo '<div class="card-body">';
+                            echo '<p><strong>Date:</strong> ' . $formatted_original_date . '</p>';
+                            if (!empty($formatted_original_time)) {
+                                echo '<p><strong>Time:</strong> ' . $formatted_original_time . '</p>';
+                            }
+                            echo '<p><strong>Student:</strong> ' . esc_html($student_display_name) . '</p>';
+                            echo '</div>';
+                            echo '</div>';
+                            
+                            if (!empty($message)) {
+                                echo '<div class="alert alert-info">';
+                                echo '<p><strong>Message from student:</strong> ' . esc_html($message) . '</p>';
+                                echo '</div>';
+                            }
+                            
+                            if ($status !== 'confirmed') {
+                                echo '<form method="post" class="mt-3">';
+                                echo '<input type="hidden" name="select_alternative" value="1">';
+                                echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                
+                                echo '<div class="list-group mb-3">';
+                                foreach ($alternatives as $index => $alternative) {
+                                    $alt_date = $alternative['date'];
+                                    $alt_time = $alternative['time'];
+                                    
+                                    $formatted_alt_date = date('l, jS \of F, Y', strtotime($alt_date));
+                                    $formatted_alt_time = date('g:i A', strtotime($alt_time));
+                                    
+                                    echo '<div class="list-group-item">';
+                                    echo '<div class="form-check">';
+                                    echo '<input class="form-check-input" type="radio" name="selected_alternative" value="' . $index . '" id="alt' . $request_id . '_' . $index . '" ' . ($index === 0 ? 'checked' : '') . '>';
+                                    echo '<label class="form-check-label" for="alt' . $request_id . '_' . $index . '">';
+                                    echo 'Option ' . ($index + 1) . ': ' . $formatted_alt_date . ' at ' . $formatted_alt_time;
+                                    echo '</label>';
+                                    echo '</div>';
+                                    echo '</div>';
+                                }
+                                echo '</div>';
+                                
+                                echo '<button type="submit" class="btn btn-success">Confirm Selected Time</button>';
+                                echo '</form>';
+                            } else {
+                                // Show the confirmed alternative
+                                $selected_index = get_post_meta($request_id, 'selected_alternative', true);
+                                $selected_alternative = $alternatives[$selected_index];
+                                
+                                $formatted_selected_date = date('l, jS \of F, Y', strtotime($selected_alternative['date']));
+                                $formatted_selected_time = date('g:i A', strtotime($selected_alternative['time']));
+                                
+                                echo '<div class="alert alert-success">';
+                                echo '<p><strong>Confirmed Time:</strong> ' . $formatted_selected_date . ' at ' . $formatted_selected_time . '</p>';
+                                echo '</div>';
+                            }
+                            
+                            echo '</div>'; // End accordion-body
+                            echo '</div>'; // End accordion-collapse
+                            echo '</div>'; // End accordion-item
+                            
+                            $counter++;
+                        }
+                        
+                        echo '</div>'; // End accordion
+                        echo '</div>'; // End card-body
+                        echo '</div>'; // End card
+                    }
+                    ?>
                 </div>
-                
-                <?php
-                // Display unavailable requests section
-        $unavailable_all_args = array(
-            'post_type'      => 'progress_report',
-            'posts_per_page' => -1,
-            'meta_query'     => array(
-                'relation' => 'AND',
-                array(
-                    'key'     => 'tutor_name',
-                            'value'   => $tutor_display_name,
-                    'compare' => '=',
-                ),
-                array(
-                    'key'     => 'request_type',
-                    'value'   => 'reschedule_unavailable_all',
-                    'compare' => '=',
-                ),
-                array(
-                    'key'     => 'status',
-                    'value'   => 'pending',
-                    'compare' => '=',
-                )
-            ),
-            'order'          => 'DESC',
-            'orderby'        => 'date'
-        );
 
-        $unavailable_all_requests = get_posts($unavailable_all_args);
-
-        if (!empty($unavailable_all_requests)) {
-            echo '<div class="alert alert-warning mt-3">';
-            echo '<h6><i class="fas fa-exclamation-triangle me-2"></i>Students Unavailable for All Alternatives</h6>';
-            echo '<p>The following students are unavailable for all alternative times you provided:</p>';
-            echo '<ul class="list-group">';
-            
-            foreach ($unavailable_all_requests as $request) {
-                $request_id = $request->ID;
-                $student_id = get_post_meta($request_id, 'student_id', true);
-                $student = get_userdata($student_id);
-                $student_name = $student ? $student->display_name : 'Unknown Student';
-                $alternatives_request_id = get_post_meta($request_id, 'alternatives_request_id', true);
-                $request_date = get_the_date('F j, Y', $request_id);
-                
-                echo '<li class="list-group-item d-flex justify-content-between align-items-center">';
-                echo '<div>';
-                echo '<strong>' . esc_html($student_name) . '</strong> - ' . $request_date;
-                echo '<br><small class="text-muted">Student is unavailable for all alternative times provided</small>';
-                echo '</div>';
-                echo '<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newAlternativesModal' . $request_id . '">Provide New Alternatives</button>';
-                echo '</li>';
-                
-                // Add modal for providing new alternatives
-                echo '<div class="modal fade" id="newAlternativesModal' . $request_id . '" tabindex="-1" aria-labelledby="newAlternativesModalLabel' . $request_id . '" aria-hidden="true">';
-                echo '<div class="modal-dialog">';
-                echo '<div class="modal-content">';
-                echo '<div class="modal-header">';
-                echo '<h5 class="modal-title" id="newAlternativesModalLabel' . $request_id . '">Provide New Alternatives for ' . esc_html($student_name) . '</h5>';
-                echo '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>';
-                echo '</div>';
-                echo '<div class="modal-body">';
-                echo '<form method="post" id="newAlternativesForm' . $request_id . '">';
-                echo '<input type="hidden" name="provide_new_alternatives" value="1">';
-                echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                echo '<input type="hidden" name="student_id" value="' . $student_id . '">';
-                        echo '<input type="hidden" name="active_tab" value="requests">';
-                
-                echo '<p>Please provide new alternative times for this student:</p>';
-                
-                echo '<div class="mb-3">';
-                echo '<label class="form-label">Alternative 1</label>';
-                echo '<div class="row">';
-                echo '<div class="col-md-6">';
-                echo '<input type="date" class="form-control" name="alt1_date" required>';
-                echo '</div>';
-                echo '<div class="col-md-6">';
-                echo '<input type="time" class="form-control" name="alt1_time" required>';
-                echo '</div>';
-                echo '</div>';
-                echo '</div>';
-                
-                echo '<div class="mb-3">';
-                echo '<label class="form-label">Alternative 2</label>';
-                echo '<div class="row">';
-                echo '<div class="col-md-6">';
-                echo '<input type="date" class="form-control" name="alt2_date">';
-                echo '</div>';
-                echo '<div class="col-md-6">';
-                echo '<input type="time" class="form-control" name="alt2_time">';
-                echo '</div>';
-                echo '</div>';
-                echo '</div>';
-                
-                echo '<div class="mb-3">';
-                echo '<label class="form-label">Alternative 3</label>';
-                echo '<div class="row">';
-                echo '<div class="col-md-6">';
-                echo '<input type="date" class="form-control" name="alt3_date">';
-                echo '</div>';
-                echo '<div class="col-md-6">';
-                echo '<input type="time" class="form-control" name="alt3_time">';
-                echo '</div>';
-                echo '</div>';
-                echo '</div>';
-                
-                echo '<div class="mb-3">';
-                echo '<label class="form-label">Message to Student</label>';
-                echo '<textarea class="form-control" name="message" rows="3" placeholder="Optional message to the student"></textarea>';
-                echo '</div>';
-                
-                echo '<div class="modal-footer">';
-                echo '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
-                echo '<button type="submit" class="btn btn-primary">Submit New Alternatives</button>';
-                echo '</div>';
-                echo '</form>';
-                echo '</div>'; // End modal-body
-                echo '</div>'; // End modal-content
-                echo '</div>'; // End modal-dialog
-                echo '</div>'; // End modal
-            }
-            
-            echo '</ul>';
-            echo '</div>';
-        }
-                ?>
             </div>
         </div>
     </div>
 </div>
 
-<?php
-// We need to include these PHP functions at the bottom
-// These handle the form submissions
-
-// Tab preservation script
-add_action('wp_footer', function() {
-    ?>
-    <script type="text/javascript">
-    (function($) {
-        $(function() {
-            // Check for active tab in URL
-            var urlParams = new URLSearchParams(window.location.search);
-            var activeTab = urlParams.get('active_tab');
-            
-            if (activeTab === 'requests') {
-                // Activate the requests tab
-                $('#requests-tab').tab('show');
-                
-                // Get request tab param (if any)
-                var requestTab = urlParams.get('request_tab');
-                if (requestTab === 'incoming') {
-                    // Activate the incoming tab inside requests
-                    $('#incoming-tab').tab('show');
-                }
-            }
-        });
-    })(jQuery);
-    </script>
-    <?php
-}, 10000);
-
-// Handle form submissions for tutor request actions
-if (!function_exists('handle_tutor_request_form_actions')) {
-    function handle_tutor_request_form_actions() {
-        // Check if we need to set the active tab
-        $active_tab = isset($_POST['active_tab']) ? sanitize_text_field($_POST['active_tab']) : '';
-        
-        // Handle confirmation action
-        if (isset($_POST['confirm_tutor_request']) && isset($_POST['request_id'])) {
-            $request_id = intval($_POST['request_id']);
-            
-            if ($request_id > 0) {
-                // Set the request status to confirmed
-                $result = update_post_meta($request_id, 'status', 'confirmed');
-                
-                // Debug info
-                error_log('Tutor confirm request: ID=' . $request_id . ', Result=' . ($result ? 'success' : 'failed'));
-                
-                if ($result !== false) {
-                    // Set a transient message to display after redirect
-                    set_transient('tutor_request_message', 'Request confirmed successfully.', 60);
-                } else {
-                    // If update_post_meta returned false, check if the meta already existed with the same value
-                    $existing_status = get_post_meta($request_id, 'status', true);
-                    if ($existing_status === 'confirmed') {
-                        set_transient('tutor_request_message', 'Request was already confirmed.', 60);
-                    } else {
-                        set_transient('tutor_request_error', 'Failed to update the request status.', 60);
-                    }
-                }
-            }
-            
-            // Redirect to the same page with the active tab parameter
-            $redirect_url = add_query_arg('active_tab', $active_tab, remove_query_arg('_wpnonce', $_SERVER['REQUEST_URI']));
-            wp_redirect($redirect_url);
-            exit;
-        }
-        
-        // Handle decline action
-        if (isset($_POST['decline_tutor_request']) && isset($_POST['request_id'])) {
-            $request_id = intval($_POST['request_id']);
-            $reason = isset($_POST['reason']) ? sanitize_text_field($_POST['reason']) : '';
-            
-            if (empty($reason)) {
-                set_transient('tutor_request_error', 'Please provide a reason for declining.', 60);
-                $redirect_url = add_query_arg('active_tab', $active_tab, remove_query_arg('_wpnonce', $_SERVER['REQUEST_URI']));
-                wp_redirect($redirect_url);
-                exit;
-            }
-            
-            if ($request_id > 0) {
-                // Set the request status to declined
-                $status_result = update_post_meta($request_id, 'status', 'declined');
-                $reason_result = update_post_meta($request_id, 'reason', $reason);
-                
-                // Debug info
-                error_log('Tutor decline request: ID=' . $request_id . ', Status=' . ($status_result ? 'success' : 'failed') . 
-                          ', Reason=' . ($reason_result ? 'success' : 'failed'));
-                
-                if ($status_result && $reason_result) {
-                    set_transient('tutor_request_message', 'Request declined successfully.', 60);
-                } else {
-                    set_transient('tutor_request_error', 'Failed to update the request status.', 60);
-                }
-            }
-            
-            // Redirect to the same page with the active tab parameter
-            $redirect_url = add_query_arg('active_tab', $active_tab, remove_query_arg('_wpnonce', $_SERVER['REQUEST_URI']));
-            wp_redirect($redirect_url);
-            exit;
-        }
-        
-        // Process provide new alternatives submission
-        if (isset($_POST['provide_new_alternatives']) && isset($_POST['request_id'])) {
-            $request_id = intval($_POST['request_id']);
-            $student_id = intval($_POST['student_id']);
-            
-            // Get alternative times
-            $alternatives = array();
-            
-            if (!empty($_POST['alt1_date']) && !empty($_POST['alt1_time'])) {
-                $alternatives[] = array(
-                    'date' => sanitize_text_field($_POST['alt1_date']),
-                    'time' => sanitize_text_field($_POST['alt1_time'])
-                );
-            }
-            
-            if (!empty($_POST['alt2_date']) && !empty($_POST['alt2_time'])) {
-                $alternatives[] = array(
-                    'date' => sanitize_text_field($_POST['alt2_date']),
-                    'time' => sanitize_text_field($_POST['alt2_time'])
-                );
-            }
-            
-            if (!empty($_POST['alt3_date']) && !empty($_POST['alt3_time'])) {
-                $alternatives[] = array(
-                    'date' => sanitize_text_field($_POST['alt3_date']),
-                    'time' => sanitize_text_field($_POST['alt3_time'])
-                );
-            }
-            
-            $message = !empty($_POST['message']) ? sanitize_textarea_field($_POST['message']) : '';
-            
-            // Create a new reschedule request with alternatives
-            $new_request = array(
-                'post_title'   => 'New Alternative Reschedule Request - ' . wp_get_current_user()->display_name,
-                'post_content' => '',
-                'post_status'  => 'publish',
-                'post_type'    => 'progress_report',
-            );
-            
-            $new_request_id = wp_insert_post($new_request);
-            
-            if (!is_wp_error($new_request_id)) {
-                // Get the original request ID
-                $original_request_id = get_post_meta($request_id, 'original_request_id', true);
-                
-                // Save the request details
-                update_post_meta($new_request_id, 'tutor_name', wp_get_current_user()->display_name);
-                update_post_meta($new_request_id, 'student_id', $student_id);
-                update_post_meta($new_request_id, 'request_type', 'reschedule_alternatives');
-                update_post_meta($new_request_id, 'original_request_id', $original_request_id);
-                update_post_meta($new_request_id, 'alternatives', $alternatives);
-                update_post_meta($new_request_id, 'message', $message);
-                update_post_meta($new_request_id, 'status', 'pending');
-                
-                // Mark the original unavailable_all request as handled
-                update_post_meta($request_id, 'status', 'handled');
-                
-                set_transient('tutor_request_message', 'New alternative times have been successfully submitted.', 60);
-            } else {
-                set_transient('tutor_request_error', 'Error: ' . $new_request_id->get_error_message(), 60);
-            }
-            
-            // Redirect back with active tab
-            $redirect_url = add_query_arg('active_tab', $active_tab, remove_query_arg('_wpnonce', $_SERVER['REQUEST_URI']));
-            wp_redirect($redirect_url);
-            exit;
-        }
-    }
-    
-    // Add action to handle form submissions
-    add_action('init', 'handle_tutor_request_form_actions');
-}
-?>
+<!-- Modal for editing a reschedule request -->
+<div class="modal fade" id="editRescheduleRequestModal" tabindex="-1" aria-labelledby="editRescheduleRequestModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editRescheduleRequestModalLabel">Edit Reschedule Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="editRescheduleSuccessMessage" class="alert alert-success" style="display: none;">
+                    <p>Your reschedule request has been successfully updated.</p>
+                </div>
+                <form id="editRescheduleRequestForm" method="post">
+                    <input type="hidden" name="update_tutor_reschedule_request" value="1">
+                    <input type="hidden" name="request_id" id="edit_request_id" value="">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Student</label>
+                        <input type="text" class="form-control" id="edit_student_name" disabled>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Original Lesson Date/Time</label>
+                        <input type="text" class="form-control" id="edit_original_datetime" disabled>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit_reason" class="form-label">Reason for Reschedule <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="edit_reason" name="reason" rows="3" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Preferred Alternative Times</label>
+                        <p class="text-muted small">Please select up to 3 preferred alternative dates and times.</p>
+                        
+                        <div id="edit-preferred-times-container">
+                            <!-- Preferred Time 1 -->
+                            <div class="preferred-time-row mb-2">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Preferred Date 1:</label>
+                                        <input type="date" class="form-control preferred-date" name="preferred_date_1" id="edit_preferred_date_1">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Preferred Time 1:</label>
+                                        <input type="time" class="form-control preferred-time" name="preferred_time_1" id="edit_preferred_time_1">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Preferred Time 2 -->
+                            <div class="preferred-time-row mb-2">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Preferred Date 2:</label>
+                                        <input type="date" class="form-control preferred-date" name="preferred_date_2" id="edit_preferred_date_2">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Preferred Time 2:</label>
+                                        <input type="time" class="form-control preferred-time" name="preferred_time_2" id="edit_preferred_time_2">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Preferred Time 3 -->
+                            <div class="preferred-time-row mb-2">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Preferred Date 3:</label>
+                                        <input type="date" class="form-control preferred-date" name="preferred_date_3" id="edit_preferred_date_3">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Preferred Time 3:</label>
+                                        <input type="time" class="form-control preferred-time" name="preferred_time_3" id="edit_preferred_time_3">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="updateTutorReschedule">Update Request</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
