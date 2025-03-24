@@ -422,9 +422,6 @@ function test_reschedule_requests() {
         return "Error creating test reschedule request: " . $new_request_id->get_error_message();
     }
 }
-
-// Uncomment this line to run the test (then comment it out again after testing)
-// echo test_reschedule_requests();
 ?>
 
 <div class="container mt-4">
