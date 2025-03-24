@@ -3,6 +3,140 @@
     <h4>Reschedule Requests</h4>
     
     <?php
+    // Process confirmation of reschedule request
+    function process_confirm_reschedule() {
+        if (isset($_POST['confirm_reschedule']) && $_POST['confirm_reschedule'] === '1') {
+            $request_id = intval($_POST['request_id']);
+            
+            // Get necessary data from the request post
+            $tutor_name = isset($_POST['tutor_name']) ? sanitize_text_field($_POST['tutor_name']) : wp_get_current_user()->user_login;
+            $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+            
+            // Also get these from the original request as a fallback
+            if (empty($tutor_name)) {
+                $tutor_name = get_post_meta($request_id, 'tutor_name', true);
+            }
+            if (empty($student_id)) {
+                $student_id = get_post_meta($request_id, 'student_id', true);
+            }
+            
+            // Update the request status
+            update_post_meta($request_id, 'status', 'confirmed');
+            
+            // Get preferred times from the request
+            $preferred_times = get_post_meta($request_id, 'preferred_times', true);
+            
+            // Get the first preferred time (or use defaults if not available)
+            $new_date = !empty($preferred_times[0]['date']) ? $preferred_times[0]['date'] : '';
+            $new_time = !empty($preferred_times[0]['time']) ? $preferred_times[0]['time'] : '';
+            
+            // Get original date/time
+            $original_date = get_post_meta($request_id, 'original_date', true);
+            $original_time = get_post_meta($request_id, 'original_time', true);
+            
+            // Create a notification for the student
+            $new_request = array(
+                'post_title'   => 'Tutor Accepted Reschedule Request',
+                'post_content' => '',
+                'post_status'  => 'publish',
+                'post_type'    => 'progress_report',
+            );
+            
+            $new_request_id = wp_insert_post($new_request);
+            
+            if (!is_wp_error($new_request_id)) {
+                // Save the request details
+                update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+                update_post_meta($new_request_id, 'student_id', $student_id);
+                update_post_meta($new_request_id, 'request_type', 'reschedule_confirmed');
+                update_post_meta($new_request_id, 'original_request_id', $request_id);
+                update_post_meta($new_request_id, 'original_date', $original_date);
+                update_post_meta($new_request_id, 'original_time', $original_time);
+                update_post_meta($new_request_id, 'new_date', $new_date);
+                update_post_meta($new_request_id, 'new_time', $new_time);
+                update_post_meta($new_request_id, 'status', 'pending');
+                
+                // Show confirmation message
+                echo '<div class="alert alert-success">You have accepted the reschedule request.</div>';
+            }
+            
+            return true;
+        }
+        return false;
+    }
+    
+    // Process declining of student-initiated reschedule
+    function process_decline_reschedule() {
+        if (isset($_POST['decline_reschedule']) && $_POST['decline_reschedule'] === '1') {
+            $request_id = intval($_POST['request_id']);
+            
+            // Get necessary data from the request post
+            $tutor_name = isset($_POST['tutor_name']) ? sanitize_text_field($_POST['tutor_name']) : wp_get_current_user()->user_login;
+            $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+            
+            // Also get these from the original request as a fallback
+            if (empty($tutor_name)) {
+                $tutor_name = get_post_meta($request_id, 'tutor_name', true);
+            }
+            if (empty($student_id)) {
+                $student_id = get_post_meta($request_id, 'student_id', true);
+            }
+            
+            // Update the request status
+            update_post_meta($request_id, 'status', 'unavailable');
+            
+            // Get the alternative times from POST data
+            $alternatives = [];
+            for ($i = 1; $i <= 3; $i++) {
+                $alt_date = isset($_POST['alt_date_' . $i]) ? sanitize_text_field($_POST['alt_date_' . $i]) : '';
+                $alt_time = isset($_POST['alt_time_' . $i]) ? sanitize_text_field($_POST['alt_time_' . $i]) : '';
+                
+                if (!empty($alt_date) && !empty($alt_time)) {
+                    $alternatives[] = [
+                        'date' => $alt_date,
+                        'time' => $alt_time
+                    ];
+                }
+            }
+            
+            // Create a notification for the student
+            $new_request = array(
+                'post_title'   => 'Tutor Unavailable - Alternative Times Provided',
+                'post_content' => '',
+                'post_status'  => 'publish',
+                'post_type'    => 'progress_report',
+            );
+            
+            $new_request_id = wp_insert_post($new_request);
+            
+            if (!is_wp_error($new_request_id)) {
+                // Copy over the original details
+                $original_date = get_post_meta($request_id, 'original_date', true);
+                $original_time = get_post_meta($request_id, 'original_time', true);
+                
+                // Save the request details
+                update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+                update_post_meta($new_request_id, 'student_id', $student_id);
+                update_post_meta($new_request_id, 'request_type', 'tutor_unavailable');
+                update_post_meta($new_request_id, 'original_request_id', $request_id);
+                update_post_meta($new_request_id, 'original_date', $original_date);
+                update_post_meta($new_request_id, 'original_time', $original_time);
+                update_post_meta($new_request_id, 'alternatives', $alternatives);
+                update_post_meta($new_request_id, 'status', 'pending');
+                
+                // Show confirmation message
+                echo '<div class="alert alert-success">You have marked yourself as unavailable for this time and provided alternatives.</div>';
+            }
+            
+            return true;
+        }
+        return false;
+    }
+    
+    // Process these request actions
+    process_confirm_reschedule();
+    process_decline_reschedule();
+    
     // Helper functions for reusability
     function format_datetime($date, $time, $format = 'M j, Y \a\t g:i A') {
         return !empty($date) ? date($format, strtotime($date . ' ' . $time)) : 'N/A';
@@ -25,6 +159,7 @@
         $badges = [
             'confirmed' => '<span class="badge bg-success">Confirmed</span>',
             'denied' => '<span class="badge bg-danger">Denied</span>',
+            'unavailable' => '<span class="badge bg-warning">Unavailable</span>',
             'pending' => '<span class="badge bg-warning">Pending</span>'
         ];
         return $badges[$status] ?? $badges['pending'];
@@ -379,6 +514,7 @@
                     $request_date = get_the_date('M j, Y', $request_id);
                     $reason = get_post_meta($request_id, 'reason', true);
                     $preferred_times = get_post_meta($request_id, 'preferred_times', true);
+                    $status = get_post_meta($request_id, 'status', true);
                     
                     echo '<tr>';
                     echo '<td>' . esc_html($request_date) . '</td>';
@@ -398,21 +534,32 @@
                     echo '</td>';
                     
                     echo '<td>' . esc_html(get_student_display_name($student_name)) . '</td>';
-                    echo '<td><span class="badge bg-warning">Pending</span></td>';
+                    echo '<td>' . get_status_badge($status) . '</td>';
                     echo '<td>';
-                    echo '<form method="post" class="d-inline">';
-                    echo '<input type="hidden" name="confirm_reschedule" value="1">';
-                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                    echo '<input type="hidden" name="active_tab" value="requests">';
-                    echo '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
-                    echo '</form>';
                     
-                    echo '<form method="post" class="d-inline">';
-                    echo '<input type="hidden" name="decline_reschedule" value="1">';
-                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                    echo '<input type="hidden" name="active_tab" value="requests">';
-                    echo '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
-                    echo '</form>';
+                    // Only show action buttons for pending requests
+                    if ($status == 'pending') {
+                        echo '<form method="post" class="d-inline">';
+                        echo '<input type="hidden" name="confirm_reschedule" value="1">';
+                        echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                        echo '<input type="hidden" name="tutor_name" value="' . wp_get_current_user()->user_login . '">';
+                        echo '<input type="hidden" name="student_id" value="' . $student_id . '">';
+                        echo '<input type="hidden" name="active_tab" value="requests">';
+                        echo '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
+                        echo '</form>';
+                        
+                        echo '<button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" 
+                              data-bs-target="#unavailableModal" 
+                              data-request-id="' . $request_id . '"
+                              data-student-id="' . $student_id . '"
+                              data-student-name="' . esc_attr(get_student_display_name($student_name)) . '"
+                              data-original-date="' . esc_attr($original_date) . '"
+                              data-original-time="' . esc_attr($original_time) . '">
+                              Unavailable
+                              </button>';
+                    } else {
+                        echo '<span class="text-muted">No actions available</span>';
+                    }
                     echo '</td></tr>';
                 }
                 
@@ -614,3 +761,123 @@
         </div>
     </div>
 </div>
+
+<!-- Modal for providing alternative times -->
+<div class="modal fade" id="unavailableModal" tabindex="-1" aria-labelledby="unavailableModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unavailableModalLabel">Provide Alternative Times</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="unavailableErrorMessage" class="alert alert-danger" style="display: none;">
+                    <p>Please provide at least one alternative time.</p>
+                </div>
+                <p>You've indicated you're unavailable for the requested time. Please provide alternative times that would work for you.</p>
+                <p><strong>Student:</strong> <span id="unavailable_student_name"></span></p>
+                <p><strong>Original Time:</strong> <span id="unavailable_original_time"></span></p>
+                
+                <form id="unavailableForm" method="post">
+                    <input type="hidden" name="decline_reschedule" value="1">
+                    <input type="hidden" name="request_id" id="unavailable_request_id" value="">
+                    <input type="hidden" name="tutor_name" value="<?php echo wp_get_current_user()->user_login; ?>">
+                    <input type="hidden" name="student_id" id="unavailable_student_id" value="">
+                    <input type="hidden" name="active_tab" value="requests">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Alternative Times <span class="text-danger">*</span></label>
+                        <p class="text-muted small">Please provide at least one alternative date and time.</p>
+                        
+                        <div id="alternative-times-container">
+                            <?php for ($i = 1; $i <= 3; $i++) { ?>
+                                <div class="mb-2">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Alternative Date <?php echo $i; ?>:</label>
+                                            <input type="date" class="form-control alt-date" 
+                                                   name="alt_date_<?php echo $i; ?>" id="alt_date_<?php echo $i; ?>" 
+                                                   <?php echo ($i == 1) ? 'required' : ''; ?>>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Alternative Time <?php echo $i; ?>:</label>
+                                            <input type="time" class="form-control alt-time" 
+                                                   name="alt_time_<?php echo $i; ?>" id="alt_time_<?php echo $i; ?>" 
+                                                   <?php echo ($i == 1) ? 'required' : ''; ?>>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="submitUnavailable">Submit Alternative Times</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add JavaScript to handle the unavailable modal -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up the unavailable modal data
+    const unavailableModal = document.getElementById('unavailableModal');
+    if (unavailableModal) {
+        unavailableModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const requestId = button.getAttribute('data-request-id');
+            const studentId = button.getAttribute('data-student-id');
+            const studentName = button.getAttribute('data-student-name');
+            const originalDate = button.getAttribute('data-original-date');
+            const originalTime = button.getAttribute('data-original-time');
+            
+            document.getElementById('unavailable_request_id').value = requestId;
+            document.getElementById('unavailable_student_id').value = studentId;
+            document.getElementById('unavailable_student_name').textContent = studentName;
+            
+            // Format the date and time
+            const dateObj = new Date(originalDate + ' ' + originalTime);
+            const formattedDate = dateObj.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric'
+            });
+            const formattedTime = dateObj.toLocaleTimeString('en-US', { 
+                hour: 'numeric', 
+                minute: 'numeric', 
+                hour12: true 
+            });
+            
+            document.getElementById('unavailable_original_time').textContent = formattedDate + ' at ' + formattedTime;
+        });
+    }
+    
+    // Form validation
+    const unavailableForm = document.getElementById('unavailableForm');
+    if (unavailableForm) {
+        unavailableForm.addEventListener('submit', function(event) {
+            const altDates = document.querySelectorAll('.alt-date');
+            const altTimes = document.querySelectorAll('.alt-time');
+            let valid = false;
+            
+            // Check if at least one alternative time is provided
+            for (let i = 0; i < altDates.length; i++) {
+                if (altDates[i].value && altTimes[i].value) {
+                    valid = true;
+                    break;
+                }
+            }
+            
+            if (!valid) {
+                event.preventDefault();
+                document.getElementById('unavailableErrorMessage').style.display = 'block';
+            }
+        });
+    }
+});
+</script>

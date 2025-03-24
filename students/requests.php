@@ -269,6 +269,7 @@
                                     $request_date = get_the_date('M j, Y', $request_id);
                                     $reason = get_post_meta($request_id, 'reason', true);
                                     $preferred_times = get_post_meta($request_id, 'preferred_times', true);
+                                    $tutor_response = get_post_meta($request_id, 'tutor_response', true);
                                     
                                     // Format the original date for display
                                     $formatted_original = !empty($original_date) ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
@@ -289,10 +290,40 @@
                                     
                                     // Set status badge
                                     $status_badge = '';
-                                    if ($status === 'confirmed') {
-                                        $status_badge = '<span class="badge bg-success">Confirmed</span>';
-                                    } elseif ($status === 'denied') {
-                                        $status_badge = '<span class="badge bg-danger">Denied</span>';
+                                    if ($status === 'confirmed' || $status === 'accepted') {
+                                        $status_badge = '<span class="badge bg-success">Accepted</span>';
+                                    } elseif ($status === 'denied' || $status === 'declined') {
+                                        $status_badge = '<span class="badge bg-danger">Declined</span>';
+                                    } elseif ($status === 'unavailable') {
+                                        $status_badge = '<span class="badge bg-warning">Tutor Unavailable</span>';
+                                        
+                                        // Check if there are alternative times provided by the tutor
+                                        $alternative_requests_args = array(
+                                            'post_type'      => 'progress_report',
+                                            'posts_per_page' => 1,
+                                            'meta_query'     => array(
+                                                'relation' => 'AND',
+                                                array(
+                                                    'key'     => 'original_request_id',
+                                                    'value'   => $request_id,
+                                                    'compare' => '=',
+                                                ),
+                                                array(
+                                                    'key'     => 'request_type',
+                                                    'value'   => 'tutor_unavailable',
+                                                    'compare' => '=',
+                                                )
+                                            )
+                                        );
+                                        
+                                        $alternative_requests = get_posts($alternative_requests_args);
+                                        
+                                        if (!empty($alternative_requests)) {
+                                            $notification = '<div class="mt-1"><small class="text-info"><i class="fas fa-info-circle"></i> Tutor has provided alternative times</small></div>';
+                                            $notification .= '<a href="#alternativeTimesSection" class="btn btn-sm btn-outline-primary mt-1">View Alternative Times</a>';
+                                        } else {
+                                            $notification = '<div class="mt-1"><small class="text-warning"><i class="fas fa-info-circle"></i> Tutor is unavailable for this time</small></div>';
+                                        }
                                     } else {
                                         $status_badge = '<span class="badge bg-warning">Pending</span>';
                                     }
@@ -317,11 +348,11 @@
                                     echo '</td>';
                                     
                                     echo '<td>' . esc_html($tutor_full_name) . '</td>';
-                                    echo '<td>' . $status_badge . '</td>';
+                                    echo '<td>' . $status_badge . $notification . '</td>';
                                     echo '<td>';
                                     
                                     // Only show edit/delete buttons for pending requests
-                                    if ($status !== 'confirmed' && $status !== 'denied') {
+                                    if ($status !== 'confirmed' && $status !== 'denied' && $status !== 'accepted' && $status !== 'declined') {
                                         echo '<button type="button" class="btn btn-sm btn-primary me-1 edit-request-btn" 
                                             data-bs-toggle="modal" 
                                             data-bs-target="#editRescheduleRequestModal" 
