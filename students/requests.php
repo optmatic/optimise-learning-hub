@@ -290,10 +290,17 @@
                                     
                                     // Set status badge
                                     $status_badge = '';
+                                    $notification = ''; // Initialize notification variable to prevent undefined variable error
+                                    
                                     if ($status === 'confirmed' || $status === 'accepted') {
                                         $status_badge = '<span class="badge bg-success">Accepted</span>';
                                     } elseif ($status === 'denied' || $status === 'declined') {
                                         $status_badge = '<span class="badge bg-danger">Declined</span>';
+                                        
+                                        // Add notification for declined requests
+                                        if (!empty($tutor_response)) {
+                                            $notification = '<div class="mt-1"><small class="text-danger"><i class="fas fa-info-circle"></i> ' . esc_html($tutor_response) . '</small></div>';
+                                        }
                                     } elseif ($status === 'unavailable') {
                                         $status_badge = '<span class="badge bg-warning">Tutor Unavailable</span>';
                                         
@@ -367,10 +374,50 @@
                                         echo '<form method="post" class="d-inline delete-request-form">';
                                         echo '<input type="hidden" name="delete_student_request" value="1">';
                                         echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                        echo '<input type="hidden" name="active_tab" value="tutor-comms">';
                                         echo '<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> Delete</button>';
                                         echo '</form>';
                                     } else {
-                                        echo '<span class="text-muted">No actions available</span>';
+                                        // Allow archiving for declined/denied requests regardless of date
+                                        if ($status === 'denied' || $status === 'declined') {
+                                            echo '<form method="post" class="d-inline delete-request-form">';
+                                            echo '<input type="hidden" name="delete_student_request" value="1">';
+                                            echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                            echo '<input type="hidden" name="active_tab" value="tutor-comms">';
+                                            echo '<button type="submit" class="btn btn-sm btn-secondary"><i class="fas fa-archive"></i> Archive</button>';
+                                            echo '</form>';
+                                        } else {
+                                            // For accepted/confirmed requests, check if they're expired
+                                            $now = new DateTime('now', new DateTimeZone('Australia/Brisbane'));
+                                            $lesson_date = new DateTime($original_date . ' ' . $original_time, new DateTimeZone('Australia/Brisbane'));
+                                            $is_expired = $lesson_date < $now;
+                                            
+                                            // Check if all preferred times have passed too
+                                            $all_times_passed = true;
+                                            if (!empty($preferred_times) && is_array($preferred_times)) {
+                                                foreach ($preferred_times as $time) {
+                                                    if (!empty($time['date']) && !empty($time['time'])) {
+                                                        $preferred_date = new DateTime($time['date'] . ' ' . $time['time'], new DateTimeZone('Australia/Brisbane'));
+                                                        if ($preferred_date > $now) {
+                                                            $all_times_passed = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Show delete button if the request is completed and expired
+                                            if ($is_expired && $all_times_passed) {
+                                                echo '<form method="post" class="d-inline delete-request-form">';
+                                                echo '<input type="hidden" name="delete_student_request" value="1">';
+                                                echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                                                echo '<input type="hidden" name="active_tab" value="tutor-comms">';
+                                                echo '<button type="submit" class="btn btn-sm btn-secondary"><i class="fas fa-archive"></i> Archive</button>';
+                                                echo '</form>';
+                                            } else {
+                                                echo '<span class="text-muted">No actions available</span>';
+                                            }
+                                        }
                                     }
                                     
                                     echo '</td>';
@@ -472,10 +519,10 @@
                         </div>
                     </div>
                     
-                    <!-- Alternative Times Section -->
+                    <!-- Get tutor unavailable responses -->
                     <?php
-                    // Get alternative reschedule requests
-                    $alternative_args = array(
+                    // Get tutor unavailable responses
+                    $unavailable_requests_args = array(
                         'post_type'      => 'progress_report',
                         'posts_per_page' => -1,
                         'meta_query'     => array(
@@ -487,66 +534,47 @@
                             ),
                             array(
                                 'key'     => 'request_type',
-                                'value'   => 'reschedule_alternatives',
+                                'value'   => 'tutor_unavailable',
                                 'compare' => '=',
                             )
                         ),
                         'order'          => 'DESC',
                         'orderby'        => 'date'
                     );
-                    
-                    $alternative_requests = get_posts($alternative_args);
-                    
-                    if (!empty($alternative_requests)) {
-                        echo '<div class="card mb-4">';
-                        echo '<div class="card-header bg-primary text-white">';
-                        echo '<i class="fas fa-exchange-alt me-2"></i> Alternative Lesson Times';
+
+                    $unavailable_requests = get_posts($unavailable_requests_args);
+
+                    if (!empty($unavailable_requests)) {
+                        echo '<div class="card mb-4" id="alternativeTimesSection">';
+                        echo '<div class="card-header bg-info text-white">';
+                        echo '<i class="fas fa-calendar-alt me-2"></i> Tutor Alternative Times';
                         echo '</div>';
                         echo '<div class="card-body">';
                         
-                        // Check for new (unviewed) alternatives
-                        $has_new_alternatives = false;
-                        foreach ($alternative_requests as $request) {
-                            $viewed = get_post_meta($request->ID, 'viewed_by_student', true);
-                            $status = get_post_meta($request->ID, 'status', true);
-                            if (empty($viewed) && $status === 'pending') {
-                                $has_new_alternatives = true;
-                                break;
-                            }
-                        }
+                        echo '<p>Your tutor is unavailable for your requested times but has provided alternatives. Please select a time that works for you:</p>';
                         
-                        // Show notification for new alternatives
-                        if ($has_new_alternatives) {
-                            echo '<div class="alert alert-info">';
-                            echo '<i class="fas fa-bell me-2"></i> <strong>New!</strong> Your tutor has provided alternative lesson times for you to review.';
-                            echo '</div>';
-                        }
-                        
-                        echo '<p>Your tutor has provided alternative times for lessons you were unavailable for. Please select one of the options below:</p>';
-                        
-                        echo '<div class="accordion" id="alternativeAccordion">';
+                        echo '<div class="accordion" id="unavailableAccordion">';
                         $counter = 1;
                         
-                        foreach ($alternative_requests as $request) {
+                        foreach ($unavailable_requests as $request) {
                             $request_id = $request->ID;
                             $original_request_id = get_post_meta($request_id, 'original_request_id', true);
                             $tutor_name = get_post_meta($request_id, 'tutor_name', true);
                             $alternatives = get_post_meta($request_id, 'alternatives', true);
-                            $message = get_post_meta($request_id, 'message', true);
                             $status = get_post_meta($request_id, 'status', true);
                             $request_date = get_the_date('F j, Y', $request_id);
-                            $viewed = get_post_meta($request_id, 'viewed_by_student', true);
                             
-                            // Get tutor's first and last name
+                            // Get tutor's full name
+                            $tutor_full_name = $tutor_name;
                             $tutor_user = get_user_by('login', $tutor_name);
-                            $tutor_display_name = $tutor_name;
                             if ($tutor_user) {
                                 $first_name = get_user_meta($tutor_user->ID, 'first_name', true);
                                 $last_name = get_user_meta($tutor_user->ID, 'last_name', true);
+                                
                                 if (!empty($first_name) && !empty($last_name)) {
-                                    $tutor_display_name = $first_name . ' ' . $last_name;
+                                    $tutor_full_name = $first_name . ' ' . $last_name;
                                 } else {
-                                    $tutor_display_name = $tutor_user->display_name;
+                                    $tutor_full_name = $tutor_user->display_name;
                                 }
                             }
                             
@@ -554,9 +582,23 @@
                             $original_date = get_post_meta($original_request_id, 'original_date', true);
                             $original_time = get_post_meta($original_request_id, 'original_time', true);
                             
-                            // Format the original date for display
+                            // Format the original date for display - making sure to handle empty values
                             $formatted_original_date = !empty($original_date) ? date('l, jS \of F, Y', strtotime($original_date)) : 'N/A';
                             $formatted_original_time = !empty($original_time) ? date('g:i A', strtotime($original_time)) : '';
+                            
+                            // If the original date is not available from the meta, try to get it from the parent request
+                            if ($formatted_original_date === 'N/A' && !empty($original_request_id)) {
+                                $parent_original_date = get_post_meta($original_request_id, 'original_date', true);
+                                $parent_original_time = get_post_meta($original_request_id, 'original_time', true);
+                                
+                                if (!empty($parent_original_date)) {
+                                    $formatted_original_date = date('l, jS \of F, Y', strtotime($parent_original_date));
+                                }
+                                
+                                if (!empty($parent_original_time)) {
+                                    $formatted_original_time = date('g:i A', strtotime($parent_original_time));
+                                }
+                            }
                             
                             // Set status badge
                             $status_badge = '';
@@ -566,42 +608,33 @@
                                 $status_badge = '<span class="badge bg-warning">Pending</span>';
                             }
                             
-                            // Add "New" badge for unviewed alternatives
-                            $new_badge = '';
-                            if (empty($viewed) && $status === 'pending') {
-                                $new_badge = '<span class="badge bg-danger ms-2">New</span>';
-                            }
-                            
-                            echo '<div class="accordion-item' . (empty($viewed) && $status === 'pending' ? ' border-danger' : '') . '">';
-                            echo '<h2 class="accordion-header" id="alternativeHeading' . $counter . '">';
-                            echo '<button class="accordion-button' . (empty($viewed) && $status === 'pending' ? '' : ' collapsed') . '" type="button" data-bs-toggle="collapse" data-bs-target="#alternativeCollapse' . $counter . '" aria-expanded="' . (empty($viewed) && $status === 'pending' ? 'true' : 'false') . '" aria-controls="alternativeCollapse' . $counter . '">';
-                            echo 'Alternative Times - ' . $request_date . ' ' . $status_badge . $new_badge;
+                            echo '<div class="accordion-item">';
+                            echo '<h2 class="accordion-header" id="unavailableHeading' . $counter . '">';
+                            echo '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#unavailableCollapse' . $counter . '" aria-expanded="false" 
+                                    aria-controls="unavailableCollapse' . $counter . '">';
+                            echo 'Alternative Times - ' . $request_date . ' from ' . $tutor_full_name . ' ' . $status_badge;
                             echo '</button>';
                             echo '</h2>';
                             
-                            echo '<div id="alternativeCollapse' . $counter . '" class="accordion-collapse collapse' . (empty($viewed) && $status === 'pending' ? ' show' : '') . '" aria-labelledby="alternativeHeading' . $counter . '" data-bs-parent="#alternativeAccordion">';
+                            echo '<div id="unavailableCollapse' . $counter . '" class="accordion-collapse collapse" 
+                                    aria-labelledby="unavailableHeading' . $counter . '" data-bs-parent="#unavailableAccordion">';
                             echo '<div class="accordion-body">';
                             
                             echo '<div class="card mb-3">';
-                            echo '<div class="card-header bg-light">Original Lesson</div>';
+                            echo '<div class="card-header bg-light">Original Requested Lesson</div>';
                             echo '<div class="card-body">';
                             echo '<p><strong>Date:</strong> ' . $formatted_original_date . '</p>';
                             if (!empty($formatted_original_time)) {
                                 echo '<p><strong>Time:</strong> ' . $formatted_original_time . '</p>';
                             }
-                            echo '<p><strong>Tutor:</strong> ' . esc_html($tutor_display_name) . '</p>';
+                            echo '<p><strong>Tutor:</strong> ' . esc_html($tutor_full_name) . '</p>';
                             echo '</div>';
                             echo '</div>';
-                            
-                            if (!empty($message)) {
-                                echo '<div class="alert alert-info">';
-                                echo '<p><strong>Message from tutor:</strong> ' . esc_html($message) . '</p>';
-                                echo '</div>';
-                            }
                             
                             if ($status !== 'confirmed') {
                                 echo '<form method="post" class="mt-3">';
-                                echo '<input type="hidden" name="select_alternative" value="1">';
+                                echo '<input type="hidden" name="accept_tutor_alternative" value="1">';
                                 echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
                                 
                                 echo '<div class="list-group mb-3">';
@@ -614,8 +647,9 @@
                                     
                                     echo '<div class="list-group-item">';
                                     echo '<div class="form-check">';
-                                    echo '<input class="form-check-input" type="radio" name="selected_alternative" value="' . $index . '" id="alt' . $request_id . '_' . $index . '" ' . ($index === 0 ? 'checked' : '') . '>';
-                                    echo '<label class="form-check-label" for="alt' . $request_id . '_' . $index . '">';
+                                    echo '<input class="form-check-input" type="radio" name="selected_alternative" 
+                                            value="' . $index . '" id="unavail' . $request_id . '_' . $index . '" ' . ($index === 0 ? 'checked' : '') . '>';
+                                    echo '<label class="form-check-label" for="unavail' . $request_id . '_' . $index . '">';
                                     echo 'Option ' . ($index + 1) . ': ' . $formatted_alt_date . ' at ' . $formatted_alt_time;
                                     echo '</label>';
                                     echo '</div>';
@@ -623,7 +657,7 @@
                                 }
                                 echo '</div>';
                                 
-                                echo '<button type="submit" class="btn btn-success">Confirm Selected Time</button>';
+                                echo '<button type="submit" class="btn btn-success">Accept Selected Time</button>';
                                 echo '</form>';
                             } else {
                                 // Show the confirmed alternative
