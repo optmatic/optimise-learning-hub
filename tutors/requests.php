@@ -516,6 +516,21 @@
                     $preferred_times = get_post_meta($request_id, 'preferred_times', true);
                     $status = get_post_meta($request_id, 'status', true);
                     
+                    // Get student name from user data if we only have ID
+                    $student_display_name = '';
+                    if (!empty($student_id)) {
+                        $student_user = get_user_by('id', $student_id);
+                        if ($student_user) {
+                            $first_name = get_user_meta($student_id, 'first_name', true);
+                            $last_name = get_user_meta($student_id, 'last_name', true);
+                            $student_display_name = (!empty($first_name) && !empty($last_name)) 
+                                ? $first_name . ' ' . $last_name 
+                                : $student_user->display_name;
+                        }
+                    } else if (!empty($student_name)) {
+                        $student_display_name = get_student_display_name($student_name);
+                    }
+                    
                     echo '<tr>';
                     echo '<td>' . esc_html($request_date) . '</td>';
                     echo '<td>' . esc_html(format_datetime($original_date, $original_time)) . '</td>';
@@ -533,7 +548,7 @@
                     }
                     echo '</td>';
                     
-                    echo '<td>' . esc_html(get_student_display_name($student_name)) . '</td>';
+                    echo '<td>' . esc_html($student_display_name) . '</td>';
                     echo '<td>' . get_status_badge($status) . '</td>';
                     echo '<td>';
                     
