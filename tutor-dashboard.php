@@ -10,13 +10,12 @@ get_header(); ?>
 if (current_user_can('tutor')) {
 ?>
 
-<?php get_header(); ?>
-
-<?php 
-if (current_user_can('tutor')) {
-?>
-
 <?php
+// Get the current user to use as the tutor
+$current_user = wp_get_current_user();
+$tutor = $current_user;
+$tutor_id = get_current_user_id();
+
 // Handle AJAX request to mark reschedules as viewed
 if (isset($_POST['mark_viewed']) && $_POST['mark_viewed'] === '1') {
     $confirmed_reschedules = get_posts(array(
@@ -39,23 +38,30 @@ if (isset($_POST['mark_viewed']) && $_POST['mark_viewed'] === '1') {
                 'value'   => 'confirmed',
                 'compare' => '=',
             )
-            ),
-            'fields'         => 'ids'
-        ));
-        
-        foreach ($confirmed_reschedules as $reschedule_id) {
-            update_post_meta($reschedule_id, 'viewed_by_tutor', '1');
-        }
-        
-        // If this is an AJAX request, return success
-        if (wp_doing_ajax()) {
-            wp_send_json_success();
-            exit;
-        }
+        ),
+        'fields'         => 'ids'
+    ));
+    
+    foreach ($confirmed_reschedules as $reschedule_id) {
+        update_post_meta($reschedule_id, 'viewed_by_tutor', '1');
     }
+    
+    // If this is an AJAX request, return success
+    if (wp_doing_ajax()) {
+        wp_send_json_success();
+        exit;
+    }
+}
 
+// Process confirmation of reschedule request
+if (isset($_POST['confirm_reschedule_option']) && isset($_POST['request_id'])) {
+    $request_id = intval($_POST['request_id']);
+    
     // Get the original request ID
     $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+    
+    // Get the selected option (if available)
+    $selected = isset($_POST['selected_option']) ? $_POST['selected_option'] : null;
     
     // Create a new confirmed reschedule request
     $new_request = array(
@@ -73,8 +79,10 @@ if (isset($_POST['mark_viewed']) && $_POST['mark_viewed'] === '1') {
         $tutor_name = get_post_meta($request_id, 'tutor_name', true);
         $original_date = get_post_meta($original_request_id, 'original_date', true);
         $original_time = get_post_meta($original_request_id, 'original_time', true);
-        $new_date = get_post_meta($new_request_id, 'new_date', true);
-        $new_time = get_post_meta($new_request_id, 'new_time', true);
+        
+        // New date and time (either from selection or directly from request)
+        $new_date = $selected && isset($selected['date']) ? $selected['date'] : get_post_meta($request_id, 'new_date', true);
+        $new_time = $selected && isset($selected['time']) ? $selected['time'] : get_post_meta($request_id, 'new_time', true);
 
         // Save the request details
         update_post_meta($new_request_id, 'tutor_name', $tutor_name);
@@ -82,8 +90,8 @@ if (isset($_POST['mark_viewed']) && $_POST['mark_viewed'] === '1') {
         update_post_meta($new_request_id, 'request_type', 'reschedule');
         update_post_meta($new_request_id, 'original_date', $original_date);
         update_post_meta($new_request_id, 'original_time', $original_time);
-        update_post_meta($new_request_id, 'new_date', $selected['date']);
-        update_post_meta($new_request_id, 'new_time', $selected['time']);
+        update_post_meta($new_request_id, 'new_date', $new_date);
+        update_post_meta($new_request_id, 'new_time', $new_time);
         update_post_meta($new_request_id, 'status', 'confirmed');
 
         // Show confirmation message
@@ -191,17 +199,6 @@ if (isset($_POST['submit_tutor_reschedule_request']) && $_POST['submit_tutor_res
     }
 }
 
-// Process confirmation of tutor-initiated reschedule
-if (isset($_POST['confirm_reschedule']) && $_POST['confirm_reschedule'] === '1') {
-    $request_id = intval($_POST['request_id']);
-    
-    // Update the request status
-    update_post_meta($request_id, 'status', 'confirmed');
-
-    // Show confirmation message
-    echo '<div class="alert alert-success">You have accepted the reschedule request.</div>';
-}
-
 // Process declining of student-initiated reschedule
 if (isset($_POST['decline_reschedule']) && $_POST['decline_reschedule'] === '1') {
     $request_id = intval($_POST['request_id']);
@@ -209,54 +206,57 @@ if (isset($_POST['decline_reschedule']) && $_POST['decline_reschedule'] === '1')
     // Update the request status
     update_post_meta($request_id, 'status', 'declined');
 
-// Create a notification for the student
-$new_request = array(
-    'post_title'   => 'Tutor Declined Reschedule Request',
-    'post_content' => '',
-    'post_status'  => 'publish',
-    'post_type'    => 'progress_report',
-);
+    // Create a notification for the student
+    $new_request = array(
+        'post_title'   => 'Tutor Declined Reschedule Request',
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    );
 
-$new_request_id = wp_insert_post($new_request);
+    $new_request_id = wp_insert_post($new_request);
 
-
-if (!is_wp_error($new_request_id)) {
-    // Copy over the original details
-    $tutor_id = get_post_meta($request_id, 'tutor_id', true);
-    $student_name = get_post_meta($request_id, 'student_name', true);
-    $original_date = get_post_meta($request_id, 'original_date', true);
-    $original_time = get_post_meta($request_id, 'original_time', true);
-    
-    // Save the request details
-    update_post_meta($new_request_id, 'tutor_name', $tutor_name);
-    update_post_meta($new_request_id, 'student_id', $student_id);
-    update_post_meta($new_request_id, 'request_type', 'reschedule_declined');
-    update_post_meta($new_request_id, 'original_request_id', $request_id);
-    update_post_meta($new_request_id, 'original_date', $original_date);
-    update_post_meta($new_request_id, 'original_time', $original_time);
-    update_post_meta($new_request_id, 'status', 'pending');
-
-
-    // Process deletion of tutor-initiated reschedule request
-    if (isset($_POST['delete_tutor_request']) && isset($_POST['request_id'])) {
-        $request_id = intval($_POST['request_id']);
-        
-        // Verify this request belongs to the current tutor
+    if (!is_wp_error($new_request_id)){
+        // Copy over the original details
         $tutor_id = get_post_meta($request_id, 'tutor_id', true);
-        if ($tutor_id == get_current_user_id()) {
-            // Delete the request
-            wp_delete_post($request_id, true);
-            
-            // Show confirmation message
-            echo '<div class="alert alert-success">Your reschedule request has been deleted.</div>';
-        }
-    }
-
-    // Process update of tutor-initiated reschedule request
-    if (isset($_POST['update_tutor_reschedule_request']) && $_POST['update_tutor_reschedule_request'] === '1') {
-        $request_id = intval($_POST['request_id']);
-        $reason = sanitize_textarea_field($_POST['reason']);
+        $student_name = get_post_meta($request_id, 'student_name', true);
+        $original_date = get_post_meta($request_id, 'original_date', true);
+        $original_time = get_post_meta($request_id, 'original_time', true);
         
+        // Save the request details
+        update_post_meta($new_request_id, 'tutor_name', $tutor_name);
+        update_post_meta($new_request_id, 'student_id', $student_id);
+        update_post_meta($new_request_id, 'request_type', 'reschedule_declined');
+        update_post_meta($new_request_id, 'original_request_id', $request_id);
+        update_post_meta($new_request_id, 'original_date', $original_date);
+        update_post_meta($new_request_id, 'original_time', $original_time);
+        update_post_meta($new_request_id, 'status', 'pending');
+        
+        // Show confirmation message
+        echo '<div class="alert alert-success">You have declined the reschedule request.</div>';
+    }
+}
+
+// Process deletion of tutor-initiated reschedule request
+if (isset($_POST['delete_tutor_request']) && isset($_POST['request_id'])) {
+    $request_id = intval($_POST['request_id']);
+    
+    // Verify this request belongs to the current tutor
+    $tutor_id = get_post_meta($request_id, 'tutor_id', true);
+    if ($tutor_id == get_current_user_id()) {
+        // Delete the request
+        wp_delete_post($request_id, true);
+        
+        // Show confirmation message
+        echo '<div class="alert alert-success">Your reschedule request has been deleted.</div>';
+    }
+}
+
+// Process update of tutor-initiated reschedule request
+if (isset($_POST['update_tutor_reschedule_request']) && $_POST['update_tutor_reschedule_request'] === '1') {
+    $request_id = intval($_POST['request_id']);
+    $reason = sanitize_textarea_field($_POST['reason']);
+    
     // Process preferred times
     $preferred_times = array();
     for ($i = 1; $i <= 3; $i++) {
@@ -266,7 +266,7 @@ if (!is_wp_error($new_request_id)) {
                 'time' => sanitize_text_field($_POST['preferred_time_' . $i])
             );
         }
-
+    }
 
     // Verify this request belongs to the current tutor
     $tutor_id = get_post_meta($request_id, 'tutor_id', true);
@@ -391,6 +391,9 @@ function test_reschedule_requests() {
     $original_time = '14:00:00';
     $new_date = date('Y-m-d', strtotime('+1 day'));
     $new_time = '15:00:00';
+    
+    // Get the current user as tutor
+    $tutor_id = get_current_user_id();
      
     // Create a new reschedule request post
     $new_request = array(
@@ -401,7 +404,6 @@ function test_reschedule_requests() {
     );
 
     $new_request_id = wp_insert_post($new_request);
-
        
     if (!is_wp_error($new_request_id)) {
         // Save the request details
@@ -431,43 +433,44 @@ function test_reschedule_requests() {
      =========================== -->
         <div class="col-12">
         <?php
-                        // Count unread requests
-                        $current_user = wp_get_current_user();
-                        $tutor_name = $current_user->display_name;
-                        
-                        $unread_requests = get_posts(array(
-                            'post_type'      => 'progress_report',
-                            'posts_per_page' => -1,
-                            'meta_query'     => array(
-                                'relation' => 'AND',
-                                array(
-                                    'key'     => 'tutor_name',
-                                    'value'   => $tutor_name,
-                                    'compare' => '=',
-                                ),
-                                array(
-                                    'key'     => 'request_type',
-                                    'value'   => array('reschedule_unavailable_all', 'student_reschedule'),
-                                    'compare' => 'IN',
-                                ),
-                                array(
-                                    'key'     => 'status',
-                                    'value'   => 'pending',
-                                    'compare' => '=',
-                                ),
-                                array(
-                                    'key'     => 'viewed_by_tutor',
-                                    'compare' => 'NOT EXISTS',
-                                )
-                            ),
-                            'fields'         => 'ids'
-                        ));
-                        
-                        $unread_count = count($unread_requests);
-                        if ($unread_count > 0) {
-                            echo '<span class="badge rounded-pill bg-danger">' . $unread_count . '</span>';
-                        }
-                        ?>
+        // Count unread requests - keeping this section for the data, but removing the badge display
+        $current_user = wp_get_current_user();
+        $tutor_name = $current_user->display_name;
+        
+        $unread_requests = get_posts(array(
+            'post_type'      => 'progress_report',
+            'posts_per_page' => -1,
+            'meta_query'     => array(
+                'relation' => 'AND',
+                array(
+                    'key'     => 'tutor_name',
+                    'value'   => $tutor_name,
+                    'compare' => '=',
+                ),
+                array(
+                    'key'     => 'request_type',
+                    'value'   => array('reschedule_unavailable_all', 'student_reschedule'),
+                    'compare' => 'IN',
+                ),
+                array(
+                    'key'     => 'status',
+                    'value'   => 'pending',
+                    'compare' => '=',
+                ),
+                array(
+                    'key'     => 'viewed_by_tutor',
+                    'compare' => 'NOT EXISTS',
+                )
+            ),
+            'fields'         => 'ids'
+        ));
+        
+        $unread_count = count($unread_requests);
+        // Removing this badge display
+        // if ($unread_count > 0) {
+        //     echo '<span class="badge rounded-pill bg-danger">' . $unread_count . '</span>';
+        // }
+        ?>
             
         <ul class="nav nav-tabs" id="myTab" role="tablist" style="padding-left: 0px !important;">
                 <li class="nav-item">
@@ -495,6 +498,13 @@ function test_reschedule_requests() {
                 <li class="nav-item">
                     <a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests">
                         Requests 
+                        <?php
+                        // Count unread requests
+                        $unread_count = count($unread_requests);
+                        if ($unread_count > 0) {
+                            echo '<span class="badge rounded-pill bg-danger">' . $unread_count . '</span>';
+                        }
+                        ?>
                     </a>
                 </li>
             </ul>
@@ -523,5 +533,7 @@ function test_reschedule_requests() {
     echo "Access denied. You don't have permission to view this page.";
 }
 ?>
+
+
 
 <?php get_footer(); ?>

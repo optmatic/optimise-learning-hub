@@ -375,7 +375,7 @@
                                     ),
                                     array(
                                         'key'     => 'request_type',
-                                        'value'   => 'reschedule',
+                                        'value'   => 'tutor_reschedule',
                                         'compare' => '=',
                                     ),
                                     array(
