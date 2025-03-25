@@ -511,6 +511,65 @@
         
         return get_posts($args);
     }
+
+    // Count confirmed reschedule requests that haven't been viewed
+    $confirmed_args = array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'tutor_id',
+                'value'   => get_current_user_id(),
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => 'reschedule',
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'status',
+                'value'   => 'confirmed',
+                'compare' => '=',
+            ),
+            array(
+                'relation' => 'OR',
+                array(
+                    'key'     => 'viewed_by_tutor',
+                    'compare' => 'NOT EXISTS',
+                ),
+                array(
+                    'key'     => 'viewed_by_tutor',
+                    'value'   => '1',
+                    'compare' => '!=',
+                )
+            )
+        ),
+        'fields'         => 'ids'
+    );
+    $confirmed_count = count(get_posts($confirmed_args));
+
+    // Add this in the Notifications section of your HTML
+    if ($confirmed_count > 0 || $requests_notification_count > 0) {
+        echo '<div class="alert alert-info">';
+        echo '<h5><i class="fas fa-bell me-2"></i>Notifications</h5>';
+        echo '<ul class="mb-0">';
+        
+        if ($confirmed_count > 0) {
+            echo '<li>You have <strong>' . $confirmed_count . '</strong> confirmed reschedule ';
+            echo 'request' . ($confirmed_count > 1 ? 's' : '') . '. ';
+            echo '<a href="#confirmedReschedulesSection" class="btn btn-sm btn-primary ms-2">View</a></li>';
+        }
+        
+        if ($requests_notification_count > 0) {
+            echo '<li>You have <strong>' . $requests_notification_count . '</strong> pending student ';
+            echo 'request' . ($requests_notification_count > 1 ? 's' : '') . '. ';
+            echo '<a href="#incomingRequestsSection" class="btn btn-sm btn-primary ms-2">View</a></li>';
+        }
+        
+        echo '</ul></div>';
+    }
     ?>
     
     <!-- Add Reschedule Request Form -->

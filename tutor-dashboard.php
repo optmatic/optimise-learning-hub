@@ -272,12 +272,36 @@ function test_reschedule_requests() {
                     <a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests">
                         Requests 
                         <?php
-                        // Count unread requests
-                        $unread_count = count($unread_requests);
-                        if ($unread_count > 0) {
-                            echo '<span class="badge rounded-pill bg-danger">' . $unread_count . '</span>';
-                        }
+                        // Count pending student reschedule requests
+                        $student_requests_args = array(
+                            'post_type'      => 'progress_report',
+                            'posts_per_page' => -1,
+                            'meta_query'     => array(
+                                'relation' => 'AND',
+                                array(
+                                    'key'     => 'tutor_id',
+                                    'value'   => get_current_user_id(),
+                                    'compare' => '=',
+                                ),
+                                array(
+                                    'key'     => 'request_type',
+                                    'value'   => array('student_reschedule', 'reschedule_unavailable_all'),
+                                    'compare' => 'IN',
+                                ),
+                                array(
+                                    'key'     => 'status',
+                                    'value'   => 'pending',
+                                    'compare' => '=',
+                                )
+                            ),
+                            'fields'         => 'ids'
+                        );
+                        $requests_notification_count = count(get_posts($student_requests_args));
+                        
+                        if ($requests_notification_count > 0): 
                         ?>
+                            <span class="badge rounded-pill bg-danger notification-badge"><?php echo $requests_notification_count; ?></span>
+                        <?php endif; ?>
                     </a>
                 </li>
             </ul>
