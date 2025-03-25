@@ -16,3 +16,28 @@
 .badge.bg-danger {
   background-color: #dc3545 !important;
 }
+
+#unavailableAccordion .badge {
+  margin-left: 10px;
+}
+
+.card-header.bg-info {
+  background-color: #113351 !important;
+}
+
+.card-header.bg-primary {
+  background-color: #113351 !important;
+}
+
+.card-header.bg-warning {
+  background-color: #113351 !important;
+  color: white !important;
+}
+
+.btn-primary {
+  background-color: #fcb31e !important;
+}
+
+#tutor-comms h4 {
+  margin-bottom: 30px;
+}

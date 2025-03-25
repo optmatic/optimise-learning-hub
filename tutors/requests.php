@@ -1,5 +1,5 @@
 <!-- =========================== REQUESTS TAB =========================== -->
-<div class="tab-pane fade" id="requests-tab" role="tabpanel" aria-labelledby="requests-tab">
+<div class="tab-pane fade" id="requests" role="tabpanel" aria-labelledby="requests-tab">
     <h4>Reschedule Requests</h4>
     
     <?php
