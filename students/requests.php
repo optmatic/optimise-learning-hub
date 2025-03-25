@@ -668,12 +668,18 @@
                     echo '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
                     echo '</form>';
                     
-                    echo '<form method="post" class="d-inline">';
-                    echo '<input type="hidden" name="decline_reschedule" value="1">';
-                    echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                    echo '<input type="hidden" name="active_tab" value="requests-tab">';
-                    echo '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
-                    echo '</form>';
+                    echo '<form method="post" class="d-inline">
+                        <input type="hidden" name="mark_unavailable" value="1">
+                        <input type="hidden" name="request_id" value="' . $request_id . '">
+                        <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" 
+                                data-bs-target="#unavailableModal" 
+                                data-request-id="' . $request_id . '"
+                                data-tutor-name="' . esc_attr($tutor_name) . '"
+                                data-original-date="' . esc_attr($original_date) . '"
+                                data-original-time="' . esc_attr($original_time) . '">
+                            Unavailable
+                        </button>
+                    </form>';
                     echo '</td>';
                     echo '</tr>';
                 }
@@ -966,6 +972,62 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-primary" id="updateStudentReschedule">Update Request</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add the Unavailable Modal -->
+<div class="modal fade" id="unavailableModal" tabindex="-1" aria-labelledby="unavailableModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unavailableModalLabel">Provide Alternative Times</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="unavailableErrorMessage" class="alert alert-danger" style="display: none;">
+                    <p>Please provide at least one alternative time.</p>
+                </div>
+                <p>You've indicated you're unavailable for the proposed time. Please provide alternative times that would work for you.</p>
+                <p><strong>Tutor:</strong> <span id="unavailable_tutor_name"></span></p>
+                <p><strong>Original Time:</strong> <span id="unavailable_original_time"></span></p>
+                
+                <form id="unavailableForm" method="post">
+                    <input type="hidden" name="mark_unavailable" value="1">
+                    <input type="hidden" name="request_id" id="unavailable_request_id" value="">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Alternative Times <span class="text-danger">*</span></label>
+                        <p class="text-muted small">Please provide at least one alternative date and time.</p>
+                        
+                        <div id="alternative-times-container">
+                            <?php for ($i = 1; $i <= 3; $i++) { ?>
+                                <div class="mb-2">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Alternative Date <?php echo $i; ?>:</label>
+                                            <input type="date" class="form-control alt-date" 
+                                                   name="alt_date_<?php echo $i; ?>" id="alt_date_<?php echo $i; ?>" 
+                                                   <?php echo ($i == 1) ? 'required' : ''; ?>>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Alternative Time <?php echo $i; ?>:</label>
+                                            <input type="time" class="form-control alt-time" 
+                                                   name="alt_time_<?php echo $i; ?>" id="alt_time_<?php echo $i; ?>" 
+                                                   <?php echo ($i == 1) ? 'required' : ''; ?>>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="submitUnavailable">Submit Alternative Times</button>
                     </div>
                 </form>
             </div>
@@ -1474,6 +1536,60 @@
             }
         });
     }
+
+    const unavailableModal = document.getElementById('unavailableModal');
+    if (unavailableModal) {
+        unavailableModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const requestId = button.getAttribute('data-request-id');
+            const tutorName = button.getAttribute('data-tutor-name');
+            const originalDate = button.getAttribute('data-original-date');
+            const originalTime = button.getAttribute('data-original-time');
+            
+            document.getElementById('unavailable_request_id').value = requestId;
+            document.getElementById('unavailable_tutor_name').textContent = tutorName;
+            
+            // Format the date and time
+            const dateObj = new Date(originalDate + ' ' + originalTime);
+            const formattedDate = dateObj.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric'
+            });
+            const formattedTime = dateObj.toLocaleTimeString('en-US', { 
+                hour: 'numeric', 
+                minute: 'numeric', 
+                hour12: true 
+            });
+            
+            document.getElementById('unavailable_original_time').textContent = formattedDate + ' at ' + formattedTime;
+        });
+    }
+    
+    // Form validation
+    const unavailableForm = document.getElementById('unavailableForm');
+    if (unavailableForm) {
+        unavailableForm.addEventListener('submit', function(event) {
+            const altDates = document.querySelectorAll('.alt-date');
+            const altTimes = document.querySelectorAll('.alt-time');
+            let valid = false;
+            
+            // Check if at least one alternative time is provided
+            for (let i = 0; i < altDates.length; i++) {
+                if (altDates[i].value && altTimes[i].value) {
+                    valid = true;
+                    break;
+                }
+            }
+            
+            if (!valid) {
+                event.preventDefault();
+                document.getElementById('unavailableErrorMessage').style.display = 'block';
+            }
+        });
+    }
+});
 </script>
 <!-- Add hidden fields with nonces for AJAX security -->
 <input type="hidden" id="check_student_requests_nonce" value="<?php echo wp_create_nonce('check_student_requests_nonce'); ?>">

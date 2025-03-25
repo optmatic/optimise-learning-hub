@@ -593,9 +593,11 @@ function test_reschedule_requests() {
                     <a class="nav-link" id="my-progress-tab" data-bs-toggle="tab" href="#my-progress">Your Learning Overviews</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests">
+                    <a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests" role="tab">
                         Requests
-                        <?php echo $requests_notification; ?>
+                        <?php if ($requests_notification_count > 0): ?>
+                            <span class="badge rounded-pill bg-danger notification-badge"><?php echo $requests_notification_count; ?></span>
+                        <?php endif; ?>
                     </a>
                 </li>
             </ul>
