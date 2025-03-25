@@ -1560,3 +1560,48 @@ function set_notification_on_request_status_change($meta_id, $object_id, $meta_k
     }
 }
 add_action('updated_post_meta', 'set_notification_on_request_status_change', 10, 4);
+
+/**
+ * Helper function to get upcoming lessons for a student
+ */
+function get_upcoming_lessons_for_student($student_id) {
+    // This is a placeholder. In a real implementation, this would query
+    // your lesson scheduling system to get actual upcoming lessons.
+    // For now, we'll return some dummy data.
+    
+    $upcoming_lessons = array();
+    
+    // Get lessons from your custom database or post type
+    // This is just a placeholder example
+    $today = date('Y-m-d');
+    $lessons = get_posts(array(
+        'post_type'      => 'lesson',
+        'posts_per_page' => 10,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'student_id',
+                'value'   => $student_id,
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'lesson_date',
+                'value'   => $today,
+                'compare' => '>=',
+            )
+        ),
+        'order'          => 'ASC',
+        'orderby'        => 'date'
+    ));
+    
+    foreach ($lessons as $lesson) {
+        $upcoming_lessons[] = array(
+            'date' => get_post_meta($lesson->ID, 'lesson_date', true),
+            'time' => get_post_meta($lesson->ID, 'lesson_time', true),
+            'tutor_name' => get_post_meta($lesson->ID, 'tutor_name', true),
+            'date_formatted' => get_the_date('M j, Y', $lesson)
+        );
+    }
+    
+    return $upcoming_lessons;
+}
