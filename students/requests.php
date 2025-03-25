@@ -603,7 +603,7 @@
                             // Set status badge
                             $status_badge = '';
                             if ($status === 'confirmed') {
-                                $status_badge = '<span class="badge bg-success">Confirmed</span>';
+                                $status_badge = '<span class="badge bg-success custom-badge">Confirmed</span>';
                             } else {
                                 $status_badge = '<span class="badge bg-warning">Pending</span>';
                             }
@@ -780,3 +780,343 @@
         </div>
     </div>
 </div>
+
+<script>
+    document.getElementById('submitStudentReschedule').addEventListener('click', function(e) {
+        e.preventDefault(); // Prevent the default button action
+        
+        // Check if button is already disabled (preventing duplicate submissions)
+        if (this.disabled) {
+            return;
+        }
+        
+        const preferredDates = document.querySelectorAll('.preferred-date');
+        const preferredTimes = document.querySelectorAll('.preferred-time');
+        let hasPreferredTime = false;
+
+        // Check if at least one preferred date and time is provided
+        for (let i = 0; i < preferredDates.length; i++) {
+            if (preferredDates[i].value && preferredTimes[i].value) {
+                hasPreferredTime = true;
+                break;
+            }
+        }
+
+        if (!hasPreferredTime) {
+            document.getElementById('preferred-times-error').style.display = 'block';
+            return; // Prevent form submission
+        }
+        
+        document.getElementById('preferred-times-error').style.display = 'none';
+        
+        // Use AJAX to submit the form
+        const form = document.getElementById('rescheduleRequestForm');
+        const formData = new FormData(form);
+        
+        // Add a unique submission ID to prevent duplicate processing on the server
+        const submissionId = Date.now().toString();
+        formData.append('submission_id', submissionId);
+        
+        // Disable submit button to prevent multiple submissions
+        const submitButton = this;
+        submitButton.disabled = true;
+        submitButton.innerHTML = 'Submitting...';
+        
+        // Disable other form elements to prevent changes during submission
+        const formElements = form.querySelectorAll('input, select, textarea');
+        formElements.forEach(el => el.disabled = true);
+        
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', window.location.href, true);
+        
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                // Show success message
+                document.getElementById('rescheduleRequestSuccessMessage').style.display = 'block';
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
+                
+                // Change buttons after successful submission
+                const footerButtons = document.querySelector('#rescheduleRequestForm .modal-footer');
+                footerButtons.innerHTML = `
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                `;
+                
+                // Refresh page after a delay
+                setTimeout(function() {
+                    location.reload();
+                }, 2000); // 2 seconds delay
+            } else {
+                // Show error message if something went wrong
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
+                    'There was an error submitting your request. Please try again.';
+                document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
+                
+                // Re-enable form elements
+                formElements.forEach(el => el.disabled = false);
+                
+                // Re-enable submit button
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Submit Request';
+            }
+        };
+        
+        // Handle network errors
+        xhr.onerror = function() {
+            document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+            document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
+                'Network error. Please check your connection and try again.';
+            document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
+            
+            // Re-enable form elements
+            formElements.forEach(el => el.disabled = false);
+            
+            // Re-enable submit button
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Submit Request';
+        };
+        
+        // Set a timeout in case the request takes too long
+        const timeoutId = setTimeout(function() {
+            xhr.abort();
+            document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+            document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
+                'Request timed out. Please try again.';
+            document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
+            
+            // Re-enable form elements
+            formElements.forEach(el => el.disabled = false);
+            
+            // Re-enable submit button
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Submit Request';
+        }, 30000); // 30 seconds timeout
+        
+        // Clear timeout if request completes
+        xhr.onloadend = function() {
+            clearTimeout(timeoutId);
+        };
+        
+        // Send the form data
+        xhr.send(formData);
+    });
+
+    // Process the lesson_select to populate the hidden date/time fields
+    document.getElementById('lesson_select').addEventListener('change', function() {
+        const selectedValue = this.value;
+        if (selectedValue) {
+            const [date, time] = selectedValue.split('|');
+            document.getElementById('original_date').value = date;
+            document.getElementById('original_time').value = time;
+        } else {
+            document.getElementById('original_date').value = '';
+            document.getElementById('original_time').value = '';
+        }
+    });
+
+    // Prevent the modal from closing on form submission by default
+    const newRescheduleRequestModal = document.getElementById('newRescheduleRequestModal');
+    if (newRescheduleRequestModal) {
+        // Prevent modal from closing on submit button click
+        newRescheduleRequestModal.addEventListener('mousedown', function(e) {
+            if (e.target.type === 'submit' || e.target.type === 'button') {
+                e.preventDefault();
+            }
+        });
+        
+        // Stop form submission events from bubbling
+        const modalForm = document.getElementById('rescheduleRequestForm');
+        if (modalForm) {
+            modalForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        }
+        
+        // Reset form when modal is closed
+        newRescheduleRequestModal.addEventListener('hidden.bs.modal', function() {
+            const form = document.getElementById('rescheduleRequestForm');
+            form.reset();
+            
+            // Reset all error/success messages
+            document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
+            document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
+            document.getElementById('preferred-times-error').style.display = 'none';
+            
+            // Re-enable submit button
+            const submitButton = document.getElementById('submitStudentReschedule');
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Submit Request';
+            
+            // Re-enable other form elements
+            const formElements = form.querySelectorAll('input, select, textarea');
+            formElements.forEach(el => el.disabled = false);
+        });
+    }
+
+    // Add validation for edit form
+    document.getElementById('updateStudentReschedule').addEventListener('click', function(e) {
+        e.preventDefault(); // Prevent default form submission
+        
+        const editPreferredDates = document.querySelectorAll('#edit-preferred-times-container .preferred-date');
+        const editPreferredTimes = document.querySelectorAll('#edit-preferred-times-container .preferred-time');
+        let hasPreferredTime = false;
+
+        // Check if at least one preferred date and time is provided
+        for (let i = 0; i < editPreferredDates.length; i++) {
+            if (editPreferredDates[i].value && editPreferredTimes[i].value) {
+                hasPreferredTime = true;
+                break;
+            }
+        }
+
+        if (!hasPreferredTime) {
+            alert('Please provide at least one preferred alternative time.');
+            return; // Prevent form submission
+        }
+
+        // Get the form data
+        const form = document.getElementById('editRescheduleRequestForm');
+        const formData = new FormData(form);
+        
+        // Use AJAX to submit the form
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', window.location.href, true);
+        
+        // Define what happens on successful data submission
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                // Check if the update was actually successful by looking for indicators in the response
+                if (xhr.responseText.includes('update_student_reschedule_request=1')) {
+                    // Show success message
+                    document.getElementById('editRescheduleSuccessMessage').style.display = 'block';
+                    
+                    // Change buttons after successful submission
+                    const footerButtons = document.querySelector('#editRescheduleRequestForm .modal-footer');
+                    footerButtons.innerHTML = `
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" id="editAgainButton">Edit Again</button>
+                    `;
+                    
+                    // Add event listener to the Edit Again button
+                    document.getElementById('editAgainButton').addEventListener('click', function() {
+                        // Hide success message
+                        document.getElementById('editRescheduleSuccessMessage').style.display = 'none';
+                        
+                        // Restore original buttons
+                        footerButtons.innerHTML = `
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="updateStudentReschedule">Update Request</button>
+                        `;
+                        
+                        // Re-add the event listener to the Update Request button
+                        const updateButton = document.getElementById('updateStudentReschedule');
+                        if (updateButton) {
+                            updateButton.addEventListener('click', arguments.callee.caller);
+                        }
+                    });
+                    
+                    // Don't refresh the page automatically - let the user decide
+                    // Instead, update the view without reloading
+                    const requestId = form.querySelector('#edit_request_id').value;
+                    
+                    // We could update DOM elements here if needed
+                    // For simplicity, we'll let the user manually close the modal
+                }
+            }
+        };
+        
+        // Send the form data
+        xhr.send(formData);
+    });
+
+    // Prevent Bootstrap from automatically closing the modal on form submission
+    const editModal = document.getElementById('editRescheduleRequestModal');
+    if (editModal) {
+        editModal.addEventListener('click', function(e) {
+            if (e.target.type === 'submit') {
+                e.preventDefault(); // Prevent the default action
+            }
+        });
+        
+        // When the modal is shown, ensure buttons are in the correct state
+        editModal.addEventListener('shown.bs.modal', function() {
+            // Hide any previous success message
+            document.getElementById('editRescheduleSuccessMessage').style.display = 'none';
+            
+            // Ensure the form is in edit mode
+            const footerButtons = document.querySelector('#editRescheduleRequestForm .modal-footer');
+            if (footerButtons) {
+                footerButtons.innerHTML = `
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updateStudentReschedule">Update Request</button>
+                `;
+                
+                // Add the event listener to the button
+                const updateButton = document.getElementById('updateStudentReschedule');
+                if (updateButton) {
+                    // Remove existing event listeners to prevent duplicates
+                    const newUpdateButton = updateButton.cloneNode(true);
+                    updateButton.parentNode.replaceChild(newUpdateButton, updateButton);
+                    
+                    // Add the event listener again
+                    newUpdateButton.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        
+                        const editPreferredDates = document.querySelectorAll('#edit-preferred-times-container .preferred-date');
+                        const editPreferredTimes = document.querySelectorAll('#edit-preferred-times-container .preferred-time');
+                        let hasPreferredTime = false;
+
+                        for (let i = 0; i < editPreferredDates.length; i++) {
+                            if (editPreferredDates[i].value && editPreferredTimes[i].value) {
+                                hasPreferredTime = true;
+                                break;
+                            }
+                        }
+
+                        if (!hasPreferredTime) {
+                            alert('Please provide at least one preferred alternative time.');
+                            return;
+                        }
+
+                        const form = document.getElementById('editRescheduleRequestForm');
+                        const formData = new FormData(form);
+                        
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', window.location.href, true);
+                        xhr.onload = function() {
+                            if (xhr.status === 200) {
+                                // Show success message
+                                document.getElementById('editRescheduleSuccessMessage').style.display = 'block';
+                                
+                                // Change buttons
+                                const footerButtons = document.querySelector('#editRescheduleRequestForm .modal-footer');
+                                footerButtons.innerHTML = `
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="button" class="btn btn-primary" id="editAgainButton">Edit Again</button>
+                                `;
+                                
+                                // Add listener to Edit Again button
+                                document.getElementById('editAgainButton').addEventListener('click', function() {
+                                    document.getElementById('editRescheduleSuccessMessage').style.display = 'none';
+                                    
+                                    footerButtons.innerHTML = `
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="button" class="btn btn-primary" id="updateStudentReschedule">Update Request</button>
+                                    `;
+                                    
+                                    // We need to reattach the event listener
+                                    const newUpdateBtn = document.getElementById('updateStudentReschedule');
+                                    if (newUpdateBtn) {
+                                        newUpdateBtn.addEventListener('click', arguments.callee.caller);
+                                    }
+                                });
+                            }
+                        };
+                        xhr.send(formData);
+                    });
+                }
+            }
+        });
+    }
+</script>

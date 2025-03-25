@@ -57,3 +57,7 @@
   margin-left: 5px;
   padding: 0 4px;
 }
+
+#unavailableAccordion .badge {
+  margin-left: 10px;
+}
