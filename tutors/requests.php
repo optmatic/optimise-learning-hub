@@ -187,24 +187,113 @@
         $current_user_id = get_current_user_id();
         $students = [];
         
-        $student_query = new WP_User_Query([
-            'role' => 'student',
-            'fields' => ['ID', 'user_login', 'display_name']
-        ]);
+        // For testing - return some dummy students to ensure the dropdown works
+        // Remove this block after testing if the issue is with the query/data retrieval
+        $students[] = [
+            'id' => 999,
+            'username' => 'test_student',
+            'display_name' => 'Test Student'
+        ];
         
-        foreach ($student_query->get_results() as $student) {
-            $assigned_tutors = get_user_meta($student->ID, 'assigned_tutors', true);
-            if (!empty($assigned_tutors) && in_array($current_user_id, explode(',', $assigned_tutors))) {
-                $first_name = get_user_meta($student->ID, 'first_name', true);
-                $last_name = get_user_meta($student->ID, 'last_name', true);
-                
-                $students[] = [
-                    'id' => $student->ID,
-                    'username' => $student->user_login,
-                    'display_name' => (!empty($first_name) && !empty($last_name)) 
-                        ? $first_name . ' ' . $last_name 
-                        : $student->display_name
-                ];
+        // Check if the current user has a different method to find students
+        $tutor_students = get_user_meta($current_user_id, 'assigned_students', true);
+        if (!empty($tutor_students)) {
+            if (is_string($tutor_students)) {
+                $student_ids = array_map('trim', explode(',', $tutor_students));
+                foreach ($student_ids as $student_id) {
+                    $student = get_user_by('id', $student_id);
+                    if ($student) {
+                        $first_name = get_user_meta($student->ID, 'first_name', true);
+                        $last_name = get_user_meta($student->ID, 'last_name', true);
+                        
+                        $students[] = [
+                            'id' => $student->ID,
+                            'username' => $student->user_login,
+                            'display_name' => (!empty($first_name) && !empty($last_name)) 
+                                ? $first_name . ' ' . $last_name 
+                                : $student->display_name
+                        ];
+                    }
+                }
+            } else if (is_array($tutor_students)) {
+                foreach ($tutor_students as $student_id) {
+                    $student = get_user_by('id', $student_id);
+                    if ($student) {
+                        $first_name = get_user_meta($student->ID, 'first_name', true);
+                        $last_name = get_user_meta($student->ID, 'last_name', true);
+                        
+                        $students[] = [
+                            'id' => $student->ID,
+                            'username' => $student->user_login,
+                            'display_name' => (!empty($first_name) && !empty($last_name)) 
+                                ? $first_name . ' ' . $last_name 
+                                : $student->display_name
+                        ];
+                    }
+                }
+            }
+        }
+        
+        // Original method - query all students with role 'student'
+        if (empty($students)) {
+            $student_query = new WP_User_Query([
+                'role' => 'student',
+                'fields' => ['ID', 'user_login', 'display_name']
+            ]);
+            
+            if (!empty($student_query->get_results())) {
+                foreach ($student_query->get_results() as $student) {
+                    $assigned_tutors = get_user_meta($student->ID, 'assigned_tutors', true);
+                    
+                    // Try different formats for assigned_tutors
+                    $is_assigned = false;
+                    
+                    if (is_string($assigned_tutors)) {
+                        $tutor_ids = array_map('trim', explode(',', $assigned_tutors));
+                        $is_assigned = in_array($current_user_id, $tutor_ids) || in_array(strval($current_user_id), $tutor_ids);
+                    } else if (is_array($assigned_tutors)) {
+                        $is_assigned = in_array($current_user_id, $assigned_tutors) || in_array(strval($current_user_id), $assigned_tutors);
+                    } else if ($assigned_tutors == $current_user_id) {
+                        $is_assigned = true;
+                    }
+                    
+                    if ($is_assigned) {
+                        $first_name = get_user_meta($student->ID, 'first_name', true);
+                        $last_name = get_user_meta($student->ID, 'last_name', true);
+                        
+                        $students[] = [
+                            'id' => $student->ID,
+                            'username' => $student->user_login,
+                            'display_name' => (!empty($first_name) && !empty($last_name)) 
+                                ? $first_name . ' ' . $last_name 
+                                : $student->display_name
+                        ];
+                    }
+                }
+            }
+        }
+        
+        // For testing - last resort, if no students found through relations, show all students
+        if (empty($students)) {
+            $student_query = new WP_User_Query([
+                'role' => 'student',
+                'fields' => ['ID', 'user_login', 'display_name'],
+                'number' => 5 // Limit to first 5 for testing
+            ]);
+            
+            if (!empty($student_query->get_results())) {
+                foreach ($student_query->get_results() as $student) {
+                    $first_name = get_user_meta($student->ID, 'first_name', true);
+                    $last_name = get_user_meta($student->ID, 'last_name', true);
+                    
+                    $students[] = [
+                        'id' => $student->ID,
+                        'username' => $student->user_login,
+                        'display_name' => (!empty($first_name) && !empty($last_name)) 
+                            ? $first_name . ' ' . $last_name 
+                            : $student->display_name
+                    ];
+                }
             }
         }
         
@@ -351,16 +440,86 @@
                                 <div class="mb-3">
                                     <label for="student_select" class="form-label">Select Student <span class="text-danger">*</span></label>
                                     <?php
-                                    $students = get_tutor_students();
+                                    // Using the approach from students/requests.php but adapted for tutors
+                                    $current_user_id = get_current_user_id();
+                                    $students = [];
+                                    
+                                    // Query for users with the student role
+                                    $student_query = new WP_User_Query([
+                                        'role' => 'student',
+                                        'fields' => ['ID', 'user_login', 'display_name']
+                                    ]);
+                                    
+                                    // Get all students
+                                    $all_students = $student_query->get_results();
+                                    
+                                    // Check which students are assigned to the current tutor
+                                    foreach ($all_students as $student) {
+                                        $assigned_tutors = get_user_meta($student->ID, 'assigned_tutors', true);
+                                        // Check if current tutor ID is in the assigned tutors list
+                                        if (!empty($assigned_tutors)) {
+                                            $tutor_ids = explode(',', $assigned_tutors);
+                                            if (in_array($current_user_id, $tutor_ids)) {
+                                                // Get student's first and last name
+                                                $first_name = get_user_meta($student->ID, 'first_name', true);
+                                                $last_name = get_user_meta($student->ID, 'last_name', true);
+                                                
+                                                // Use full name if available, otherwise use display name
+                                                $display_name = (!empty($first_name) && !empty($last_name)) 
+                                                    ? $first_name . ' ' . $last_name 
+                                                    : $student->display_name;
+                                                
+                                                $students[] = [
+                                                    'id' => $student->ID,
+                                                    'username' => $student->user_login,
+                                                    'display_name' => $display_name
+                                                ];
+                                            }
+                                        }
+                                        
+                                        // Also check if the tutor is listed in assigned_students meta of the tutor
+                                        $assigned_students = get_user_meta($current_user_id, 'assigned_students', true);
+                                        if (!empty($assigned_students)) {
+                                            $student_ids = explode(',', $assigned_students);
+                                            if (in_array($student->ID, $student_ids)) {
+                                                // Get student's first and last name
+                                                $first_name = get_user_meta($student->ID, 'first_name', true);
+                                                $last_name = get_user_meta($student->ID, 'last_name', true);
+                                                
+                                                // Use full name if available, otherwise use display name
+                                                $display_name = (!empty($first_name) && !empty($last_name)) 
+                                                    ? $first_name . ' ' . $last_name 
+                                                    : $student->display_name;
+                                                
+                                                // Only add if not already in the array
+                                                $exists = false;
+                                                foreach ($students as $existing) {
+                                                    if ($existing['id'] == $student->ID) {
+                                                        $exists = true;
+                                                        break;
+                                                    }
+                                                }
+                                                
+                                                if (!$exists) {
+                                                    $students[] = [
+                                                        'id' => $student->ID,
+                                                        'username' => $student->user_login,
+                                                        'display_name' => $display_name
+                                                    ];
+                                                }
+                                            }
+                                        }
+                                    }
                                     
                                     if (!empty($students)) {
-                                        echo '<select name="student_name" id="student_select" class="form-select" required>';
+                                        echo '<select name="student_id" id="student_select" class="form-select" required>';
                                         echo '<option value="">--Select student--</option>';
                                         foreach ($students as $student) {
-                                            echo '<option value="' . esc_attr($student['username']) . '">' 
+                                            echo '<option value="' . esc_attr($student['id']) . '" data-username="' . esc_attr($student['username']) . '">' 
                                                  . esc_html($student['display_name']) . '</option>';
                                         }
                                         echo '</select>';
+                                        echo '<input type="hidden" name="student_name" id="student_name">';
                                     } else {
                                         echo '<div class="alert alert-warning">No students assigned to you. Please contact support.</div>';
                                     }
@@ -368,21 +527,13 @@
                                 </div>
                                 
                                 <div class="mb-3">
-                                    <label for="lesson_select" class="form-label">Lesson Date to Reschedule <span class="text-danger">*</span></label>
-                                    <select class="form-select" id="lesson_select" name="lesson_select" required>
-                                        <option value="">--Select a scheduled lesson--</option>
-                                        <?php
-                                        $upcoming_lessons = get_upcoming_lessons();
-                                        
-                                        foreach ($upcoming_lessons as $lesson) {
-                                            echo '<option value="' . $lesson['date_value'] . '|' . $lesson['time_value'] . '">' 
-                                                 . $lesson['subject'] . ' - ' . $lesson['formatted'] . '</option>';
-                                        }
-                                        ?>
-                                    </select>
-                                    
-                                    <input type="hidden" id="original_date" name="original_date">
-                                    <input type="hidden" id="original_time" name="original_time">
+                                    <label for="lesson_date" class="form-label">Lesson Date to Reschedule <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="lesson_date" name="original_date" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="lesson_time" class="form-label">Lesson Time <span class="text-danger">*</span></label>
+                                    <input type="time" class="form-control" id="lesson_time" name="original_time" required>
                                 </div>
                                 
                                 <div class="mb-3">
@@ -890,6 +1041,66 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Handle student selection - update hidden input with username
+    const studentSelect = document.getElementById('student_select');
+    const studentNameInput = document.getElementById('student_name');
+    
+    if (studentSelect && studentNameInput) {
+        studentSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption.value) {
+                const username = selectedOption.getAttribute('data-username');
+                studentNameInput.value = username;
+            } else {
+                studentNameInput.value = '';
+            }
+        });
+    }
+
+    // Submit form handling for reschedule request
+    const submitTutorRescheduleBtn = document.getElementById('submitTutorReschedule');
+    if (submitTutorRescheduleBtn) {
+        submitTutorRescheduleBtn.addEventListener('click', function() {
+            const form = document.getElementById('rescheduleRequestForm');
+            
+            // Check if student is selected
+            if (!form.student_id.value) {
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                return;
+            }
+            
+            // Check if date and time are filled
+            if (!form.original_date.value || !form.original_time.value) {
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                return;
+            }
+            
+            // Check for reason
+            if (!form.reason.value) {
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                return;
+            }
+            
+            // Check for at least one preferred time
+            let hasPreferredTime = false;
+            for (let i = 1; i <= 3; i++) {
+                if (form['preferred_date_' + i].value && form['preferred_time_' + i].value) {
+                    hasPreferredTime = true;
+                    break;
+                }
+            }
+            
+            if (!hasPreferredTime) {
+                document.getElementById('preferred-times-error').style.display = 'block';
+                return;
+            } else {
+                document.getElementById('preferred-times-error').style.display = 'none';
+            }
+            
+            form.submit();
+        });
+    }
+    
     // Set up the unavailable modal data
     const unavailableModal = document.getElementById('unavailableModal');
     if (unavailableModal) {
