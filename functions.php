@@ -1367,3 +1367,196 @@ function migrate_old_classroom_url() {
     }
 }
 add_action('wp', 'migrate_old_classroom_url');
+
+/**
+ * AJAX handler to check for incoming requests for students
+ */
+function check_student_requests_ajax() {
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'check_student_requests_nonce')) {
+        wp_send_json_error('Invalid nonce');
+        return;
+    }
+    
+    // Get student ID
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+    if (!$student_id) {
+        wp_send_json_error('Invalid student ID');
+        return;
+    }
+
+    // Count incoming reschedule requests (tutor-initiated)
+    $tutor_requests_count = count(get_posts(array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'student_id',
+                'value'   => $student_id,
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => 'tutor_reschedule',
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'status',
+                'value'   => 'pending',
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'viewed_by_student',
+                'compare' => 'NOT EXISTS',
+            )
+        ),
+        'fields'         => 'ids'
+    )));
+
+    // Count status changes on outgoing requests
+    $status_changes_count = count(get_posts(array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'student_id',
+                'value'   => $student_id,
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => array('tutor_unavailable', 'reschedule_confirmed'),
+                'compare' => 'IN',
+            ),
+            array(
+                'key'     => 'viewed_by_student',
+                'compare' => 'NOT EXISTS',
+            )
+        ),
+        'fields'         => 'ids'
+    )));
+
+    // Total count
+    $total_count = $tutor_requests_count + $status_changes_count;
+    
+    wp_send_json_success(['count' => $total_count]);
+    exit;
+}
+add_action('wp_ajax_check_student_requests', 'check_student_requests_ajax');
+
+/**
+ * AJAX handler to mark student requests as read
+ */
+function mark_student_requests_read_ajax() {
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mark_student_requests_read_nonce')) {
+        wp_send_json_error('Invalid nonce');
+        return;
+    }
+    
+    // Get student ID
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+    if (!$student_id) {
+        wp_send_json_error('Invalid student ID');
+        return;
+    }
+
+    // Mark tutor-initiated requests as viewed
+    $tutor_requests = get_posts(array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'student_id',
+                'value'   => $student_id,
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => 'tutor_reschedule',
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'status',
+                'value'   => 'pending',
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'viewed_by_student',
+                'compare' => 'NOT EXISTS',
+            )
+        ),
+        'fields'         => 'ids'
+    ));
+
+    foreach ($tutor_requests as $request_id) {
+        update_post_meta($request_id, 'viewed_by_student', '1');
+    }
+
+    // Mark status changes as viewed
+    $status_changes = get_posts(array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'student_id',
+                'value'   => $student_id,
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => array('tutor_unavailable', 'reschedule_confirmed'),
+                'compare' => 'IN',
+            ),
+            array(
+                'key'     => 'viewed_by_student',
+                'compare' => 'NOT EXISTS',
+            )
+        ),
+        'fields'         => 'ids'
+    ));
+
+    foreach ($status_changes as $request_id) {
+        update_post_meta($request_id, 'viewed_by_student', '1');
+    }
+    
+    wp_send_json_success(['marked' => count($tutor_requests) + count($status_changes)]);
+    exit;
+}
+add_action('wp_ajax_mark_student_requests_read', 'mark_student_requests_read_ajax');
+
+/**
+ * Update notification flags when a tutor creates a reschedule request for a student
+ */
+function set_notification_on_tutor_reschedule($request_id) {
+    // Only proceed if this is a tutor-initiated reschedule
+    $request_type = get_post_meta($request_id, 'request_type', true);
+    if ($request_type === 'tutor_reschedule') {
+        // The request doesn't need any marking - the absence of viewed_by_student
+        // will be used to determine if it's a new notification
+    }
+}
+add_action('wp_insert_post', 'set_notification_on_tutor_reschedule', 10, 1);
+
+/**
+ * Update notification flags when a tutor responds to a student request
+ */
+function set_notification_on_request_status_change($meta_id, $object_id, $meta_key, $meta_value) {
+    // Check if this is a status update
+    if ($meta_key === 'status') {
+        // Get the request type
+        $request_type = get_post_meta($object_id, 'request_type', true);
+        
+        // Only proceed for student-initiated requests
+        if ($request_type === 'student_reschedule') {
+            // The student_id is already in the meta, so no need to add it
+            // Just ensure viewed_by_student is not set
+            delete_post_meta($object_id, 'viewed_by_student');
+        }
+    }
+}
+add_action('updated_post_meta', 'set_notification_on_request_status_change', 10, 4);

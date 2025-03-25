@@ -85,7 +85,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Mark alternative times as viewed when Tutor Comms tab is opened
-  const tutorCommsTab = document.getElementById("tutor-comms-tab");
+  const tutorCommsTab = document.getElementById("requests-tab");
   if (tutorCommsTab) {
     tutorCommsTab.addEventListener("click", function () {
       // Send AJAX request to mark alternatives as viewed
@@ -395,9 +395,9 @@ jQuery(document).ready(function ($) {
           // Update the notification bubble
           const count = response.data.count;
           if (count > 0) {
-            $("#tutor-comms-tab .notification-bubble").text(count).show();
+            $("#requests .notification-bubble").text(count).show();
           } else {
-            $("#tutor-comms-tab .notification-bubble").hide();
+            $("#requests .notification-bubble").hide();
           }
 
           // Update the existing incoming requests section

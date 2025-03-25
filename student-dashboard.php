@@ -328,7 +328,7 @@ function check_incoming_reschedule_requests_ajax() {
         'meta_query'     => array(
             'relation' => 'AND',
             array('key' => 'student_id', 'value' => $student_id, 'compare' => '='),
-            array('key' => 'request_type', 'value' => 'reschedule', 'compare' => '='),
+            array('key' => 'request_type', 'value' => 'tutor_reschedule', 'compare' => '='),
             array('key' => 'status', 'value' => 'pending', 'compare' => '=')
         ),
         'order'          => 'DESC',
@@ -336,15 +336,53 @@ function check_incoming_reschedule_requests_ajax() {
     );
     
     $tutor_requests = get_posts($tutor_requests_args);
-    $count = count($tutor_requests);
+    $pending_reschedule_count = count($tutor_requests);
+    
+    // Count pending alternative times
+    $pending_alternatives_count = count(get_posts(array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array('key' => 'student_id', 'value' => $student_id, 'compare' => '='),
+            array('key' => 'request_type', 'value' => 'tutor_unavailable', 'compare' => '='),
+            array('key' => 'status', 'value' => 'pending', 'compare' => '=')
+        ),
+        'fields'         => 'ids'
+    )));
+    
+    // Calculate total unread count
+    $count = $pending_reschedule_count + $pending_alternatives_count;
+    
+    // Generate HTML for the notifications section
+    $notifications_html = '';
+    if ($pending_reschedule_count > 0 || $pending_alternatives_count > 0) {
+        $notifications_html .= '<div class="alert alert-info">';
+        $notifications_html .= '<h5><i class="fas fa-bell me-2"></i>Notifications</h5>';
+        $notifications_html .= '<ul class="mb-0">';
+        
+        if ($pending_reschedule_count > 0) {
+            $notifications_html .= '<li>You have <strong>' . $pending_reschedule_count . '</strong> pending reschedule ';
+            $notifications_html .= 'request' . ($pending_reschedule_count > 1 ? 's' : '') . ' from your tutor. ';
+            $notifications_html .= '<a href="#incomingRescheduleSection" class="btn btn-sm btn-primary ms-2">View</a></li>';
+        }
+        
+        if ($pending_alternatives_count > 0) {
+            $notifications_html .= '<li>You have <strong>' . $pending_alternatives_count . '</strong> alternative time ';
+            $notifications_html .= 'suggestion' . ($pending_alternatives_count > 1 ? 's' : '') . ' from your tutor. ';
+            $notifications_html .= '<a href="#alternativeTimesSection" class="btn btn-sm btn-primary ms-2">View</a></li>';
+        }
+        
+        $notifications_html .= '</ul></div>';
+    }
     
     // Generate HTML for the requests section
-    $html = '';
-    if ($count > 0) {
-        $html .= '<div class="table-responsive">';
-        $html .= '<table class="table table-striped">';
-        $html .= '<thead><tr><th>Date Requested</th><th>Original Lesson</th><th>Proposed New Time</th><th>Tutor</th><th>Action</th></tr></thead>';
-        $html .= '<tbody>';
+    $incoming_html = '';
+    if ($pending_reschedule_count > 0) {
+        $incoming_html .= '<div class="table-responsive">';
+        $incoming_html .= '<table class="table table-striped">';
+        $incoming_html .= '<thead><tr><th>Date Requested</th><th>Original Lesson</th><th>Proposed New Time</th><th>Tutor</th><th>Action</th></tr></thead>';
+        $incoming_html .= '<tbody>';
         
         foreach ($tutor_requests as $request) {
             $request_id = $request->ID;
@@ -355,33 +393,43 @@ function check_incoming_reschedule_requests_ajax() {
             $new_time = esc_html(get_post_meta($request_id, 'new_time', true));
             $request_date = esc_html(get_the_date('M j, Y', $request_id));
             
-            $html .= '<tr>';
-            $html .= '<td>' . $request_date . '</td>';
-            $html .= '<td>' . $original_date . ' at ' . $original_time . '</td>';
-            $html .= '<td>' . $new_date . ' at ' . $new_time . '</td>';
-            $html .= '<td>' . $tutor_name . '</td>';
-            $html .= '<td>';
-            $html .= '<form method="post" class="d-inline">';
-            $html .= '<input type="hidden" name="confirm_reschedule" value="1">';
-            $html .= '<input type="hidden" name="request_id" value="' . $request_id . '">';
-            $html .= '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
-            $html .= '</form>';
-            $html .= '<form method="post" class="d-inline">';
-            $html .= '<input type="hidden" name="decline_reschedule" value="1">';
-            $html .= '<input type="hidden" name="request_id" value="' . $request_id . '">';
-            $html .= '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
-            $html .= '</form>';
-            $html .= '</td>';
-            $html .= '</tr>';
+            // Format dates for display
+            $formatted_original = !empty($original_date) ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
+            $formatted_new = !empty($new_date) ? date('M j, Y', strtotime($new_date)) . ' at ' . date('g:i A', strtotime($new_time)) : 'N/A';
+            
+            $incoming_html .= '<tr>';
+            $incoming_html .= '<td>' . $request_date . '</td>';
+            $incoming_html .= '<td>' . $formatted_original . '</td>';
+            $incoming_html .= '<td>' . $formatted_new . '</td>';
+            $incoming_html .= '<td>' . $tutor_name . '</td>';
+            $incoming_html .= '<td>';
+            $incoming_html .= '<form method="post" class="d-inline">';
+            $incoming_html .= '<input type="hidden" name="confirm_reschedule" value="1">';
+            $incoming_html .= '<input type="hidden" name="request_id" value="' . $request_id . '">';
+            $incoming_html .= '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
+            $incoming_html .= '</form>';
+            $incoming_html .= '<form method="post" class="d-inline">';
+            $incoming_html .= '<input type="hidden" name="decline_reschedule" value="1">';
+            $incoming_html .= '<input type="hidden" name="request_id" value="' . $request_id . '">';
+            $incoming_html .= '<button type="submit" class="btn btn-sm btn-danger">Decline</button>';
+            $incoming_html .= '</form>';
+            $incoming_html .= '</td>';
+            $incoming_html .= '</tr>';
         }
         
-        $html .= '</tbody></table>';
-        $html .= '</div>';
+        $incoming_html .= '</tbody></table>';
+        $incoming_html .= '</div>';
     } else {
-        $html = '<p>No incoming reschedule requests from tutors at this time.</p>';
+        $incoming_html = '<p>No incoming reschedule requests from tutors at this time.</p>';
     }
     
-    wp_send_json_success(['count' => $count, 'html' => $html]);
+    wp_send_json_success([
+        'count' => $count, 
+        'pendingRescheduleCount' => $pending_reschedule_count,
+        'pendingAlternativesCount' => $pending_alternatives_count,
+        'notificationsHtml' => $notifications_html,
+        'incomingHtml' => $incoming_html
+    ]);
     exit;
 }
 add_action('wp_ajax_check_incoming_reschedule_requests', 'check_incoming_reschedule_requests_ajax');
@@ -467,8 +515,8 @@ function test_reschedule_requests() {
             );
             $confirmed_count = count(get_posts($confirmed_args));
             
-            // Count pending reschedule requests
-            $pending_args = array(
+            // Count pending reschedule requests from tutors
+            $tutor_requests_args = array(
                 'post_type'      => 'progress_report',
                 'posts_per_page' => -1,
                 'meta_query'     => array(
@@ -480,64 +528,53 @@ function test_reschedule_requests() {
                     ),
                     array(
                         'key'     => 'request_type',
-                        'value'   => 'reschedule',
-                        'compare' => '=',
-                    ),
-                    array(
-                        'relation' => 'OR',
-                        array(
-                            'key'     => 'status',
-                            'compare' => 'NOT EXISTS',
-                        ),
-                        array(
-                            'key'     => 'status',
-                            'value'   => 'pending',
-                            'compare' => '=',
-                        ),
-                        array(
-                            'key'     => 'status',
-                            'value'   => '',
-                            'compare' => '=',
-                        )
-                    )
-                ),
-                'fields'         => 'ids'
-            );
-            $pending_count = count(get_posts($pending_args));
-            
-            // Count pending alternative reschedule requests
-            $alternative_args = array(
-                'post_type'      => 'progress_report',
-                'posts_per_page' => -1,
-                'meta_query'     => array(
-                    'relation' => 'AND',
-                    array(
-                        'key'     => 'student_id',
-                        'value'   => get_current_user_id(),
-                        'compare' => '=',
-                    ),
-                    array(
-                        'key'     => 'request_type',
-                        'value'   => 'reschedule_alternatives',
+                        'value'   => 'tutor_reschedule',
                         'compare' => '=',
                     ),
                     array(
                         'key'     => 'status',
                         'value'   => 'pending',
                         'compare' => '=',
+                    )
+                ),
+                'fields'         => 'ids'
+            );
+            $tutor_requests_count = count(get_posts($tutor_requests_args));
+            
+            // Count pending alternative times
+            $alternatives_args = array(
+                'post_type'      => 'progress_report',
+                'posts_per_page' => -1,
+                'meta_query'     => array(
+                    'relation' => 'AND',
+                    array(
+                        'key'     => 'student_id',
+                        'value'   => get_current_user_id(),
+                        'compare' => '=',
                     ),
                     array(
-                        'key'     => 'viewed_by_student',
-                        'compare' => 'NOT EXISTS',
+                        'key'     => 'request_type',
+                        'value'   => 'tutor_unavailable',
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'status',
+                        'value'   => 'pending',
+                        'compare' => '=',
                     )
-                )
+                ),
+                'fields'         => 'ids'
             );
-
-            $alternative_count = count(get_posts($alternative_args));
+            $alternatives_count = count(get_posts($alternatives_args));
+            
+            // Calculate total pending items for the Requests tab
+            $requests_notification_count = $tutor_requests_count + $alternatives_count;
+            $requests_notification = $requests_notification_count > 0 ? 
+                '<span class="badge rounded-pill bg-danger">' . $requests_notification_count . '</span>' : '';
             
             // Create notification badges
-            $schedule_notification = $confirmed_count > 0 ? '<span class="badge rounded-pill bg-danger">' . $confirmed_count . '</span>' : '';
-            $comms_notification = $pending_count > 0 ? '<span class="badge rounded-pill bg-danger">' . $pending_count . '</span>' : '';
+            $schedule_notification = $confirmed_count > 0 ? 
+                '<span class="badge rounded-pill bg-danger">' . $confirmed_count . '</span>' : '';
             ?>
             <ul class="nav nav-tabs" id="myTab" role="tablist" style="padding-left: 0px !important;">
                 <li class="nav-item">
@@ -556,13 +593,9 @@ function test_reschedule_requests() {
                     <a class="nav-link" id="my-progress-tab" data-bs-toggle="tab" href="#my-progress">Your Learning Overviews</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link position-relative" id="tutor-comms-tab" data-bs-toggle="tab" href="#tutor-comms">
-                        Requests                        <?php if ($alternative_count > 0): ?>
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                            <?php echo $alternative_count; ?>
-                            <span class="visually-hidden">alternative times</span>
-                        </span>
-                        <?php endif; ?>
+                    <a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests">
+                        Requests
+                        <?php echo $requests_notification; ?>
                     </a>
                 </li>
             </ul>

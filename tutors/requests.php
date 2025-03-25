@@ -1,5 +1,5 @@
 <!-- =========================== REQUESTS TAB =========================== -->
-<div class="tab-pane fade" id="requests" role="tabpanel" aria-labelledby="requests-tab">
+<div class="tab-pane fade" id="requests-tab" role="tabpanel" aria-labelledby="requests-tab">
     <h4>Reschedule Requests</h4>
     
     <?php
@@ -133,9 +133,79 @@
         return false;
     }
     
+    // Add this function to handle the tutor-initiated request submission
+    function process_tutor_reschedule_request() {
+        if (isset($_POST['submit_tutor_reschedule_request']) && $_POST['submit_tutor_reschedule_request'] === '1') {
+            $tutor_id = get_current_user_id();
+            $tutor_name = wp_get_current_user()->user_login;
+            $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+            $student_name = isset($_POST['student_name']) ? sanitize_text_field($_POST['student_name']) : '';
+            $original_date = isset($_POST['original_date']) ? sanitize_text_field($_POST['original_date']) : '';
+            $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
+            $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
+            
+            // Validate required fields
+            if (empty($student_id) || empty($original_date) || empty($original_time) || empty($reason)) {
+                return false;
+            }
+            
+            // Get student username if we only have the ID
+            if (empty($student_name) && !empty($student_id)) {
+                $student = get_user_by('id', $student_id);
+                if ($student) {
+                    $student_name = $student->user_login;
+                }
+            }
+            
+            // Collect preferred times
+            $preferred_times = [];
+            for ($i = 1; $i <= 3; $i++) {
+                $date = isset($_POST['preferred_date_' . $i]) ? sanitize_text_field($_POST['preferred_date_' . $i]) : '';
+                $time = isset($_POST['preferred_time_' . $i]) ? sanitize_text_field($_POST['preferred_time_' . $i]) : '';
+                
+                if (!empty($date) && !empty($time)) {
+                    $preferred_times[] = [
+                        'date' => $date,
+                        'time' => $time
+                    ];
+                }
+            }
+            
+            // Create the request post
+            $request = [
+                'post_title'   => 'Tutor Reschedule Request',
+                'post_content' => '',
+                'post_status'  => 'publish',
+                'post_type'    => 'progress_report',
+            ];
+            
+            $request_id = wp_insert_post($request);
+            
+            if (!is_wp_error($request_id)) {
+                // Save all the necessary meta data
+                update_post_meta($request_id, 'request_type', 'tutor_reschedule');
+                update_post_meta($request_id, 'tutor_id', $tutor_id);
+                update_post_meta($request_id, 'tutor_name', $tutor_name);
+                update_post_meta($request_id, 'student_id', $student_id);
+                update_post_meta($request_id, 'student_name', $student_name);
+                update_post_meta($request_id, 'original_date', $original_date);
+                update_post_meta($request_id, 'original_time', $original_time);
+                update_post_meta($request_id, 'reason', $reason);
+                update_post_meta($request_id, 'preferred_times', $preferred_times);
+                update_post_meta($request_id, 'status', 'pending');
+                
+                // Show success message
+                echo '<div class="alert alert-success">Your reschedule request has been submitted successfully.</div>';
+                return true;
+            }
+        }
+        return false;
+    }
+    
     // Process these request actions
     process_confirm_reschedule();
     process_decline_reschedule();
+    process_tutor_reschedule_request();
     
     // Helper functions for reusability
     function format_datetime($date, $time, $format = 'M j, Y \a\t g:i A') {
@@ -345,47 +415,84 @@
     }
     
     function get_reschedule_requests($type, $status = null) {
-        $args = [
-            'post_type' => 'progress_report',
-            'posts_per_page' => -1,
-            'meta_query' => [
-                'relation' => 'AND',
+        $current_user_id = get_current_user_id();
+        $current_user_login = wp_get_current_user()->user_login;
+        
+        $meta_query = [
+            'relation' => 'AND',
+            [
+                'key' => 'request_type',
+                'value' => $type,
+                'compare' => '=',
+            ]
+        ];
+        
+        // Handle different request types
+        if ($type === 'tutor_reschedule') {
+            // For tutor-initiated requests, we need both tutor_id and tutor_name checks
+            $meta_query[] = [
+                'relation' => 'OR',
                 [
                     'key' => 'tutor_id',
-                    'value' => get_current_user_id(),
+                    'value' => $current_user_id,
                     'compare' => '=',
                 ],
                 [
-                    'key' => 'request_type',
-                    'value' => $type,
+                    'key' => 'tutor_name',
+                    'value' => $current_user_login,
                     'compare' => '=',
                 ]
-            ],
-            'order' => 'DESC',
-            'orderby' => 'date'
-        ];
+            ];
+        } else {
+            // For other request types, use the default tutor_id check
+            $meta_query[] = [
+                'key' => 'tutor_id',
+                'value' => $current_user_id,
+                'compare' => '=',
+            ];
+        }
         
+        // Add status filter if provided
         if ($status) {
-            $args['meta_query'][] = [
+            $meta_query[] = [
                 'key' => 'status',
                 'value' => $status,
                 'compare' => '=',
             ];
         }
         
+        $args = [
+            'post_type' => 'progress_report',
+            'posts_per_page' => -1,
+            'meta_query' => $meta_query,
+            'order' => 'DESC',
+            'orderby' => 'date'
+        ];
+        
         return get_posts($args);
     }
     
     function get_student_initiated_requests() {
+        $current_user_id = get_current_user_id();
+        $current_user_login = wp_get_current_user()->user_login;
+        
         $args = [
             'post_type' => 'progress_report',
             'posts_per_page' => -1,
             'meta_query' => [
                 'relation' => 'AND',
                 [
-                    'key' => 'tutor_name',
-                    'value' => wp_get_current_user()->user_login,
-                    'compare' => '=',
+                    'relation' => 'OR',
+                    [
+                        'key' => 'tutor_id',
+                        'value' => $current_user_id,
+                        'compare' => '=',
+                    ],
+                    [
+                        'key' => 'tutor_name',
+                        'value' => $current_user_login,
+                        'compare' => '=',
+                    ]
                 ],
                 [
                     'key' => 'request_type',
@@ -542,8 +649,8 @@
                                 </div>
                                 
                                 <div class="mb-3">
-                                    <label class="form-label">Preferred Alternative Times <span class="text-danger">*</span></label>
-                                    <p class="text-muted small">Please select at least one preferred alternative date and time.</p>
+                                    <label class="form-label">Preferred Alternative Times</label>
+                                    <p class="text-muted small">Please select up to 3 preferred alternative dates and times.</p>
                                     
                                     <div id="preferred-times-container">
                                         <?php render_preferred_time_inputs('', true); ?>
@@ -726,7 +833,7 @@
                         echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
                         echo '<input type="hidden" name="tutor_name" value="' . wp_get_current_user()->user_login . '">';
                         echo '<input type="hidden" name="student_id" value="' . $student_id . '">';
-                        echo '<input type="hidden" name="active_tab" value="requests">';
+                        echo '<input type="hidden" name="active_tab" value="requests-tab">';
                         echo '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
                         echo '</form>';
                         
@@ -1066,18 +1173,24 @@ document.addEventListener('DOMContentLoaded', function() {
             // Check if student is selected
             if (!form.student_id.value) {
                 document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
+                    'Please select a student.';
                 return;
             }
             
             // Check if date and time are filled
             if (!form.original_date.value || !form.original_time.value) {
                 document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
+                    'Please provide the lesson date and time to reschedule.';
                 return;
             }
             
             // Check for reason
             if (!form.reason.value) {
                 document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
+                    'Please provide a reason for the reschedule request.';
                 return;
             }
             
@@ -1097,6 +1210,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('preferred-times-error').style.display = 'none';
             }
             
+            // Hide error messages
+            document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
+            
+            // Submit the form (standard form submission to ensure proper PHP processing)
             form.submit();
         });
     }
