@@ -782,6 +782,51 @@
 </div>
 
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add fixed height and scrollbars to the request tables
+        const requestTablesContainers = [
+            document.querySelector('.card-body .table-responsive'), // Outgoing Reschedule Requests
+            document.querySelectorAll('.card-body .table-responsive')[1], // Incoming Reschedule Requests
+            document.querySelector('#alternativeTimesSection .card-body .accordion') // Tutor Alternative Times
+        ];
+        
+        // Apply styling to each container if it exists
+        requestTablesContainers.forEach(container => {
+            if (container) {
+                container.style.maxHeight = '300px';
+                container.style.overflowY = 'auto';
+                container.style.overflowX = 'hidden';
+                container.style.padding = '5px';
+                container.style.border = '1px solid #dee2e6';
+                container.style.borderRadius = '5px';
+                
+                // Add shadow to scrollbar container for better visual separation
+                container.style.boxShadow = 'inset 0 0 5px rgba(0,0,0,0.1)';
+            }
+        });
+        
+        // Apply better scrollbar styling for WebKit browsers (Chrome, Safari, Edge)
+        const style = document.createElement('style');
+        style.textContent = `
+            .table-responsive::-webkit-scrollbar, .accordion::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            .table-responsive::-webkit-scrollbar-track, .accordion::-webkit-scrollbar-track {
+                background: #f1f1f1;
+                border-radius: 4px;
+            }
+            .table-responsive::-webkit-scrollbar-thumb, .accordion::-webkit-scrollbar-thumb {
+                background: #888;
+                border-radius: 4px;
+            }
+            .table-responsive::-webkit-scrollbar-thumb:hover, .accordion::-webkit-scrollbar-thumb:hover {
+                background: #555;
+            }
+        `;
+        document.head.appendChild(style);
+    });
+
     document.getElementById('submitStudentReschedule').addEventListener('click', function(e) {
         e.preventDefault(); // Prevent the default button action
         
