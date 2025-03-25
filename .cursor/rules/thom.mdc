@@ -1,10 +1,11 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: true
 ---
+Be as concise as possible. Look to reuse code blocks as components when it makes sense. I want maximum efficiency and pragmatism here. 
 
-# Your rule content
-
-- You can @ files here
-- You can use markdown but dont have to
+[functions.php](mdc:functions.php) 
+[tutor-dashboard.php](mdc:tutor-dashboard.php)](mdc:tutor-dashboard.php)
+[student-dashboard.php](mdc:student-dashboard.php)
+ [requests.php](mdc:tutors/requests.php) [requests.php](mdc:students/requests.php)
