@@ -502,7 +502,7 @@
             
             if (!empty($student_requests)) {
                 echo '<div class="table-responsive"><table class="table table-striped">';
-                echo '<thead><tr><th>Date Requested</th><th>Original Lesson</th><th>Preferred Times</th><th>Student</th><th>Status</th><th>Actions</th></tr></thead>';
+                echo '<thead><tr><th>Date Requested</th><th>Original Lesson</th><th>Preferred Times</th><th>Student</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>';
                 echo '<tbody>';
                 
                 foreach ($student_requests as $request) {
@@ -549,6 +549,22 @@
                     echo '</td>';
                     
                     echo '<td>' . esc_html($student_display_name) . '</td>';
+                    
+                    // Add reason column
+                    echo '<td>';
+                    if (!empty($reason)) {
+                        // Show first 30 characters with ellipsis if longer
+                        $truncated_reason = strlen($reason) > 30 ? substr($reason, 0, 30) . '...' : $reason;
+                        // Add a clickable span with tooltip that will open a modal with the full reason
+                        echo '<span class="reason-text" style="cursor: pointer; color: #fcb31e;" 
+                               data-bs-toggle="modal" data-bs-target="#reasonModal" 
+                               data-reason="' . esc_attr($reason) . '"
+                               data-bs-toggle="tooltip" title="Click to expand">' . esc_html($truncated_reason) . '</span>';
+                    } else {
+                        echo '<em>No reason provided</em>';
+                    }
+                    echo '</td>';
+                    
                     echo '<td>' . get_status_badge($status) . '</td>';
                     echo '<td>';
                     
@@ -836,9 +852,44 @@
     </div>
 </div>
 
+<!-- Modal for displaying full reason text -->
+<div class="modal fade" id="reasonModal" tabindex="-1" aria-labelledby="reasonModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reasonModalLabel">Reschedule Reason</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="fullReasonText"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Add JavaScript to handle the unavailable modal -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips without delay
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        const tooltip = new bootstrap.Tooltip(tooltipTriggerEl, {
+            delay: { show: 0, hide: 0 } // Ensure no delay
+        });
+
+        // Manually handle mouse events for instant display
+        tooltipTriggerEl.addEventListener('mouseenter', function() {
+            tooltip.show();
+        });
+
+        tooltipTriggerEl.addEventListener('mouseleave', function() {
+            tooltip.hide();
+        });
+    });
+
     // Set up the unavailable modal data
     const unavailableModal = document.getElementById('unavailableModal');
     if (unavailableModal) {
@@ -894,5 +945,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Handle the reason modal
+    const reasonModal = document.getElementById('reasonModal');
+    if (reasonModal) {
+        reasonModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const reason = button.getAttribute('data-reason');
+            // Replace newlines with <br> tags for proper display
+            document.getElementById('fullReasonText').innerHTML = reason.replace(/\n/g, '<br>');
+        });
+    }
+    
+    // Make all reason text items clickable
+    document.querySelectorAll('.reason-text').forEach(item => {
+        item.addEventListener('click', function() {
+            const reason = this.getAttribute('data-reason');
+            const reasonModal = new bootstrap.Modal(document.getElementById('reasonModal'));
+            document.getElementById('fullReasonText').innerHTML = reason.replace(/\n/g, '<br>');
+            reasonModal.show();
+        });
+    });
 });
 </script>
