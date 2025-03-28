@@ -1,5 +1,5 @@
 <!-- =========================== REQUESTS TAB =========================== -->
-<div class="tab-pane fade <?php echo (empty($active_tab) || $active_tab == 'progress-report') ? 'show active' : ''; ?>" id="progress-report" role="tabpanel" aria-labelledby="progress-report-tab">
+<div class="tab-pane fade <?php echo (isset($_GET['active_tab']) && $_GET['active_tab'] == 'requests') ? 'show active' : ''; ?>" id="requests" role="tabpanel" aria-labelledby="requests-tab">
     <h4>Reschedule Requests</h4>
     
     <?php

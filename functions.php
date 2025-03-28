@@ -1825,3 +1825,40 @@ function fix_reschedule_requests_tab() {
     <?php
 }
 add_action('wp_footer', 'fix_reschedule_requests_tab');
+
+/**
+ * Function to determine if reschedule content should be displayed
+ * 
+ * @return bool True if we should show reschedule content
+ */
+function should_show_reschedule_content() {
+    // Check if we're on the requests tab
+    $active_tab = isset($_GET['active_tab']) ? $_GET['active_tab'] : '';
+    $stored_tab = isset($_COOKIE['activeTutorTab']) ? str_replace('#', '', $_COOKIE['activeTutorTab']) : '';
+    
+    // Either the URL parameter or the stored tab cookie indicates we're on the requests tab
+    return $active_tab === 'requests' || $stored_tab === 'requests';
+}
+
+/**
+ * Filter that wraps reschedule content in a conditional
+ */
+function wrap_reschedule_content($content) {
+    if (strpos($content, '<h2>Reschedule Requests</h2>') !== false || 
+        strpos($content, '<h4>Reschedule Requests</h4>') !== false) {
+        
+        // Replace with conditional
+        $content = preg_replace(
+            '/<(h[24])>Reschedule Requests<\/\1>/',
+            '<?php if (function_exists("should_show_reschedule_content") && should_show_reschedule_content()): ?>' .
+            '<$1>Reschedule Requests</$1>',
+            $content
+        );
+        
+        // Add closing conditional
+        $content .= '<?php endif; ?>';
+    }
+    
+    return $content;
+}
+add_filter('the_content', 'wrap_reschedule_content', 999);

@@ -335,26 +335,68 @@ function test_reschedule_requests() {
 
 <?php get_footer(); ?>
 
+<style>
+/* Hide reschedule content when not on the requests tab */
+body:not(.tab-requests) h2:contains("Reschedule Requests"),
+body:not(.tab-requests) h4:contains("Reschedule Requests"),
+body:not(.tab-requests) .reschedule-section,
+body:not(.tab-requests) #rescheduleRequestsSection,
+body:not(.tab-requests) div.card:has(> .card-header:contains("Request Lesson Reschedule")),
+body:not(.tab-requests) div.card:has(> .card-header:contains("Your Outgoing Reschedule Requests")),
+body:not(.tab-requests) div.card:has(> .card-header:contains("Incoming Reschedule Requests")) {
+    display: none !important;
+}
+
+/* Standalone JS-independent solution */
+.tab-pane:not(#requests) h2:contains("Reschedule Requests"),
+.tab-pane:not(#requests) h4:contains("Reschedule Requests"),
+.tab-pane:not(#requests) .reschedule-section,
+.tab-pane:not(#requests) #rescheduleRequestsSection,
+.tab-pane:not(#requests) div.card:has(> .card-header:contains("Request Lesson Reschedule")),
+.tab-pane:not(#requests) div.card:has(> .card-header:contains("Your Outgoing Reschedule Requests")),
+.tab-pane:not(#requests) div.card:has(> .card-header:contains("Incoming Reschedule Requests")) {
+    display: none !important;
+}
+</style>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Check for previously stored active tab in localStorage
     const storedTab = localStorage.getItem('activeTutorTab');
     
-    if (storedTab) {
-        // Activate the stored tab
-        const tabToActivate = document.querySelector(`a[href="${storedTab}"]`);
-        if (tabToActivate) {
-            const bsTab = new bootstrap.Tab(tabToActivate);
-            bsTab.show();
+    // Add this function to ensure reschedule content only shows on the requests tab
+    function hideRescheduleContentOnNonRequestsTabs() {
+        const isRequestsTab = document.querySelector('.nav-link.active')?.getAttribute('href') === '#requests';
+        
+        if (!isRequestsTab) {
+            // Hide any reschedule content that might be on other tabs
+            const rescheduleHeadings = Array.from(document.querySelectorAll('h2, h4')).filter(h => 
+                h.textContent.trim() === 'Reschedule Requests'
+            );
+            
+            rescheduleHeadings.forEach(heading => {
+                // Only hide if not within the #requests tab pane
+                if (!heading.closest('#requests')) {
+                    heading.style.display = 'none';
+                    
+                    // Hide all content after this heading until the next heading
+                    let sibling = heading.nextElementSibling;
+                    while (sibling && !['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(sibling.tagName)) {
+                        sibling.style.display = 'none';
+                        sibling = sibling.nextElementSibling;
+                    }
+                }
+            });
         }
     }
     
-    // Add event listeners to all tab links
-    const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
-    tabLinks.forEach(function(tabLink) {
-        tabLink.addEventListener('shown.bs.tab', function(event) {
-            // Store the active tab in localStorage
-            localStorage.setItem('activeTutorTab', event.target.getAttribute('href'));
+    // Run this function on page load
+    hideRescheduleContentOnNonRequestsTabs();
+    
+    // Run this function whenever a tab is clicked
+    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            hideRescheduleContentOnNonRequestsTabs();
         });
     });
     
@@ -488,4 +530,47 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     });
+</script>
+
+<script>
+// Add this to your existing document.ready function
+document.addEventListener('DOMContentLoaded', function() {
+    // Update body class based on active tab
+    function updateBodyClass() {
+        const activeTab = document.querySelector('.nav-link.active');
+        if (activeTab) {
+            const tabId = activeTab.getAttribute('href').substring(1);
+            document.body.className = document.body.className.replace(/\btab-\S+/g, '');
+            document.body.classList.add('tab-' + tabId);
+        }
+    }
+    
+    // Initial class setting
+    updateBodyClass();
+    
+    // Update class when tab changes
+    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(function(tab) {
+        tab.addEventListener('shown.bs.tab', updateBodyClass);
+    });
+    
+    // Simple direct approach to hide reschedule content on non-requests tabs
+    if (!document.querySelector('.nav-link.active[href="#requests"]')) {
+        document.querySelectorAll('h2, h4').forEach(function(heading) {
+            if (heading.textContent.trim() === 'Reschedule Requests') {
+                // Find its parent .tab-pane
+                const tabPane = heading.closest('.tab-pane');
+                if (tabPane && tabPane.id !== 'requests') {
+                    heading.style.display = 'none';
+                    
+                    // Hide all following sibling elements until next heading
+                    let current = heading.nextElementSibling;
+                    while (current && !['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(current.tagName)) {
+                        current.style.display = 'none';
+                        current = current.nextElementSibling;
+                    }
+                }
+            }
+        });
+    }
+});
 </script>
