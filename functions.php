@@ -1605,3 +1605,223 @@ function get_upcoming_lessons_for_student($student_id) {
     
     return $upcoming_lessons;
 }
+
+// Add to functions.php to ensure reschedule requests don't show on the Home tab
+add_action('wp_ajax_delete_tutor_request', 'handle_delete_tutor_request');
+
+function handle_delete_tutor_request() {
+    if (isset($_POST['delete_tutor_request']) && $_POST['delete_tutor_request'] === '1') {
+        $request_id = intval($_POST['request_id']);
+        
+        // Verify the request belongs to the current tutor
+        $tutor_id = get_post_meta($request_id, 'tutor_id', true);
+        if ($tutor_id == get_current_user_id()) {
+            $result = wp_delete_post($request_id, true);
+            if ($result) {
+                wp_send_json_success(array('message' => 'Request deleted successfully'));
+            } else {
+                wp_send_json_error(array('message' => 'Failed to delete the request'));
+            }
+        } else {
+            wp_send_json_error(array('message' => 'You do not have permission to delete this request'));
+        }
+    }
+    wp_die();
+}
+
+// Add this function to ensure reschedule requests only show on the Requests tab
+function should_display_reschedule_requests() {
+    $current_tab = isset($_GET['active_tab']) ? $_GET['active_tab'] : '';
+    return $current_tab === 'requests';
+}
+
+/**
+ * Function to completely hide reschedule requests on the home tab
+ */
+function hide_reschedule_on_home_tab() {
+    // Only add this script on the tutor dashboard page
+    if (!is_page('tutor-dashboard') && !is_page('dashboard')) {
+        return;
+    }
+    
+    ?>
+    <style>
+        /* Hide reschedule requests on the home tab */
+        body.tab-home .reschedule-container,
+        #home h2:contains("Reschedule Requests"),
+        #home .reschedule-container,
+        #home + .reschedule-container {
+            display: none !important;
+        }
+        
+        /* Only show reschedule content when the Requests tab is active */
+        .reschedule-container {
+            display: none;
+        }
+        
+        body.tab-requests .reschedule-container {
+            display: block;
+        }
+    </style>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Simple function to check if we're on the home tab
+        function isHomeTabActive() {
+            const activeTab = document.querySelector('.nav-link.active');
+            return !activeTab || activeTab.getAttribute('href') === '#home' || activeTab.id === 'home-tab';
+        }
+        
+        // Function to hide reschedule sections on home tab
+        function hideRescheduleOnHomeTab() {
+            if (isHomeTabActive()) {
+                // Find the reschedule heading and hide everything until the next section
+                const rescheduleHeading = Array.from(document.querySelectorAll('h2')).find(h => 
+                    h.textContent.trim() === 'Reschedule Requests'
+                );
+                
+                if (rescheduleHeading) {
+                    // Hide the heading
+                    rescheduleHeading.style.display = 'none';
+                    
+                    // Hide all siblings until the next h2
+                    let currentElement = rescheduleHeading.nextElementSibling;
+                    while (currentElement && currentElement.tagName !== 'H2') {
+                        currentElement.style.display = 'none';
+                        currentElement = currentElement.nextElementSibling;
+                    }
+                }
+            }
+        }
+        
+        // Initial call on page load
+        hideRescheduleOnHomeTab();
+        
+        // Set up tab change listeners
+        const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
+        tabLinks.forEach(function(tab) {
+            tab.addEventListener('shown.bs.tab', function(event) {
+                const isHomeTab = event.target.getAttribute('href') === '#home';
+                
+                // Get the reschedule heading
+                const rescheduleHeading = Array.from(document.querySelectorAll('h2')).find(h => 
+                    h.textContent.trim() === 'Reschedule Requests'
+                );
+                
+                if (rescheduleHeading) {
+                    // Show/hide based on which tab we're on
+                    const displayStyle = isHomeTab ? 'none' : 'block';
+                    rescheduleHeading.style.display = displayStyle;
+                    
+                    // Show/hide all elements until the next h2
+                    let currentElement = rescheduleHeading.nextElementSibling;
+                    while (currentElement && currentElement.tagName !== 'H2') {
+                        currentElement.style.display = displayStyle;
+                        currentElement = currentElement.nextElementSibling;
+                    }
+                }
+            });
+        });
+    });
+    </script>
+    <?php
+}
+add_action('wp_footer', 'hide_reschedule_on_home_tab');
+
+/**
+ * Add classes to reschedule sections for easier targeting
+ */
+function mark_reschedule_sections($content) {
+    // Add container class to reschedule sections
+    $content = preg_replace(
+        '/<h2[^>]*>Reschedule Requests<\/h2>/',
+        '<h2 class="reschedule-heading">Reschedule Requests</h2><div class="reschedule-container">',
+        $content
+    );
+    
+    // Find closing tags and add closing div
+    $content = str_replace(
+        '<h2 class="reschedule-heading">Reschedule Requests</h2><div class="reschedule-container">',
+        '</div><!-- End previous section --><h2 class="reschedule-heading">Reschedule Requests</h2><div class="reschedule-container">',
+        $content
+    );
+    
+    // Add closing div at the end if needed
+    if (strpos($content, 'reschedule-container') !== false && 
+        substr_count($content, 'reschedule-container') > substr_count($content, 'End previous section')) {
+        $content .= '</div><!-- End reschedule container -->';
+    }
+    
+    return $content;
+}
+add_filter('the_content', 'mark_reschedule_sections', 999);
+
+/**
+ * Add a simple JavaScript fix to move reschedule requests to the requests tab only
+ */
+function fix_reschedule_requests_tab() {
+    // Only add this script on the tutor dashboard page
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Simple function to check if we're on the home tab
+        function isHomeTabActive() {
+            const activeTab = document.querySelector('.nav-link.active');
+            return !activeTab || activeTab.getAttribute('href') === '#home' || activeTab.id === 'home-tab';
+        }
+        
+        // Function to hide reschedule sections on home tab
+        function hideRescheduleOnHomeTab() {
+            if (isHomeTabActive()) {
+                // Find the reschedule heading and hide everything until the next section
+                const rescheduleHeading = Array.from(document.querySelectorAll('h2')).find(h => 
+                    h.textContent.trim() === 'Reschedule Requests'
+                );
+                
+                if (rescheduleHeading) {
+                    // Hide the heading
+                    rescheduleHeading.style.display = 'none';
+                    
+                    // Hide all siblings until the next h2
+                    let currentElement = rescheduleHeading.nextElementSibling;
+                    while (currentElement && currentElement.tagName !== 'H2') {
+                        currentElement.style.display = 'none';
+                        currentElement = currentElement.nextElementSibling;
+                    }
+                }
+            }
+        }
+        
+        // Initial call on page load
+        hideRescheduleOnHomeTab();
+        
+        // Set up tab change listeners
+        const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
+        tabLinks.forEach(function(tab) {
+            tab.addEventListener('shown.bs.tab', function(event) {
+                const isHomeTab = event.target.getAttribute('href') === '#home';
+                
+                // Get the reschedule heading
+                const rescheduleHeading = Array.from(document.querySelectorAll('h2')).find(h => 
+                    h.textContent.trim() === 'Reschedule Requests'
+                );
+                
+                if (rescheduleHeading) {
+                    // Show/hide based on which tab we're on
+                    const displayStyle = isHomeTab ? 'none' : 'block';
+                    rescheduleHeading.style.display = displayStyle;
+                    
+                    // Show/hide all elements until the next h2
+                    let currentElement = rescheduleHeading.nextElementSibling;
+                    while (currentElement && currentElement.tagName !== 'H2') {
+                        currentElement.style.display = displayStyle;
+                        currentElement = currentElement.nextElementSibling;
+                    }
+                }
+            });
+        });
+    });
+    </script>
+    <?php
+}
+add_action('wp_footer', 'fix_reschedule_requests_tab');

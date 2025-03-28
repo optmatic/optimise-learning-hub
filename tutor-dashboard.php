@@ -334,3 +334,158 @@ function test_reschedule_requests() {
 
 
 <?php get_footer(); ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Check for previously stored active tab in localStorage
+    const storedTab = localStorage.getItem('activeTutorTab');
+    
+    if (storedTab) {
+        // Activate the stored tab
+        const tabToActivate = document.querySelector(`a[href="${storedTab}"]`);
+        if (tabToActivate) {
+            const bsTab = new bootstrap.Tab(tabToActivate);
+            bsTab.show();
+        }
+    }
+    
+    // Add event listeners to all tab links
+    const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
+    tabLinks.forEach(function(tabLink) {
+        tabLink.addEventListener('shown.bs.tab', function(event) {
+            // Store the active tab in localStorage
+            localStorage.setItem('activeTutorTab', event.target.getAttribute('href'));
+        });
+    });
+    
+    // Handle form submissions to preserve active tab
+    const forms = document.querySelectorAll('form');
+    forms.forEach(function(form) {
+        form.addEventListener('submit', function(event) {
+            // Add a hidden field with the current active tab
+            const activeTab = document.querySelector('.nav-link.active');
+            if (activeTab) {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'active_tab';
+                hiddenInput.value = activeTab.getAttribute('href').substring(1); // Remove the # from the href
+                this.appendChild(hiddenInput);
+            }
+        });
+    });
+    
+    // Function to handle the Delete buttons with AJAX
+    const deleteButtons = document.querySelectorAll('.delete-request-btn');
+    deleteButtons.forEach(function(button) {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            
+            if (!confirm('Are you sure you want to delete this request?')) {
+                return;
+            }
+            
+            const requestId = this.getAttribute('data-request-id');
+            const row = this.closest('tr');
+            
+            // Set up AJAX request
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', ajaxurl, true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            
+            xhr.onload = function() {
+                if (this.status >= 200 && this.status < 400) {
+                    const response = JSON.parse(this.response);
+                    
+                    if (response.success) {
+                        // Remove the table row
+                        row.remove();
+                        
+                        // Show success message
+                        const successAlert = document.createElement('div');
+                        successAlert.className = 'alert alert-success';
+                        successAlert.textContent = 'Request has been deleted successfully.';
+                        
+                        // Insert at the top of the reschedule section
+                        const rescheduleSection = document.getElementById('rescheduleRequestsSection');
+                        rescheduleSection.insertBefore(successAlert, rescheduleSection.firstChild);
+                        
+                        // Auto-hide after 3 seconds
+                        setTimeout(function() {
+                            successAlert.remove();
+                        }, 3000);
+                    } else {
+                        alert('Error: ' + (response.data ? response.data.message : 'Failed to delete request'));
+                    }
+                } else {
+                    alert('Error: Server returned an error');
+                }
+            };
+            
+            xhr.onerror = function() {
+                alert('Error: Request failed');
+            };
+            
+            xhr.send('action=delete_tutor_request&delete_tutor_request=1&request_id=' + requestId);
+        });
+    });
+});
+</script>
+
+<script>
+    // Initialize tab tracking
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add a direct class to reschedule sections for easier JS targeting
+        document.querySelectorAll('h2').forEach(function(heading) {
+            if (heading.textContent.includes('Reschedule Requests')) {
+                let section = heading;
+                let container = document.createElement('div');
+                container.className = 'reschedule-container';
+                
+                // Move everything from this heading until the next h2 into the container
+                heading.parentNode.insertBefore(container, heading);
+                container.appendChild(heading);
+                
+                let nextSibling = container.nextSibling;
+                while (nextSibling && 
+                       !(nextSibling.tagName === 'H2')) {
+                    const temp = nextSibling.nextSibling;
+                    container.appendChild(nextSibling);
+                    nextSibling = temp;
+                }
+            }
+        });
+        
+        // Handle tab switching
+        const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
+        tabLinks.forEach(function(tabLink) {
+            tabLink.addEventListener('click', function(event) {
+                // Store which tab was clicked
+                localStorage.setItem('activeTutorTab', this.getAttribute('href'));
+                
+                // Toggle reschedule content visibility
+                const isRequestsTab = this.getAttribute('href') === '#requests';
+                document.querySelectorAll('.reschedule-container').forEach(function(container) {
+                    container.style.display = isRequestsTab ? 'block' : 'none';
+                });
+            });
+        });
+        
+        // Check if we should restore a previously selected tab
+        const storedTab = localStorage.getItem('activeTutorTab');
+        if (storedTab) {
+            const tabToSelect = document.querySelector(`a[href="${storedTab}"]`);
+            if (tabToSelect) {
+                // Trigger a click on the stored tab
+                tabToSelect.click();
+            }
+        }
+        
+        // Hide reschedule sections initially if not on requests tab
+        const activeTab = document.querySelector('.nav-link.active');
+        if (!activeTab || activeTab.getAttribute('href') !== '#requests') {
+            document.querySelectorAll('.reschedule-container').forEach(function(container) {
+                container.style.display = 'none';
+            });
+        }
+    });
+</script>

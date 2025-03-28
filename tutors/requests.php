@@ -1,5 +1,5 @@
 <!-- =========================== REQUESTS TAB =========================== -->
-<div class="tab-pane fade" id="requests" role="tabpanel" aria-labelledby="requests-tab">
+<div class="tab-pane fade <?php echo (empty($active_tab) || $active_tab == 'progress-report') ? 'show active' : ''; ?>" id="progress-report" role="tabpanel" aria-labelledby="progress-report-tab">
     <h4>Reschedule Requests</h4>
     
     <?php
@@ -207,11 +207,25 @@
         if (isset($_POST['delete_tutor_request']) && $_POST['delete_tutor_request'] === '1') {
             $request_id = intval($_POST['request_id']);
             
+            // Check if it's an AJAX request
+            $is_ajax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
+            
             // Verify the request belongs to the current tutor
             $tutor_id = get_post_meta($request_id, 'tutor_id', true);
             if ($tutor_id == get_current_user_id()) {
                 wp_delete_post($request_id, true);
-                echo '<div class="alert alert-success">Request has been deleted successfully.</div>';
+                
+                if ($is_ajax) {
+                    wp_send_json_success(array('message' => 'Request deleted successfully'));
+                    exit;
+                } else {
+                    // For non-AJAX requests, set a session variable to stay on the requests tab
+                    if (!session_id()) {
+                        session_start();
+                    }
+                    $_SESSION['active_tab'] = 'requests';
+                    echo '<div class="alert alert-success">Request has been deleted successfully.</div>';
+                }
             }
             
             return true;
@@ -597,6 +611,7 @@
                             <form id="rescheduleRequestForm" method="post">
                                 <input type="hidden" name="submit_tutor_reschedule_request" value="1">
                                 <input type="hidden" name="tutor_id" value="<?php echo get_current_user_id(); ?>">
+                                <input type="hidden" name="active_tab" value="requests">
                                 
                                 <div class="mb-3">
                                     <label for="student_select" class="form-label">Select Student <span class="text-danger">*</span></label>
@@ -823,12 +838,10 @@
                             <i class="fas fa-edit"></i> Edit
                         </button>';
                         
-                        echo '<form method="post" class="d-inline delete-request-form">';
-                        echo '<input type="hidden" name="delete_tutor_request" value="1">';
-                        echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
-                        echo '<input type="hidden" name="active_tab" value="requests">';
-                        echo '<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> Delete</button>';
-                        echo '</form>';
+                        echo '<button type="button" class="btn btn-sm btn-danger delete-request-btn" 
+                            data-request-id="' . $request_id . '">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>';
                     } else {
                         echo '<span class="text-muted">No actions available</span>';
                     }
@@ -929,7 +942,7 @@
                         echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
                         echo '<input type="hidden" name="tutor_name" value="' . wp_get_current_user()->user_login . '">';
                         echo '<input type="hidden" name="student_id" value="' . $student_id . '">';
-                        echo '<input type="hidden" name="active_tab" value="requests-tab">';
+                        echo '<input type="hidden" name="active_tab" value="requests">';
                         echo '<button type="submit" class="btn btn-sm btn-success me-1">Accept</button>';
                         echo '</form>';
                         
@@ -1050,6 +1063,7 @@
                                         <form method="post" class="mt-3">
                                             <input type="hidden" name="select_alternative" value="1">
                                             <input type="hidden" name="request_id" value="<?php echo $request_id; ?>">
+                                            <input type="hidden" name="active_tab" value="requests">
                                             
                                             <div class="list-group mb-3">
                                                 <?php foreach ($alternatives as $index => $alternative) : 
@@ -1111,6 +1125,7 @@
                     <form id="editRescheduleRequestForm" method="post">
                         <input type="hidden" name="update_tutor_reschedule_request" value="1">
                         <input type="hidden" name="request_id" id="edit_request_id" value="">
+                        <input type="hidden" name="active_tab" value="requests">
                         
                         <div class="mb-3">
                             <label class="form-label">Student</label>
@@ -1309,111 +1324,118 @@ document.addEventListener('DOMContentLoaded', function() {
             // Hide error messages
             document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
             
-            // Submit the form (standard form submission to ensure proper PHP processing)
+            // Add a hidden input for active tab
+            const activeTabInput = document.createElement('input');
+            activeTabInput.type = 'hidden';
+            activeTabInput.name = 'active_tab';
+            activeTabInput.value = 'requests';
+            form.appendChild(activeTabInput);
+            
+            // Store the current tab in session storage
+            sessionStorage.setItem('activeTab', 'requests');
+            
+            // Submit the form
             form.submit();
         });
     }
     
-    // Set up the unavailable modal data
-    const unavailableModal = document.getElementById('unavailableModal');
-    if (unavailableModal) {
-        unavailableModal.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-            const requestId = button.getAttribute('data-request-id');
-            const studentId = button.getAttribute('data-student-id');
-            const studentName = button.getAttribute('data-student-name');
-            const originalDate = button.getAttribute('data-original-date');
-            const originalTime = button.getAttribute('data-original-time');
-            
-            document.getElementById('unavailable_request_id').value = requestId;
-            document.getElementById('unavailable_student_id').value = studentId;
-            document.getElementById('unavailable_student_name').textContent = studentName;
-            
-            // Format the date and time
-            const dateObj = new Date(originalDate + ' ' + originalTime);
-            const formattedDate = dateObj.toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric'
-            });
-            const formattedTime = dateObj.toLocaleTimeString('en-US', { 
-                hour: 'numeric', 
-                minute: 'numeric', 
-                hour12: true 
-            });
-            
-            document.getElementById('unavailable_original_time').textContent = formattedDate + ' at ' + formattedTime;
-        });
-    }
-    
-    // Form validation
-    const unavailableForm = document.getElementById('unavailableForm');
-    if (unavailableForm) {
-        unavailableForm.addEventListener('submit', function(event) {
-            const altDates = document.querySelectorAll('.alt-date');
-            const altTimes = document.querySelectorAll('.alt-time');
-            let valid = false;
-            
-            // Check if at least one alternative time is provided
-            for (let i = 0; i < altDates.length; i++) {
-                if (altDates[i].value && altTimes[i].value) {
-                    valid = true;
-                    break;
-                }
-            }
-            
-            if (!valid) {
-                event.preventDefault();
-                document.getElementById('unavailableErrorMessage').style.display = 'block';
-            }
-        });
-    }
-    
-    // Handle the reason modal
-    const reasonModal = document.getElementById('reasonModal');
-    if (reasonModal) {
-        reasonModal.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-            const reason = button.getAttribute('data-reason');
-            // Replace newlines with <br> tags for proper display
-            document.getElementById('fullReasonText').innerHTML = reason.replace(/\n/g, '<br>');
-        });
-    }
-    
-    // Make all reason text items clickable
-    document.querySelectorAll('.reason-text').forEach(item => {
-        item.addEventListener('click', function() {
-            const reason = this.getAttribute('data-reason');
-            const reasonModal = new bootstrap.Modal(document.getElementById('reasonModal'));
-            document.getElementById('fullReasonText').innerHTML = reason.replace(/\n/g, '<br>');
-            reasonModal.show();
-        });
-    });
-
-    // Add this to your existing DOMContentLoaded event listener
-    document.querySelectorAll('.delete-request-form').forEach(form => {
-        form.addEventListener('submit', function(e) {
+    // Delete request button click handler
+    document.querySelectorAll('.delete-request-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
             if (!confirm('Are you sure you want to delete this request?')) {
-                e.preventDefault();
                 return;
             }
             
-            // Store the active tab in session storage before form submission
-            sessionStorage.setItem('activeTab', 'requests');
+            const requestId = this.getAttribute('data-request-id');
+            const row = this.closest('tr');
+            
+            // Create a form data object
+            const formData = new FormData();
+            formData.append('delete_tutor_request', '1');
+            formData.append('request_id', requestId);
+            formData.append('action', 'delete_tutor_request');
+            
+            // Send AJAX request
+            fetch(ajaxurl, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove the row from the table
+                    row.remove();
+                    
+                    // Show success message
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success';
+                    alertDiv.textContent = 'Request has been deleted successfully.';
+                    
+                    // Insert the alert at the top of the card body
+                    const cardBody = document.querySelector('.card-body');
+                    cardBody.insertBefore(alertDiv, cardBody.firstChild);
+                    
+                    // Auto-hide the alert after 3 seconds
+                    setTimeout(() => {
+                        alertDiv.remove();
+                    }, 3000);
+                } else {
+                    alert('Error: Failed to delete the request.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error: Failed to delete the request.');
+            });
         });
     });
 
-    // Add this to ensure we stay on the requests tab after form submission
-    if (sessionStorage.getItem('activeTab') === 'requests') {
+    // Modified Session handling for tab retention
+    // Check if we should activate the requests tab
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('active_tab') === 'requests') {
         // Show the requests tab
         const requestsTab = document.querySelector('[href="#requests"]');
         if (requestsTab) {
             const tab = new bootstrap.Tab(requestsTab);
             tab.show();
         }
-        // Clear the stored tab
-        sessionStorage.removeItem('activeTab');
     }
+    
+    // Keep track of active tab across page loads
+    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function (e) {
+            // Update the URL with the active tab
+            const id = e.target.getAttribute('href').substring(1);
+            history.replaceState(null, null, `?active_tab=${id}`);
+        });
+    });
+    
+    // When the page loads, check for the active tab in URL
+    document.addEventListener('DOMContentLoaded', function() {
+        const params = new URLSearchParams(window.location.search);
+        const activeTab = params.get('active_tab');
+        
+        if (activeTab) {
+            const tabElement = document.querySelector(`a[href="#${activeTab}"]`);
+            if (tabElement) {
+                const tab = new bootstrap.Tab(tabElement);
+                tab.show();
+            }
+        }
+    });
 });
 </script>
+
+<!-- Clear marker to ensure the content only appears in the requests tab -->
+<?php
+define('IS_REQUESTS_TAB', true);
+
+// Near the beginning of the requests tab content, add this container wrapper
+echo '<div class="reschedule-section" id="rescheduleRequestsSection">';
+
+// ... rest of reschedule requests content ...
+
+// At the end of the requests tab content
+echo '</div><!-- End reschedule-section -->';
