@@ -1607,41 +1607,26 @@ function get_upcoming_lessons_for_student($student_id) {
 }
 
 // Add to functions.php to ensure reschedule requests don't show on the Home tab
-add_action('wp_ajax_delete_tutor_request', 'handle_ajax_delete_tutor_request');
+add_action('wp_ajax_delete_tutor_request', 'handle_delete_tutor_request');
 
-function handle_ajax_delete_tutor_request() {
-    // Verify nonce if provided
-    if (isset($_POST['nonce']) && !wp_verify_nonce($_POST['nonce'], 'delete_tutor_request_nonce')) {
-        wp_send_json_error(array('message' => 'Invalid security token'));
-        exit;
+function handle_delete_tutor_request() {
+    if (isset($_POST['delete_tutor_request']) && $_POST['delete_tutor_request'] === '1') {
+        $request_id = intval($_POST['request_id']);
+        
+        // Verify the request belongs to the current tutor
+        $tutor_id = get_post_meta($request_id, 'tutor_id', true);
+        if ($tutor_id == get_current_user_id()) {
+            $result = wp_delete_post($request_id, true);
+            if ($result) {
+                wp_send_json_success(array('message' => 'Request deleted successfully'));
+            } else {
+                wp_send_json_error(array('message' => 'Failed to delete the request'));
+            }
+        } else {
+            wp_send_json_error(array('message' => 'You do not have permission to delete this request'));
+        }
     }
-    
-    if (!isset($_POST['request_id']) || empty($_POST['request_id'])) {
-        wp_send_json_error(array('message' => 'Missing request ID'));
-        exit;
-    }
-    
-    $request_id = intval($_POST['request_id']);
-    
-    // Verify the request belongs to the current tutor
-    $tutor_id = get_post_meta($request_id, 'tutor_id', true);
-    $current_user_id = get_current_user_id();
-    
-    if ($tutor_id != $current_user_id) {
-        wp_send_json_error(array('message' => 'You do not have permission to delete this request'));
-        exit;
-    }
-    
-    // Try to delete the post
-    $result = wp_delete_post($request_id, true);
-    
-    if ($result) {
-        wp_send_json_success(array('message' => 'Request deleted successfully'));
-    } else {
-        wp_send_json_error(array('message' => 'Failed to delete the request'));
-    }
-    
-    exit;
+    wp_die();
 }
 
 // Add this function to ensure reschedule requests only show on the Requests tab

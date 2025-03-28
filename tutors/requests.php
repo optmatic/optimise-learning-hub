@@ -207,26 +207,25 @@
         if (isset($_POST['delete_tutor_request']) && $_POST['delete_tutor_request'] === '1') {
             $request_id = intval($_POST['request_id']);
             
+            // Check if it's an AJAX request
+            $is_ajax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
+            
             // Verify the request belongs to the current tutor
             $tutor_id = get_post_meta($request_id, 'tutor_id', true);
-            $current_user_id = get_current_user_id();
-            
-            if ($tutor_id == $current_user_id) {
-                // Try to delete the post
-                $result = wp_delete_post($request_id, true);
+            if ($tutor_id == get_current_user_id()) {
+                wp_delete_post($request_id, true);
                 
-                if ($result) {
-                    echo '<div class="alert alert-success">Request has been deleted successfully.</div>';
+                if ($is_ajax) {
+                    wp_send_json_success(array('message' => 'Request deleted successfully'));
+                    exit;
                 } else {
-                    echo '<div class="alert alert-danger">Error: Failed to delete the request. Please try again.</div>';
+                    // For non-AJAX requests, set a session variable to stay on the requests tab
+                    if (!session_id()) {
+                        session_start();
+                    }
+                    $_SESSION['active_tab'] = 'requests';
+                    echo '<div class="alert alert-success">Request has been deleted successfully.</div>';
                 }
-                
-                // Set the active tab to ensure we stay on the requests tab
-                $_GET['active_tab'] = 'requests'; // This helps with conditional display
-                
-                return true;
-            } else {
-                echo '<div class="alert alert-danger">Error: You do not have permission to delete this request.</div>';
             }
             
             return true;
@@ -839,13 +838,10 @@
                             <i class="fas fa-edit"></i> Edit
                         </button>';
                         
-                        // Replace the AJAX delete button with a form-based delete
-                        echo '<form method="post" class="d-inline delete-request-form" onsubmit="return confirm(\'Are you sure you want to delete this request?\');">
-                            <input type="hidden" name="delete_tutor_request" value="1">
-                            <input type="hidden" name="request_id" value="' . $request_id . '">
-                            <input type="hidden" name="active_tab" value="requests">
-                            <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> Delete</button>
-                        </form>';
+                        echo '<button type="button" class="btn btn-sm btn-danger delete-request-btn" 
+                            data-request-id="' . $request_id . '">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>';
                     } else {
                         echo '<span class="text-muted">No actions available</span>';
                     }
