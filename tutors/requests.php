@@ -202,10 +202,28 @@
         return false;
     }
     
+    // Add this function near the top with the other process functions
+    function process_delete_tutor_request() {
+        if (isset($_POST['delete_tutor_request']) && $_POST['delete_tutor_request'] === '1') {
+            $request_id = intval($_POST['request_id']);
+            
+            // Verify the request belongs to the current tutor
+            $tutor_id = get_post_meta($request_id, 'tutor_id', true);
+            if ($tutor_id == get_current_user_id()) {
+                wp_delete_post($request_id, true);
+                echo '<div class="alert alert-success">Request has been deleted successfully.</div>';
+            }
+            
+            return true;
+        }
+        return false;
+    }
+    
     // Process these request actions
     process_confirm_reschedule();
     process_decline_reschedule();
     process_tutor_reschedule_request();
+    process_delete_tutor_request();
     
     // Helper functions for reusability
     function format_datetime($date, $time, $format = 'M j, Y \a\t g:i A') {
@@ -416,59 +434,36 @@
     
     function get_reschedule_requests($type, $status = null) {
         $current_user_id = get_current_user_id();
-        $current_user_login = wp_get_current_user()->user_login;
-        
-        $meta_query = [
-            'relation' => 'AND',
-            [
-                'key' => 'request_type',
-                'value' => $type,
-                'compare' => '=',
-            ]
-        ];
-        
-        // Handle different request types
-        if ($type === 'tutor_reschedule') {
-            // For tutor-initiated requests, we need both tutor_id and tutor_name checks
-            $meta_query[] = [
-                'relation' => 'OR',
-                [
-                    'key' => 'tutor_id',
-                    'value' => $current_user_id,
-                    'compare' => '=',
-                ],
-                [
-                    'key' => 'tutor_name',
-                    'value' => $current_user_login,
-                    'compare' => '=',
-                ]
-            ];
-        } else {
-            // For other request types, use the default tutor_id check
-            $meta_query[] = [
-                'key' => 'tutor_id',
-                'value' => $current_user_id,
-                'compare' => '=',
-            ];
-        }
-        
-        // Add status filter if provided
-        if ($status) {
-            $meta_query[] = [
-                'key' => 'status',
-                'value' => $status,
-                'compare' => '=',
-            ];
-        }
         
         $args = [
             'post_type' => 'progress_report',
             'posts_per_page' => -1,
-            'meta_query' => $meta_query,
-            'order' => 'DESC',
-            'orderby' => 'date'
+            'meta_query' => [
+                'relation' => 'AND',
+                [
+                    'key' => 'request_type',
+                    'value' => $type,
+                    'compare' => '='
+                ],
+                [
+                    'key' => 'tutor_id',
+                    'value' => $current_user_id,
+                    'compare' => '='
+                ]
+            ],
+            'orderby' => 'date',
+            'order' => 'DESC'
         ];
-        
+
+        // Add status filter if provided
+        if ($status) {
+            $args['meta_query'][] = [
+                'key' => 'status',
+                'value' => $status,
+                'compare' => '='
+            ];
+        }
+
         return get_posts($args);
     }
     
@@ -738,11 +733,21 @@
         </div>
         <div class="card-body">
             <?php
+            // Get tutor's reschedule requests
             $tutor_requests = get_reschedule_requests('tutor_reschedule');
             
             if (!empty($tutor_requests)) {
-                echo '<div class="table-responsive"><table class="table table-striped">';
-                echo '<thead><tr><th>Date Requested</th><th>Lesson Date</th><th>Preferred Times</th><th>Student</th><th>Status</th><th>Actions</th></tr></thead>';
+                echo '<div class="table-responsive">';
+                echo '<table class="table table-striped">';
+                echo '<thead><tr>
+                    <th>Date Requested</th>
+                    <th>Lesson Date</th>
+                    <th>Preferred Times</th>
+                    <th>Student</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr></thead>';
                 echo '<tbody>';
                 
                 foreach ($tutor_requests as $request) {
@@ -755,16 +760,32 @@
                     $reason = get_post_meta($request_id, 'reason', true);
                     $preferred_times = get_post_meta($request_id, 'preferred_times', true);
                     
+                    // Format the original date for display
+                    $formatted_original = !empty($original_date) ? date('M j, Y', strtotime($original_date)) . ' at ' . date('g:i A', strtotime($original_time)) : 'N/A';
+                    
+                    // Set status badge
+                    if ($status === 'confirmed' || $status === 'accepted') {
+                        $status_badge = '<span class="badge bg-success">Accepted</span>';
+                    } elseif ($status === 'denied' || $status === 'declined') {
+                        $status_badge = '<span class="badge bg-danger">Declined</span>';
+                    } elseif ($status === 'unavailable') {
+                        $status_badge = '<span class="badge bg-warning">Student Unavailable</span>';
+                    } else {
+                        $status_badge = '<span class="badge bg-warning">Pending</span>';
+                    }
+                    
                     echo '<tr>';
                     echo '<td>' . esc_html($request_date) . '</td>';
-                    echo '<td>' . esc_html(format_datetime($original_date, $original_time)) . '</td>';
+                    echo '<td>' . esc_html($formatted_original) . '</td>';
                     
                     // Display preferred times
                     echo '<td>';
                     if (!empty($preferred_times) && is_array($preferred_times)) {
                         foreach ($preferred_times as $index => $time) {
                             if (!empty($time['date']) && !empty($time['time'])) {
-                                echo 'Option ' . ($index + 1) . ': ' . esc_html(format_datetime($time['date'], $time['time'])) . '<br>';
+                                $formatted_time = date('M j, Y \a\t g:i A', 
+                                    strtotime($time['date'] . ' ' . $time['time']));
+                                echo 'Option ' . ($index + 1) . ': ' . esc_html($formatted_time) . '<br>';
                             }
                         }
                     } else {
@@ -773,11 +794,25 @@
                     echo '</td>';
                     
                     echo '<td>' . esc_html(get_student_display_name($student_name)) . '</td>';
-                    echo '<td>' . get_status_badge($status) . '</td>';
+                    
+                    // Add reason column with truncation and modal functionality
+                    echo '<td>';
+                    if (!empty($reason)) {
+                        $truncated_reason = strlen($reason) > 30 ? substr($reason, 0, 30) . '...' : $reason;
+                        echo '<span class="reason-text" style="cursor: pointer; color: #fcb31e;" 
+                               data-bs-toggle="modal" data-bs-target="#reasonModal" 
+                               data-reason="' . esc_attr($reason) . '"
+                               data-bs-toggle="tooltip" title="Click to expand">' . esc_html($truncated_reason) . '</span>';
+                    } else {
+                        echo '<em>No reason provided</em>';
+                    }
+                    echo '</td>';
+                    
+                    echo '<td>' . $status_badge . '</td>';
                     echo '<td>';
                     
                     // Only show edit/delete buttons for pending requests
-                    if ($status !== 'confirmed' && $status !== 'denied') {
+                    if ($status !== 'confirmed' && $status !== 'denied' && $status !== 'accepted' && $status !== 'declined') {
                         echo '<button type="button" class="btn btn-sm btn-primary me-1 edit-request-btn" 
                             data-bs-toggle="modal" data-bs-target="#editRescheduleRequestModal" 
                             data-request-id="' . $request_id . '"
@@ -791,6 +826,7 @@
                         echo '<form method="post" class="d-inline delete-request-form">';
                         echo '<input type="hidden" name="delete_tutor_request" value="1">';
                         echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                        echo '<input type="hidden" name="active_tab" value="requests">';
                         echo '<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> Delete</button>';
                         echo '</form>';
                     } else {
@@ -800,7 +836,8 @@
                     echo '</td></tr>';
                 }
                 
-                echo '</tbody></table></div>';
+                echo '</tbody></table>';
+                echo '</div>';
             } else {
                 echo '<p>You have not submitted any reschedule requests yet.</p>';
             }
@@ -1353,5 +1390,30 @@ document.addEventListener('DOMContentLoaded', function() {
             reasonModal.show();
         });
     });
+
+    // Add this to your existing DOMContentLoaded event listener
+    document.querySelectorAll('.delete-request-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Are you sure you want to delete this request?')) {
+                e.preventDefault();
+                return;
+            }
+            
+            // Store the active tab in session storage before form submission
+            sessionStorage.setItem('activeTab', 'requests');
+        });
+    });
+
+    // Add this to ensure we stay on the requests tab after form submission
+    if (sessionStorage.getItem('activeTab') === 'requests') {
+        // Show the requests tab
+        const requestsTab = document.querySelector('[href="#requests"]');
+        if (requestsTab) {
+            const tab = new bootstrap.Tab(requestsTab);
+            tab.show();
+        }
+        // Clear the stored tab
+        sessionStorage.removeItem('activeTab');
+    }
 });
 </script>
