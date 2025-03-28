@@ -574,3 +574,64 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ... existing code ...
+    
+    // Handle tab switching to maintain active tab
+    const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
+    tabLinks.forEach(function(tab) {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            const tabId = e.target.getAttribute('href').substring(1);
+            // Store the active tab in localStorage and cookie
+            localStorage.setItem('activeTutorTab', e.target.getAttribute('href'));
+            document.cookie = 'activeTutorTab=' + tabId + '; path=/';
+            
+            // If using URL parameter approach
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('active_tab', tabId);
+            history.replaceState(null, null, '?' + urlParams.toString());
+        });
+    });
+    
+    // Check URL parameters first
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramTab = urlParams.get('active_tab');
+    if (paramTab) {
+        const tabToShow = document.querySelector(`[href="#${paramTab}"]`);
+        if (tabToShow) {
+            const tab = new bootstrap.Tab(tabToShow);
+            tab.show();
+        }
+    } 
+    // Then check localStorage if no URL parameter
+    else {
+        const storedTab = localStorage.getItem('activeTutorTab');
+        if (storedTab) {
+            const tabToShow = document.querySelector(storedTab);
+            if (tabToShow) {
+                const tab = new bootstrap.Tab(tabToShow);
+                tab.show();
+            }
+        }
+    }
+    
+    // Add a clean nonce to all Ajax requests
+    const ajaxNonce = '<?php echo wp_create_nonce('delete_tutor_request_nonce'); ?>';
+    
+    // Initialize delete request forms
+    document.querySelectorAll('.delete-request-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const requestId = this.querySelector('input[name="request_id"]').value;
+            
+            // Store active tab for page reload fallback
+            localStorage.setItem('activeTutorTab', '#requests');
+            document.cookie = 'activeTutorTab=requests; path=/';
+            
+            // Continue with normal form submission
+            return true;
+        });
+    });
+});
+</script>
