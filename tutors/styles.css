@@ -1,4 +1,10 @@
 /* Add this to the existing style section or create a new one */
+
+#preferred_times_list {
+  list-style-type: none;
+  padding-left: 0 !important;
+}
+
 .nav-link .badge {
   font-size: 0.65rem;
   transform: translate(-50%, -30%) !important;

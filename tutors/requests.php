@@ -233,11 +233,70 @@
         return false;
     }
     
+    // Add this function to handle selecting alternative times
+    function process_select_alternative() {
+        if (isset($_POST['select_alternative']) && $_POST['select_alternative'] === '1') {
+            $request_id = intval($_POST['request_id']);
+            $selected_index = intval($_POST['selected_alternative']);
+            
+            // Get the alternative request details
+            $alternatives = get_post_meta($request_id, 'alternatives', true);
+            $student_id = get_post_meta($request_id, 'student_id', true);
+            $student_name = get_post_meta($request_id, 'student_name', true);
+            $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+            
+            // Validate inputs
+            if (empty($alternatives) || !isset($alternatives[$selected_index])) {
+                echo '<div class="alert alert-danger">Invalid alternative selected.</div>';
+                return false;
+            }
+            
+            // Update the request status and selected alternative
+            update_post_meta($request_id, 'status', 'confirmed');
+            update_post_meta($request_id, 'selected_alternative', $selected_index);
+            update_post_meta($request_id, 'viewed_by_tutor', '1');
+            
+            // Create a new post to track the confirmed alternative
+            $confirmation_post = array(
+                'post_title'   => 'Alternative Time Confirmed',
+                'post_content' => '',
+                'post_status'  => 'publish',
+                'post_type'    => 'progress_report',
+            );
+            
+            $confirmation_id = wp_insert_post($confirmation_post);
+            
+            if (!is_wp_error($confirmation_id)) {
+                // Save details of the confirmation
+                update_post_meta($confirmation_id, 'request_type', 'reschedule_confirmed');
+                update_post_meta($confirmation_id, 'original_request_id', $original_request_id);
+                update_post_meta($confirmation_id, 'student_id', $student_id);
+                update_post_meta($confirmation_id, 'student_name', $student_name);
+                update_post_meta($confirmation_id, 'tutor_id', get_current_user_id());
+                update_post_meta($confirmation_id, 'tutor_name', wp_get_current_user()->user_login);
+                update_post_meta($confirmation_id, 'selected_alternative', $selected_index);
+                update_post_meta($confirmation_id, 'status', 'confirmed');
+                
+                // Copy over the selected alternative details
+                $selected_alternative = $alternatives[$selected_index];
+                update_post_meta($confirmation_id, 'new_date', $selected_alternative['date']);
+                update_post_meta($confirmation_id, 'new_time', $selected_alternative['time']);
+                
+                echo '<div class="alert alert-success">You have successfully confirmed an alternative time.</div>';
+                return true;
+            }
+            
+            return false;
+        }
+        return false;
+    }
+    
     // Process these request actions
     process_confirm_reschedule();
     process_decline_reschedule();
     process_tutor_reschedule_request();
     process_delete_tutor_request();
+    process_select_alternative();
     
     // Helper functions for reusability
     function format_datetime($date, $time, $format = 'M j, Y \a\t g:i A') {
@@ -973,7 +1032,59 @@
     
     <!-- Alternative Times Section -->
     <?php
-    $alternative_requests = get_reschedule_requests('reschedule_alternatives');
+    // Debugging: Log current user ID and other details
+    $current_user_id = get_current_user_id();
+    error_log("Current Tutor User ID: " . $current_user_id);
+    
+    $alternative_requests_args = array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'tutor_id',
+                'value'   => $current_user_id,
+                'compare' => '='
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => 'student_unavailable',
+                'compare' => '='
+            )
+        ),
+        'order'          => 'DESC',
+        'orderby'        => 'date'
+    );
+    
+    $alternative_requests = get_posts($alternative_requests_args);
+    
+    // Debugging: Log query details
+    error_log("Alternative Requests Query Args: " . print_r($alternative_requests_args, true));
+    error_log("Number of Alternative Requests Found: " . count($alternative_requests));
+    
+    // If no requests found, log all progress_report posts for this tutor
+    if (empty($alternative_requests)) {
+        $all_progress_reports = get_posts(array(
+            'post_type'      => 'progress_report',
+            'posts_per_page' => -1,
+            'meta_query'     => array(
+                array(
+                    'key'     => 'tutor_id',
+                    'value'   => $current_user_id,
+                    'compare' => '='
+                )
+            )
+        ));
+        
+        error_log("All Progress Reports for this Tutor: " . count($all_progress_reports));
+        
+        // Log details of each progress report
+        foreach ($all_progress_reports as $report) {
+            $meta = get_post_meta($report->ID);
+            error_log("Progress Report ID: " . $report->ID);
+            error_log("Progress Report Meta: " . print_r($meta, true));
+        }
+    }
     
     if (!empty($alternative_requests)) {
         // Check for new (unviewed) alternatives
@@ -989,7 +1100,39 @@
         ?>
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
-                <i class="fas fa-exchange-alt me-2"></i> Alternative Lesson Times
+                <div class="d-flex justify-content-between align-items-center">
+                    <div><i class="fas fa-exchange-alt me-2"></i> Alternative Lesson Times</div>
+                    <?php 
+                    // Count pending alternatives
+                    $pending_alternatives = count(get_posts(array(
+                        'post_type'      => 'progress_report',
+                        'posts_per_page' => -1,
+                        'meta_query'     => array(
+                            'relation' => 'AND',
+                            array(
+                                'key'     => 'tutor_id',
+                                'value'   => $current_user_id,
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'request_type',
+                                'value'   => 'student_unavailable',
+                                'compare' => '=',
+                            ),
+                            array(
+                                'key'     => 'status',
+                                'value'   => 'pending',
+                                'compare' => '=',
+                            )
+                        ),
+                        'fields'         => 'ids'
+                    )));
+                    
+                    if ($pending_alternatives > 0) {
+                        echo '<span class="badge bg-danger">' . $pending_alternatives . '</span>';
+                    }
+                    ?>
+                </div>
             </div>
             <div class="card-body">
                 <?php if ($has_new_alternatives) : ?>
@@ -998,7 +1141,7 @@
                 </div>
                 <?php endif; ?>
                 
-                <p>Your student has provided alternative times for lessons you were unavailable for. Please select one of the options below:</p>
+                <p>Your student is unavailable for the originally requested time and has provided alternative times. Please review and select a time that works for you:</p>
                 
                 <div class="accordion" id="alternativeAccordion">
                     <?php 
@@ -1012,6 +1155,13 @@
                         $status = get_post_meta($request_id, 'status', true);
                         $request_date = get_the_date('F j, Y', $request_id);
                         $viewed = get_post_meta($request_id, 'viewed_by_tutor', true);
+                        
+                        // Debugging: Log request details
+                        error_log("Alternative Request ID: " . $request_id);
+                        error_log("Original Request ID: " . $original_request_id);
+                        error_log("Student Name: " . $student_name);
+                        error_log("Alternatives: " . print_r($alternatives, true));
+                        error_log("Status: " . $status);
                         
                         // Get original request details
                         $original_date = get_post_meta($original_request_id, 'original_date', true);
@@ -1034,7 +1184,7 @@
                                         data-bs-toggle="collapse" data-bs-target="#alternativeCollapse<?php echo $counter; ?>" 
                                         aria-expanded="<?php echo $is_new ? 'true' : 'false'; ?>" 
                                         aria-controls="alternativeCollapse<?php echo $counter; ?>">
-                                    Alternative Times - <?php echo $request_date; ?> 
+                                    Alternative Times - <?php echo $request_date; ?> from <?php echo $student_display_name; ?> 
                                     <?php echo get_status_badge($status) . $new_badge; ?>
                                 </button>
                             </h2>
@@ -1184,20 +1334,20 @@
                         <strong>Student's Request Details</strong>
                     </div>
                     <div class="card-body">
-                        <p><strong>Student:</strong> <span id="unavailable_student_name" class="text-primary"></span></p>
+                        <p><strong>Student:</strong> <span id="unavailable_student_name" class="text-dark"></span></p>
                         
                         <p><strong>Student's Original Lesson Time:</strong> 
-                            <span id="unavailable_original_time" class="text-muted"></span>
+                            <span id="unavailable_original_time" ></span>
                         </p>
                         
                         <div id="student_preferred_times_container">
                             <p><strong>Student's Preferred Alternative Times:</strong></p>
-                            <ul id="preferred_times_list" class="list-group"></ul>
+                            <ul id="preferred_times_list"></ul>
                         </div>
                         
                         <div id="student_reason_container">
-                            <p><strong>Student's Reason:</strong> 
-                                <span id="unavailable_reason" class="text-muted"></span>
+                            <p><strong>Student's Reason:</strong>
+                                <span id="unavailable_reason" ></span>
                             </p>
                         </div>
                     </div>
@@ -1267,7 +1417,6 @@
     </div>
 </div>
 
-<!-- Add JavaScript to handle the unavailable modal -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Existing tooltip initialization code
@@ -1286,9 +1435,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Debug function to log modal population
-    function debugLog(message) {
-        console.log('Modal Debug: ' + message);
+    // Helper function to format date and time
+    function formatDateTime(date, time) {
+        if (!date || !time) return 'N/A';
+        const dateObj = new Date(`${date}T${time}`);
+        return dateObj.toLocaleString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
     }
 
     // Handle the Unavailable button click
@@ -1355,21 +1514,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Helper function to format date and time
-    function formatDateTime(date, time) {
-        if (!date || !time) return 'N/A';
-        const dateObj = new Date(`${date}T${time}`);
-        return dateObj.toLocaleString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
+    // Reason Modal Handling
+    const reasonModal = document.getElementById('reasonModal');
+    const fullReasonTextEl = document.getElementById('fullReasonText');
+    
+    // Add click event to all reason text spans
+    document.querySelectorAll('.reason-text').forEach(reasonSpan => {
+        reasonSpan.addEventListener('click', function() {
+            const fullReason = this.getAttribute('data-reason');
+            
+            if (fullReasonTextEl) {
+                fullReasonTextEl.textContent = fullReason;
+            }
         });
-    }
-
-    // Rest of the existing code...
+    });
 });
 </script>
