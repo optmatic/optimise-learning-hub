@@ -950,7 +950,7 @@
                               data-bs-target="#unavailableModal" 
                               data-request-id="' . $request_id . '"
                               data-student-id="' . $student_id . '"
-                              data-student-name="' . esc_attr(get_student_display_name($student_name)) . '"
+                              data-student-name="' . esc_attr($student_display_name) . '"
                               data-original-date="' . esc_attr($original_date) . '"
                               data-original-time="' . esc_attr($original_time) . '"
                               data-reason="' . esc_attr($reason) . '"
@@ -1294,79 +1294,41 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle the Unavailable button click
     document.querySelectorAll('.btn-warning[data-bs-target="#unavailableModal"]').forEach(btn => {
         btn.addEventListener('click', function() {
-            debugLog('Unavailable button clicked');
-
             // Gather all data attributes
-            const requestId = this.getAttribute('data-request-id');
-            const studentId = this.getAttribute('data-student-id');
             const studentName = this.getAttribute('data-student-name');
             const originalDate = this.getAttribute('data-original-date');
             const originalTime = this.getAttribute('data-original-time');
             const reason = this.getAttribute('data-reason');
             const preferredTimesAttr = this.getAttribute('data-preferred-times');
 
-            debugLog('Student Name: ' + studentName);
-            debugLog('Original Date: ' + originalDate);
-            debugLog('Original Time: ' + originalTime);
-            debugLog('Reason: ' + reason);
-            debugLog('Preferred Times: ' + preferredTimesAttr);
-
             // Get modal elements
             const studentNameEl = document.getElementById('unavailable_student_name');
             const originalLessonTimeEl = document.getElementById('unavailable_original_time');
             const preferredTimesListEl = document.getElementById('preferred_times_list');
             const studentReasonEl = document.getElementById('unavailable_reason');
-            const requestIdInput = document.getElementById('unavailable_request_id');
-            const studentIdInput = document.getElementById('unavailable_student_id');
 
-            // Set student name
+            // Set student name - ensure it's not empty
             if (studentNameEl) {
                 studentNameEl.textContent = studentName || 'N/A';
-                debugLog('Set student name to: ' + studentNameEl.textContent);
-            } else {
-                debugLog('Student name element not found');
             }
 
             // Format and set original lesson time
             if (originalLessonTimeEl) {
                 const formattedOriginalTime = formatDateTime(originalDate, originalTime);
-                originalLessonTimeEl.textContent = formattedOriginalTime || 'N/A';
-                debugLog('Set original lesson time to: ' + originalLessonTimeEl.textContent);
-            } else {
-                debugLog('Original lesson time element not found');
+                originalLessonTimeEl.textContent = formattedOriginalTime;
             }
 
             // Set student's reason
             if (studentReasonEl) {
                 studentReasonEl.textContent = reason || 'No reason provided';
-                debugLog('Set reason to: ' + studentReasonEl.textContent);
-            } else {
-                debugLog('Student reason element not found');
-            }
-
-            // Set hidden inputs
-            if (requestIdInput) {
-                requestIdInput.value = requestId;
-                debugLog('Set request ID to: ' + requestId);
-            } else {
-                debugLog('Request ID input not found');
-            }
-
-            if (studentIdInput) {
-                studentIdInput.value = studentId;
-                debugLog('Set student ID to: ' + studentId);
-            } else {
-                debugLog('Student ID input not found');
             }
 
             // Populate preferred times list
             if (preferredTimesListEl) {
                 preferredTimesListEl.innerHTML = ''; // Clear previous entries
-                debugLog('Cleared preferred times list');
 
                 try {
                     const preferredTimes = JSON.parse(preferredTimesAttr);
-                    debugLog('Parsed preferred times: ' + JSON.stringify(preferredTimes));
                     
                     if (preferredTimes && preferredTimes.length > 0) {
                         preferredTimes.forEach((time, index) => {
@@ -1375,14 +1337,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             const formattedTime = formatDateTime(time.date, time.time);
                             li.textContent = `Option ${index + 1}: ${formattedTime}`;
                             preferredTimesListEl.appendChild(li);
-                            debugLog('Added preferred time: ' + li.textContent);
                         });
                     } else {
                         const li = document.createElement('li');
                         li.className = 'list-group-item text-muted';
                         li.textContent = 'No preferred times provided';
                         preferredTimesListEl.appendChild(li);
-                        debugLog('No preferred times found');
                     }
                 } catch (error) {
                     console.error('Error parsing preferred times:', error);
@@ -1390,17 +1350,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     li.className = 'list-group-item text-danger';
                     li.textContent = 'Error loading preferred times';
                     preferredTimesListEl.appendChild(li);
-                    debugLog('Error parsing preferred times');
                 }
-            } else {
-                debugLog('Preferred times list element not found');
             }
         });
     });
 
     // Helper function to format date and time
     function formatDateTime(date, time) {
-        if (!date || !time) return '';
+        if (!date || !time) return 'N/A';
         const dateObj = new Date(`${date}T${time}`);
         return dateObj.toLocaleString('en-US', {
             weekday: 'long',
