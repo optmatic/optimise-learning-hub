@@ -952,7 +952,9 @@
                               data-student-id="' . $student_id . '"
                               data-student-name="' . esc_attr(get_student_display_name($student_name)) . '"
                               data-original-date="' . esc_attr($original_date) . '"
-                              data-original-time="' . esc_attr($original_time) . '">
+                              data-original-time="' . esc_attr($original_time) . '"
+                              data-reason="' . esc_attr($reason) . '"
+                              data-preferred-times="' . esc_attr(json_encode($preferred_times)) . '">
                               Unavailable
                               </button>';
                     } else {
@@ -1167,16 +1169,42 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="unavailableModalLabel">Provide Alternative Times</h5>
+                <h5 class="modal-title" id="unavailableModalLabel">Provide Your Preferred Alternative Times</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div id="unavailableErrorMessage" class="alert alert-danger" style="display: none;">
                     <p>Please provide at least one alternative time.</p>
                 </div>
-                <p>You've indicated you're unavailable for the requested time. Please provide alternative times that would work for you.</p>
-                <p><strong>Student:</strong> <span id="unavailable_student_name"></span></p>
-                <p><strong>Original Time:</strong> <span id="unavailable_original_time"></span></p>
+                <p class="lead">You've indicated you're unavailable for the student's requested time. Please provide your alternative times.</p>
+                
+                <!-- Student Information Section -->
+                <div class="card mb-3">
+                    <div class="card-header bg-light">
+                        <strong>Student's Request Details</strong>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Student:</strong> <span id="unavailable_student_name" class="text-primary"></span></p>
+                        
+                        <p><strong>Student's Original Lesson Time:</strong> 
+                            <span id="unavailable_original_time" class="text-muted"></span>
+                        </p>
+                        
+                        <div id="student_preferred_times_container">
+                            <p><strong>Student's Preferred Alternative Times:</strong></p>
+                            <ul id="preferred_times_list" class="list-group"></ul>
+                        </div>
+                        
+                        <div id="student_reason_container">
+                            <p><strong>Student's Reason:</strong> 
+                                <span id="unavailable_reason" class="text-muted"></span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <h5 class="mt-4">Your Alternative Times</h5>
+                <p class="text-muted small">Please provide your preferred alternative times that work for you.</p>
                 
                 <form id="unavailableForm" method="post">
                     <input type="hidden" name="decline_reschedule" value="1">
@@ -1186,8 +1214,8 @@
                     <input type="hidden" name="active_tab" value="requests">
                     
                     <div class="mb-3">
-                        <label class="form-label">Alternative Times <span class="text-danger">*</span></label>
-                        <p class="text-muted small">Please provide at least one alternative date and time.</p>
+                        <label class="form-label">Your Alternative Times <span class="text-danger">*</span></label>
+                        <p class="text-muted small">Please provide at least one alternative date and time that works for you.</p>
                         
                         <div id="alternative-times-container">
                             <?php for ($i = 1; $i <= 3; $i++) { ?>
@@ -1213,7 +1241,7 @@
                     
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary" id="submitUnavailable">Submit Alternative Times</button>
+                        <button type="submit" class="btn btn-primary" id="submitUnavailable">Submit Your Alternative Times</button>
                     </div>
                 </form>
             </div>
@@ -1242,14 +1270,13 @@
 <!-- Add JavaScript to handle the unavailable modal -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize tooltips without delay
+    // Existing tooltip initialization code
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.forEach(function (tooltipTriggerEl) {
         const tooltip = new bootstrap.Tooltip(tooltipTriggerEl, {
-            delay: { show: 0, hide: 0 } // Ensure no delay
+            delay: { show: 0, hide: 0 }
         });
 
-        // Manually handle mouse events for instant display
         tooltipTriggerEl.addEventListener('mouseenter', function() {
             tooltip.show();
         });
@@ -1259,183 +1286,133 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Handle student selection - update hidden input with username
-    const studentSelect = document.getElementById('student_select');
-    const studentNameInput = document.getElementById('student_name');
-    
-    if (studentSelect && studentNameInput) {
-        studentSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            if (selectedOption.value) {
-                const username = selectedOption.getAttribute('data-username');
-                studentNameInput.value = username;
-            } else {
-                studentNameInput.value = '';
-            }
-        });
+    // Debug function to log modal population
+    function debugLog(message) {
+        console.log('Modal Debug: ' + message);
     }
 
-    // Submit form handling for reschedule request
-    const submitTutorRescheduleBtn = document.getElementById('submitTutorReschedule');
-    if (submitTutorRescheduleBtn) {
-        submitTutorRescheduleBtn.addEventListener('click', function() {
-            const form = document.getElementById('rescheduleRequestForm');
-            
-            // Check if student is selected
-            if (!form.student_id.value) {
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
-                    'Please select a student.';
-                return;
-            }
-            
-            // Check if date and time are filled
-            if (!form.original_date.value || !form.original_time.value) {
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
-                    'Please provide the lesson date and time to reschedule.';
-                return;
-            }
-            
-            // Check for reason
-            if (!form.reason.value) {
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
-                    'Please provide a reason for the reschedule request.';
-                return;
-            }
-            
-            // Check for at least one preferred time
-            let hasPreferredTime = false;
-            for (let i = 1; i <= 3; i++) {
-                if (form['preferred_date_' + i].value && form['preferred_time_' + i].value) {
-                    hasPreferredTime = true;
-                    break;
-                }
-            }
-            
-            if (!hasPreferredTime) {
-                document.getElementById('preferred-times-error').style.display = 'block';
-                return;
-            } else {
-                document.getElementById('preferred-times-error').style.display = 'none';
-            }
-            
-            // Hide error messages
-            document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
-            
-            // Add a hidden input for active tab
-            const activeTabInput = document.createElement('input');
-            activeTabInput.type = 'hidden';
-            activeTabInput.name = 'active_tab';
-            activeTabInput.value = 'requests';
-            form.appendChild(activeTabInput);
-            
-            // Store the current tab in session storage
-            sessionStorage.setItem('activeTab', 'requests');
-            
-            // Submit the form
-            form.submit();
-        });
-    }
-    
-    // Delete request button click handler
-    document.querySelectorAll('.delete-request-btn').forEach(btn => {
+    // Handle the Unavailable button click
+    document.querySelectorAll('.btn-warning[data-bs-target="#unavailableModal"]').forEach(btn => {
         btn.addEventListener('click', function() {
-            if (!confirm('Are you sure you want to delete this request?')) {
-                return;
-            }
-            
+            debugLog('Unavailable button clicked');
+
+            // Gather all data attributes
             const requestId = this.getAttribute('data-request-id');
-            const row = this.closest('tr');
-            
-            // Create a form data object
-            const formData = new FormData();
-            formData.append('delete_tutor_request', '1');
-            formData.append('request_id', requestId);
-            formData.append('action', 'delete_tutor_request');
-            
-            // Send AJAX request
-            fetch(ajaxurl, {
-                method: 'POST',
-                body: formData,
-                credentials: 'same-origin'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Remove the row from the table
-                    row.remove();
+            const studentId = this.getAttribute('data-student-id');
+            const studentName = this.getAttribute('data-student-name');
+            const originalDate = this.getAttribute('data-original-date');
+            const originalTime = this.getAttribute('data-original-time');
+            const reason = this.getAttribute('data-reason');
+            const preferredTimesAttr = this.getAttribute('data-preferred-times');
+
+            debugLog('Student Name: ' + studentName);
+            debugLog('Original Date: ' + originalDate);
+            debugLog('Original Time: ' + originalTime);
+            debugLog('Reason: ' + reason);
+            debugLog('Preferred Times: ' + preferredTimesAttr);
+
+            // Get modal elements
+            const studentNameEl = document.getElementById('unavailable_student_name');
+            const originalLessonTimeEl = document.getElementById('unavailable_original_time');
+            const preferredTimesListEl = document.getElementById('preferred_times_list');
+            const studentReasonEl = document.getElementById('unavailable_reason');
+            const requestIdInput = document.getElementById('unavailable_request_id');
+            const studentIdInput = document.getElementById('unavailable_student_id');
+
+            // Set student name
+            if (studentNameEl) {
+                studentNameEl.textContent = studentName || 'N/A';
+                debugLog('Set student name to: ' + studentNameEl.textContent);
+            } else {
+                debugLog('Student name element not found');
+            }
+
+            // Format and set original lesson time
+            if (originalLessonTimeEl) {
+                const formattedOriginalTime = formatDateTime(originalDate, originalTime);
+                originalLessonTimeEl.textContent = formattedOriginalTime || 'N/A';
+                debugLog('Set original lesson time to: ' + originalLessonTimeEl.textContent);
+            } else {
+                debugLog('Original lesson time element not found');
+            }
+
+            // Set student's reason
+            if (studentReasonEl) {
+                studentReasonEl.textContent = reason || 'No reason provided';
+                debugLog('Set reason to: ' + studentReasonEl.textContent);
+            } else {
+                debugLog('Student reason element not found');
+            }
+
+            // Set hidden inputs
+            if (requestIdInput) {
+                requestIdInput.value = requestId;
+                debugLog('Set request ID to: ' + requestId);
+            } else {
+                debugLog('Request ID input not found');
+            }
+
+            if (studentIdInput) {
+                studentIdInput.value = studentId;
+                debugLog('Set student ID to: ' + studentId);
+            } else {
+                debugLog('Student ID input not found');
+            }
+
+            // Populate preferred times list
+            if (preferredTimesListEl) {
+                preferredTimesListEl.innerHTML = ''; // Clear previous entries
+                debugLog('Cleared preferred times list');
+
+                try {
+                    const preferredTimes = JSON.parse(preferredTimesAttr);
+                    debugLog('Parsed preferred times: ' + JSON.stringify(preferredTimes));
                     
-                    // Show success message
-                    const alertDiv = document.createElement('div');
-                    alertDiv.className = 'alert alert-success';
-                    alertDiv.textContent = 'Request has been deleted successfully.';
-                    
-                    // Insert the alert at the top of the card body
-                    const cardBody = document.querySelector('.card-body');
-                    cardBody.insertBefore(alertDiv, cardBody.firstChild);
-                    
-                    // Auto-hide the alert after 3 seconds
-                    setTimeout(() => {
-                        alertDiv.remove();
-                    }, 3000);
-                } else {
-                    alert('Error: Failed to delete the request.');
+                    if (preferredTimes && preferredTimes.length > 0) {
+                        preferredTimes.forEach((time, index) => {
+                            const li = document.createElement('li');
+                            li.className = 'list-group-item';
+                            const formattedTime = formatDateTime(time.date, time.time);
+                            li.textContent = `Option ${index + 1}: ${formattedTime}`;
+                            preferredTimesListEl.appendChild(li);
+                            debugLog('Added preferred time: ' + li.textContent);
+                        });
+                    } else {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item text-muted';
+                        li.textContent = 'No preferred times provided';
+                        preferredTimesListEl.appendChild(li);
+                        debugLog('No preferred times found');
+                    }
+                } catch (error) {
+                    console.error('Error parsing preferred times:', error);
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item text-danger';
+                    li.textContent = 'Error loading preferred times';
+                    preferredTimesListEl.appendChild(li);
+                    debugLog('Error parsing preferred times');
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Error: Failed to delete the request.');
-            });
+            } else {
+                debugLog('Preferred times list element not found');
+            }
         });
     });
 
-    // Modified Session handling for tab retention
-    // Check if we should activate the requests tab
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('active_tab') === 'requests') {
-        // Show the requests tab
-        const requestsTab = document.querySelector('[href="#requests"]');
-        if (requestsTab) {
-            const tab = new bootstrap.Tab(requestsTab);
-            tab.show();
-        }
-    }
-    
-    // Keep track of active tab across page loads
-    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(tab => {
-        tab.addEventListener('shown.bs.tab', function (e) {
-            // Update the URL with the active tab
-            const id = e.target.getAttribute('href').substring(1);
-            history.replaceState(null, null, `?active_tab=${id}`);
+    // Helper function to format date and time
+    function formatDateTime(date, time) {
+        if (!date || !time) return '';
+        const dateObj = new Date(`${date}T${time}`);
+        return dateObj.toLocaleString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
         });
-    });
-    
-    // When the page loads, check for the active tab in URL
-    document.addEventListener('DOMContentLoaded', function() {
-        const params = new URLSearchParams(window.location.search);
-        const activeTab = params.get('active_tab');
-        
-        if (activeTab) {
-            const tabElement = document.querySelector(`a[href="#${activeTab}"]`);
-            if (tabElement) {
-                const tab = new bootstrap.Tab(tabElement);
-                tab.show();
-            }
-        }
-    });
+    }
+
+    // Rest of the existing code...
 });
 </script>
-
-<!-- Clear marker to ensure the content only appears in the requests tab -->
-<?php
-define('IS_REQUESTS_TAB', true);
-
-// Near the beginning of the requests tab content, add this container wrapper
-echo '<div class="reschedule-section" id="rescheduleRequestsSection">';
-
-// ... rest of reschedule requests content ...
-
-// At the end of the requests tab content
-echo '</div><!-- End reschedule-section -->';
