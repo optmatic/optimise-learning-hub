@@ -85,8 +85,11 @@
                                 <p>Please fill in all required fields (tutor, lesson, and reason).</p>
                             </div>
                             <form id="rescheduleRequestForm" method="post">
-                                <input type="hidden" name="submit_student_reschedule_request" value="1">
-                                <input type="hidden" name="student_id" value="<?php echo $current_user_id; ?>">
+                                <input type="hidden" name="submit_tutor_reschedule_request" value="1">
+                                <input type="hidden" name="tutor_id" value="<?php echo get_current_user_id(); ?>">
+                                <input type="hidden" name="tutor_name" value="<?php echo wp_get_current_user()->user_login; ?>">
+                                <input type="hidden" name="active_tab" value="requests">
+                                <input type="hidden" name="student_name" id="student_name">
                                 
                                 <div class="mb-3">
                                     <label for="tutor_select" class="form-label">Select Tutor <span class="text-danger">*</span></label>
@@ -225,7 +228,7 @@
                                 
                                 <div class="modal-footer">
                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                    <button type="button" class="btn btn-primary" id="submitStudentReschedule">Submit Request</button>
+                                    <button type="button" class="btn btn-primary" id="submitTutorReschedule">Submit Request</button>
                                 </div>
                             </form>
                         </div>
@@ -1794,6 +1797,52 @@
             }); // End of submit listener
         } // End of if (unavailableForm)
     } // End of if (unavailableModal)
+
+    // Replace the existing submitTutorRescheduleBtn click handler with this:
+    const submitTutorRescheduleBtn = document.getElementById('submitTutorReschedule');
+    const rescheduleRequestForm = document.getElementById('rescheduleRequestForm');
+
+    if (submitTutorRescheduleBtn && rescheduleRequestForm) {
+        submitTutorRescheduleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+
+            // Reset error messages
+            document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
+            document.getElementById('preferred-times-error').style.display = 'none';
+
+            // Validate form
+            const student = document.getElementById('student_select').value;
+            const lessonDate = document.getElementById('lesson_date').value;
+            const lessonTime = document.getElementById('lesson_time').value;
+            const reason = document.getElementById('reason').value;
+
+            // Check required fields
+            if (!student || !lessonDate || !lessonTime || !reason) {
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                return;
+            }
+
+            // Validate preferred times
+            const preferredDates = document.querySelectorAll('#preferred-times-container .preferred-date');
+            const preferredTimes = document.querySelectorAll('#preferred-times-container .preferred-time');
+            let hasPreferredTime = false;
+
+            for (let i = 0; i < preferredDates.length; i++) {
+                if (preferredDates[i].value && preferredTimes[i].value) {
+                    hasPreferredTime = true;
+                    break;
+                }
+            }
+
+            if (!hasPreferredTime) {
+                document.getElementById('preferred-times-error').style.display = 'block';
+                return;
+            }
+
+            // Submit the form traditionally
+            rescheduleRequestForm.submit();
+        });
+    }
 
 }); // End of DOMContentLoaded listener
 </script>
