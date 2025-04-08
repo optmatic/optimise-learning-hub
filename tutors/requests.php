@@ -858,40 +858,40 @@ if (isset($_POST['submit_tutor_reschedule_request']) || isset($_POST['confirm_re
                                 <input type="hidden" name="tutor_id" value="<?php echo get_current_user_id(); ?>">
                                 <input type="hidden" name="tutor_name" value="<?php echo wp_get_current_user()->user_login; ?>">
                                 <input type="hidden" name="active_tab" value="requests">
-                                <input type="hidden" name="student_name" id="student_name">
-                                
-                                <!-- Development Mode Checkbox -->
-                                <div class="mb-3">
-                                    <div class="form-check">
-                                        <input type="checkbox" class="form-check-input" id="devModeCheckbox">
-                                        <label class="form-check-label text-muted small" for="devModeCheckbox">
-                                            Development Mode (Fill with sample data)
-                                        </label>
-                                    </div>
-                                </div>
                                 
                                 <div class="mb-3">
                                     <label for="student_select" class="form-label">Select Student <span class="text-danger">*</span></label>
-                                    <select name="student_id" id="student_select" class="form-select" required>
-                                        <option value="">--Select student--</option>
-                                        <?php
-                                        $students = get_tutor_students();
+                                    <?php
+                                    // Get tutor's assigned students
+                                    $students = get_tutor_students();
+                                    
+                                    if (!empty($students)) {
+                                        echo '<select name="student_name" id="student_select" class="form-select" required>';
+                                        echo '<option value="">--Select student--</option>';
                                         foreach ($students as $student) {
-                                            echo '<option value="' . esc_attr($student['id']) . '" data-username="' . esc_attr($student['username']) . '">' 
-                                                 . esc_html($student['display_name']) . '</option>';
+                                            echo '<option value="' . esc_attr($student['username']) . '" data-id="' . esc_attr($student['id']) . '">' 
+                                                . esc_html($student['display_name']) . '</option>';
                                         }
-                                        ?>
-                                    </select>
+                                        echo '</select>';
+                                        echo '<input type="hidden" name="student_id" id="student_id">';
+                                    } else {
+                                        echo '<div class="alert alert-warning">No students assigned to you. Please contact support.</div>';
+                                    }
+                                    ?>
                                 </div>
                                 
                                 <div class="mb-3">
-                                    <label for="lesson_date" class="form-label">Lesson Date to Reschedule <span class="text-danger">*</span></label>
-                                    <input type="date" class="form-control" id="lesson_date" name="original_date" required>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label for="lesson_time" class="form-label">Lesson Time <span class="text-danger">*</span></label>
-                                    <input type="time" class="form-control" id="lesson_time" name="original_time" required>
+                                    <label class="form-label">Lesson to Reschedule <span class="text-danger">*</span></label>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="original_date" class="form-label small">Date</label>
+                                            <input type="date" class="form-control" id="original_date" name="original_date" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="original_time" class="form-label small">Time</label>
+                                            <input type="time" class="form-control" id="original_time" name="original_time" required>
+                                        </div>
+                                    </div>
                                 </div>
                                 
                                 <div class="mb-3">
@@ -904,7 +904,20 @@ if (isset($_POST['submit_tutor_reschedule_request']) || isset($_POST['confirm_re
                                     <p class="text-muted small">Please select at least one preferred alternative date and time.</p>
                                     
                                     <div id="preferred-times-container">
-                                        <?php render_preferred_time_inputs('', true); ?>
+                                        <?php for ($i = 1; $i <= 3; $i++): ?>
+                                        <div class="preferred-time-row mb-2">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Preferred Date <?php echo $i; ?>:</label>
+                                                    <input type="date" class="form-control preferred-date" name="preferred_date_<?php echo $i; ?>" id="preferred_date_<?php echo $i; ?>" <?php echo $i == 1 ? 'required' : ''; ?>>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Preferred Time <?php echo $i; ?>:</label>
+                                                    <input type="time" class="form-control preferred-time" name="preferred_time_<?php echo $i; ?>" id="preferred_time_<?php echo $i; ?>" <?php echo $i == 1 ? 'required' : ''; ?>>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <?php endfor; ?>
                                     </div>
                                 </div>
                                 <div id="preferred-times-error" class="text-danger mt-2" style="display: none;">
@@ -923,8 +936,8 @@ if (isset($_POST['submit_tutor_reschedule_request']) || isset($_POST['confirm_re
         </div>
     </div>
     
-    <!-- Outgoing Reschedule Requests (Tutor-initiated) -->
-    <div class="card mb-4">
+<!-- Outgoing Reschedule Requests (Tutor-initiated) -->
+     <div class="card mb-4">
         <div class="card-header bg-info text-white">
             <i class="fas fa-arrow-left me-2"></i> Your Outgoing Reschedule Requests
         </div>
@@ -1058,8 +1071,10 @@ if (isset($_POST['submit_tutor_reschedule_request']) || isset($_POST['confirm_re
             }
             ?>
         </div>
-    </div>
+    </div> 
     
+    
+
     <!-- Incoming Reschedule Requests (Student-initiated) -->
     <div class="card mb-4">
         <div class="card-header bg-warning text-dark">
@@ -1573,17 +1588,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle student selection to populate hidden field
     const studentSelect = document.getElementById('student_select');
-    const studentNameInput = document.getElementById('student_name');
-    if (studentSelect && studentNameInput) {
+    const studentIdInput = document.getElementById('student_id');
+    if (studentSelect && studentIdInput) {
         studentSelect.addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
             if (selectedOption) {
-                studentNameInput.value = selectedOption.getAttribute('data-username') || '';
+                studentIdInput.value = selectedOption.getAttribute('data-id') || '';
             }
         });
     }
 
-    // Handle tutor reschedule request form submission
+    // Set minimum date for date pickers to today
+    const today = new Date().toISOString().split('T')[0];
+    const datePickers = document.querySelectorAll('input[type="date"]');
+    datePickers.forEach(picker => {
+        picker.min = today;
+    });
+
+    // Handle form submission
     const submitTutorRescheduleBtn = document.getElementById('submitTutorReschedule');
     const rescheduleRequestForm = document.getElementById('rescheduleRequestForm');
     
@@ -1602,12 +1624,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Get form elements
             const student = document.getElementById('student_select').value;
-            const lessonDate = document.getElementById('lesson_date').value;
-            const lessonTime = document.getElementById('lesson_time').value;
+            const originalDate = document.getElementById('original_date').value;
+            const originalTime = document.getElementById('original_time').value;
             const reason = document.getElementById('reason').value;
 
             // Check required fields
-            if (!student || !lessonDate || !lessonTime || !reason) {
+            if (!student || !originalDate || !originalTime || !reason) {
                 document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
                 return;
             }
@@ -1629,79 +1651,32 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            // Validate that preferred times are different from original time
+            const originalDateTime = new Date(originalDate + 'T' + originalTime);
+            let hasValidAlternative = false;
+
+            for (let i = 0; i < preferredDates.length; i++) {
+                if (preferredDates[i].value && preferredTimes[i].value) {
+                    const preferredDateTime = new Date(preferredDates[i].value + 'T' + preferredTimes[i].value);
+                    if (preferredDateTime.getTime() !== originalDateTime.getTime()) {
+                        hasValidAlternative = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasValidAlternative) {
+                alert('Please provide at least one alternative time that is different from the original lesson time.');
+                return;
+            }
+
             // Disable form elements during submission
             const formElements = rescheduleRequestForm.querySelectorAll('input, select, textarea, button');
             formElements.forEach(el => el.disabled = true);
             submitTutorRescheduleBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
 
-            // Use AJAX to submit the form
-            const formData = new FormData(rescheduleRequestForm);
-
-            // Add a unique submission ID to prevent duplicate processing
-            const submissionId = Date.now().toString();
-            formData.append('submission_id', submissionId);
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', window.location.href, true);
-
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    // Show success message
-                    document.getElementById('rescheduleRequestSuccessMessage').style.display = 'block';
-                    document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
-
-                    // Change buttons after successful submission
-                    const footerButtons = document.querySelector('#rescheduleRequestForm .modal-footer');
-                    footerButtons.innerHTML = `
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    `;
-
-                    // Reload the page after 2 seconds
-                    setTimeout(function() {
-                        location.reload();
-                    }, 2000);
-                } else {
-                    document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                    document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent =
-                        'There was an error submitting your request. Please try again.';
-                    document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
-
-                    // Re-enable form elements
-                    formElements.forEach(el => el.disabled = false);
-                    submitTutorRescheduleBtn.disabled = false;
-                    submitTutorRescheduleBtn.innerHTML = 'Submit Request';
-                }
-            };
-
-            xhr.onerror = function() {
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent =
-                    'Network error. Please check your connection and try again.';
-                document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
-
-                formElements.forEach(el => el.disabled = false);
-                submitTutorRescheduleBtn.disabled = false;
-                submitTutorRescheduleBtn.innerHTML = 'Submit Request';
-            };
-
-            // Set a timeout in case the request takes too long
-            const timeoutId = setTimeout(function() {
-                xhr.abort();
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent =
-                    'Request timed out. Please try again.';
-                document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
-
-                formElements.forEach(el => el.disabled = false);
-                submitTutorRescheduleBtn.disabled = false;
-                submitTutorRescheduleBtn.innerHTML = 'Submit Request';
-            }, 30000); // 30 seconds timeout
-
-            xhr.onloadend = function() {
-                clearTimeout(timeoutId);
-            };
-
-            xhr.send(formData);
+            // Submit the form
+            rescheduleRequestForm.submit();
         });
     }
 
