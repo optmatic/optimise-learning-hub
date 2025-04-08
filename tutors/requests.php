@@ -1,6 +1,130 @@
-<!-- =========================== REQUESTS TAB =========================== -->
+<?php
+
+// =========================== REQUESTS TAB ===========================
+
+// Process form submissions before any output is generated
+if (isset($_POST['submit_tutor_reschedule_request']) || isset($_POST['confirm_reschedule']) || 
+    isset($_POST['decline_reschedule']) || isset($_POST['delete_tutor_request']) || 
+    isset($_POST['update_tutor_reschedule_request']) || isset($_POST['select_alternative'])) {
+    
+    error_log('Form submission detected in tutors/requests.php');
+    error_log('POST data: ' . print_r($_POST, true));
+    
+    // Store current tab in session
+    $_SESSION['active_tab'] = 'requests';
+    
+    // Process tutor reschedule request
+    if (isset($_POST['submit_tutor_reschedule_request']) && $_POST['submit_tutor_reschedule_request'] === '1') {
+        error_log('Processing tutor reschedule request');
+        
+        $tutor_id = get_current_user_id();
+        $tutor_name = wp_get_current_user()->user_login;
+        $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+        $student_name = isset($_POST['student_name']) ? sanitize_text_field($_POST['student_name']) : '';
+        $original_date = isset($_POST['original_date']) ? sanitize_text_field($_POST['original_date']) : '';
+        $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
+        $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
+        
+        error_log("Form data received:");
+        error_log("tutor_id: $tutor_id");
+        error_log("tutor_name: $tutor_name");
+        error_log("student_id: $student_id");
+        error_log("student_name: $student_name");
+        error_log("original_date: $original_date");
+        error_log("original_time: $original_time");
+        error_log("reason: $reason");
+        
+        // Validate required fields
+        if (!empty($student_id) && !empty($original_date) && !empty($original_time) && !empty($reason)) {
+            error_log('All required fields present');
+            
+            // Get student username if we only have the ID
+            if (empty($student_name) && !empty($student_id)) {
+                $student = get_user_by('id', $student_id);
+                if ($student) {
+                    $student_name = $student->user_login;
+                    error_log("Found student name: $student_name");
+                } else {
+                    error_log("Could not find student with ID: $student_id");
+                }
+            }
+            
+            // Collect preferred times
+            $preferred_times = [];
+            for ($i = 1; $i <= 3; $i++) {
+                $date = isset($_POST['preferred_date_' . $i]) ? sanitize_text_field($_POST['preferred_date_' . $i]) : '';
+                $time = isset($_POST['preferred_time_' . $i]) ? sanitize_text_field($_POST['preferred_time_' . $i]) : '';
+                
+                if (!empty($date) && !empty($time)) {
+                    $preferred_times[] = [
+                        'date' => $date,
+                        'time' => $time
+                    ];
+                }
+            }
+            error_log('Collected preferred times: ' . print_r($preferred_times, true));
+            
+            // Create the request post
+            $request = [
+                'post_title'   => 'Tutor Reschedule Request',
+                'post_content' => '',
+                'post_status'  => 'publish',
+                'post_type'    => 'progress_report',
+            ];
+            
+            error_log('Attempting to create post with data: ' . print_r($request, true));
+            $request_id = wp_insert_post($request);
+            error_log('wp_insert_post result: ' . print_r($request_id, true));
+            
+            if (!is_wp_error($request_id)) {
+                error_log('Successfully created post. Saving meta data...');
+                
+                // Save all the necessary meta data
+                update_post_meta($request_id, 'request_type', 'tutor_reschedule');
+                update_post_meta($request_id, 'tutor_id', $tutor_id);
+                update_post_meta($request_id, 'tutor_name', $tutor_name);
+                update_post_meta($request_id, 'student_id', $student_id);
+                update_post_meta($request_id, 'student_name', $student_name);
+                update_post_meta($request_id, 'original_date', $original_date);
+                update_post_meta($request_id, 'original_time', $original_time);
+                update_post_meta($request_id, 'reason', $reason);
+                update_post_meta($request_id, 'preferred_times', $preferred_times);
+                update_post_meta($request_id, 'status', 'pending');
+                
+                error_log('Successfully saved all meta data');
+                
+                // Set a transient message
+                set_transient('tutor_dashboard_message', [
+                    'type' => 'success',
+                    'text' => 'Your reschedule request has been submitted successfully.'
+                ], 60);
+                
+                error_log('Set success message transient');
+            } else {
+                error_log('Error creating post: ' . $request_id->get_error_message());
+            }
+        } else {
+            error_log('Missing required fields:');
+            error_log('student_id empty: ' . (empty($student_id) ? 'yes' : 'no'));
+            error_log('original_date empty: ' . (empty($original_date) ? 'yes' : 'no'));
+            error_log('original_time empty: ' . (empty($original_time) ? 'yes' : 'no'));
+            error_log('reason empty: ' . (empty($reason) ? 'yes' : 'no'));
+        }
+    }
+}
+
+?>
 <div class="tab-pane fade <?php echo (isset($_GET['active_tab']) && $_GET['active_tab'] == 'requests') ? 'show active' : ''; ?>" id="requests" role="tabpanel" aria-labelledby="requests-tab">
     <h4>Reschedule Requests</h4>
+    
+    <?php
+    // Display transient message if exists
+    $message = get_transient('tutor_dashboard_message');
+    if ($message) {
+        echo '<div class="alert alert-' . $message['type'] . '">' . $message['text'] . '</div>';
+        delete_transient('tutor_dashboard_message');
+    }
+    ?>
     
     <?php
     // Process confirmation of reschedule request
@@ -135,7 +259,12 @@
     
     // Add this function to handle the tutor-initiated request submission
     function process_tutor_reschedule_request() {
+        error_log('process_tutor_reschedule_request called');
+        error_log('POST data: ' . print_r($_POST, true));
+        
         if (isset($_POST['submit_tutor_reschedule_request']) && $_POST['submit_tutor_reschedule_request'] === '1') {
+            error_log('Tutor reschedule request submission detected');
+            
             $tutor_id = get_current_user_id();
             $tutor_name = wp_get_current_user()->user_login;
             $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
@@ -144,8 +273,18 @@
             $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
             $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
             
+            error_log('Processed form data:');
+            error_log("tutor_id: $tutor_id");
+            error_log("tutor_name: $tutor_name");
+            error_log("student_id: $student_id");
+            error_log("student_name: $student_name");
+            error_log("original_date: $original_date");
+            error_log("original_time: $original_time");
+            error_log("reason: $reason");
+            
             // Validate required fields
             if (empty($student_id) || empty($original_date) || empty($original_time) || empty($reason)) {
+                error_log('Validation failed - missing required fields');
                 return false;
             }
             
@@ -154,6 +293,7 @@
                 $student = get_user_by('id', $student_id);
                 if ($student) {
                     $student_name = $student->user_login;
+                    error_log("Found student name from ID: $student_name");
                 }
             }
             
@@ -170,6 +310,7 @@
                     ];
                 }
             }
+            error_log('Preferred times: ' . print_r($preferred_times, true));
             
             // Create the request post
             $request = [
@@ -179,10 +320,14 @@
                 'post_type'    => 'progress_report',
             ];
             
+            error_log('Attempting to create post with data: ' . print_r($request, true));
             $request_id = wp_insert_post($request);
+            error_log('wp_insert_post result: ' . print_r($request_id, true));
             
             if (!is_wp_error($request_id)) {
                 // Save all the necessary meta data
+                error_log('Saving post meta data for request ID: ' . $request_id);
+                
                 update_post_meta($request_id, 'request_type', 'tutor_reschedule');
                 update_post_meta($request_id, 'tutor_id', $tutor_id);
                 update_post_meta($request_id, 'tutor_name', $tutor_name);
@@ -194,10 +339,14 @@
                 update_post_meta($request_id, 'preferred_times', $preferred_times);
                 update_post_meta($request_id, 'status', 'pending');
                 
-                // Show success message
+                error_log('Successfully saved all post meta');
                 echo '<div class="alert alert-success">Your reschedule request has been submitted successfully.</div>';
                 return true;
+            } else {
+                error_log('Error creating post: ' . $request_id->get_error_message());
             }
+        } else {
+            error_log('Form submission flag not found in POST data');
         }
         return false;
     }
@@ -507,6 +656,13 @@
     
     function get_reschedule_requests($type, $status = null) {
         $current_user_id = get_current_user_id();
+        $current_user_login = wp_get_current_user()->user_login;
+        
+        error_log("Fetching reschedule requests for user ID: $current_user_id, username: $current_user_login");
+        error_log("Request type: $type");
+        if ($status) {
+            error_log("Status filter: $status");
+        }
         
         $args = [
             'post_type' => 'progress_report',
@@ -519,9 +675,17 @@
                     'compare' => '='
                 ],
                 [
-                    'key' => 'tutor_id',
-                    'value' => $current_user_id,
-                    'compare' => '='
+                    'relation' => 'OR',
+                    [
+                        'key' => 'tutor_id',
+                        'value' => $current_user_id,
+                        'compare' => '='
+                    ],
+                    [
+                        'key' => 'tutor_name',
+                        'value' => $current_user_login,
+                        'compare' => '='
+                    ]
                 ]
             ],
             'orderby' => 'date',
@@ -537,7 +701,29 @@
             ];
         }
 
-        return get_posts($args);
+        error_log('Query args: ' . print_r($args, true));
+        $posts = get_posts($args);
+        error_log('Found ' . count($posts) . ' requests');
+        
+        if (empty($posts)) {
+            error_log('No requests found. Performing debug query...');
+            // Debug query to check all progress reports
+            $debug_args = [
+                'post_type' => 'progress_report',
+                'posts_per_page' => -1,
+                'meta_key' => 'request_type',
+                'meta_value' => $type
+            ];
+            $debug_posts = get_posts($debug_args);
+            error_log('Debug: Found ' . count($debug_posts) . ' total progress reports of type ' . $type);
+            foreach ($debug_posts as $post) {
+                $post_tutor_id = get_post_meta($post->ID, 'tutor_id', true);
+                $post_tutor_name = get_post_meta($post->ID, 'tutor_name', true);
+                error_log("Debug: Post ID {$post->ID} - tutor_id: $post_tutor_id, tutor_name: $post_tutor_name");
+            }
+        }
+
+        return $posts;
     }
     
     function get_student_initiated_requests() {
@@ -670,95 +856,32 @@
                             <form id="rescheduleRequestForm" method="post">
                                 <input type="hidden" name="submit_tutor_reschedule_request" value="1">
                                 <input type="hidden" name="tutor_id" value="<?php echo get_current_user_id(); ?>">
+                                <input type="hidden" name="tutor_name" value="<?php echo wp_get_current_user()->user_login; ?>">
                                 <input type="hidden" name="active_tab" value="requests">
+                                <input type="hidden" name="student_name" id="student_name">
+                                
+                                <!-- Development Mode Checkbox -->
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" id="devModeCheckbox">
+                                        <label class="form-check-label text-muted small" for="devModeCheckbox">
+                                            Development Mode (Fill with sample data)
+                                        </label>
+                                    </div>
+                                </div>
                                 
                                 <div class="mb-3">
                                     <label for="student_select" class="form-label">Select Student <span class="text-danger">*</span></label>
-                                    <?php
-                                    // Using the approach from students/requests.php but adapted for tutors
-                                    $current_user_id = get_current_user_id();
-                                    $students = [];
-                                    
-                                    // Query for users with the student role
-                                    $student_query = new WP_User_Query([
-                                        'role' => 'student',
-                                        'fields' => ['ID', 'user_login', 'display_name']
-                                    ]);
-                                    
-                                    // Get all students
-                                    $all_students = $student_query->get_results();
-                                    
-                                    // Check which students are assigned to the current tutor
-                                    foreach ($all_students as $student) {
-                                        $assigned_tutors = get_user_meta($student->ID, 'assigned_tutors', true);
-                                        // Check if current tutor ID is in the assigned tutors list
-                                        if (!empty($assigned_tutors)) {
-                                            $tutor_ids = explode(',', $assigned_tutors);
-                                            if (in_array($current_user_id, $tutor_ids)) {
-                                                // Get student's first and last name
-                                                $first_name = get_user_meta($student->ID, 'first_name', true);
-                                                $last_name = get_user_meta($student->ID, 'last_name', true);
-                                                
-                                                // Use full name if available, otherwise use display name
-                                                $display_name = (!empty($first_name) && !empty($last_name)) 
-                                                    ? $first_name . ' ' . $last_name 
-                                                    : $student->display_name;
-                                                
-                                                $students[] = [
-                                                    'id' => $student->ID,
-                                                    'username' => $student->user_login,
-                                                    'display_name' => $display_name
-                                                ];
-                                            }
-                                        }
-                                        
-                                        // Also check if the tutor is listed in assigned_students meta of the tutor
-                                        $assigned_students = get_user_meta($current_user_id, 'assigned_students', true);
-                                        if (!empty($assigned_students)) {
-                                            $student_ids = explode(',', $assigned_students);
-                                            if (in_array($student->ID, $student_ids)) {
-                                                // Get student's first and last name
-                                                $first_name = get_user_meta($student->ID, 'first_name', true);
-                                                $last_name = get_user_meta($student->ID, 'last_name', true);
-                                                
-                                                // Use full name if available, otherwise use display name
-                                                $display_name = (!empty($first_name) && !empty($last_name)) 
-                                                    ? $first_name . ' ' . $last_name 
-                                                    : $student->display_name;
-                                                
-                                                // Only add if not already in the array
-                                                $exists = false;
-                                                foreach ($students as $existing) {
-                                                    if ($existing['id'] == $student->ID) {
-                                                        $exists = true;
-                                                        break;
-                                                    }
-                                                }
-                                                
-                                                if (!$exists) {
-                                                    $students[] = [
-                                                        'id' => $student->ID,
-                                                        'username' => $student->user_login,
-                                                        'display_name' => $display_name
-                                                    ];
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
-                                    if (!empty($students)) {
-                                        echo '<select name="student_id" id="student_select" class="form-select" required>';
-                                        echo '<option value="">--Select student--</option>';
+                                    <select name="student_id" id="student_select" class="form-select" required>
+                                        <option value="">--Select student--</option>
+                                        <?php
+                                        $students = get_tutor_students();
                                         foreach ($students as $student) {
                                             echo '<option value="' . esc_attr($student['id']) . '" data-username="' . esc_attr($student['username']) . '">' 
                                                  . esc_html($student['display_name']) . '</option>';
                                         }
-                                        echo '</select>';
-                                        echo '<input type="hidden" name="student_name" id="student_name">';
-                                    } else {
-                                        echo '<div class="alert alert-warning">No students assigned to you. Please contact support.</div>';
-                                    }
-                                    ?>
+                                        ?>
+                                    </select>
                                 </div>
                                 
                                 <div class="mb-3">
@@ -777,8 +900,8 @@
                                 </div>
                                 
                                 <div class="mb-3">
-                                    <label class="form-label">Preferred Alternative Times</label>
-                                    <p class="text-muted small">Please select up to 3 preferred alternative dates and times.</p>
+                                    <label class="form-label">Preferred Alternative Times <span class="text-danger">*</span></label>
+                                    <p class="text-muted small">Please select at least one preferred alternative date and time.</p>
                                     
                                     <div id="preferred-times-container">
                                         <?php render_preferred_time_inputs('', true); ?>
@@ -808,7 +931,27 @@
         <div class="card-body">
             <?php
             // Get tutor's reschedule requests
-            $tutor_requests = get_reschedule_requests('tutor_reschedule');
+            $tutor_requests_args = array(
+                'post_type'      => 'progress_report',
+                'posts_per_page' => -1,
+                'meta_query'     => array(
+                    'relation' => 'AND',
+                    array(
+                        'key'     => 'tutor_id',
+                        'value'   => get_current_user_id(),
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key'     => 'request_type',
+                        'value'   => 'tutor_reschedule',
+                        'compare' => '=',
+                    )
+                ),
+                'order'          => 'DESC',
+                'orderby'        => 'date'
+            );
+            
+            $tutor_requests = get_posts($tutor_requests_args);
             
             if (!empty($tutor_requests)) {
                 echo '<div class="table-responsive">';
@@ -1448,11 +1591,16 @@ document.addEventListener('DOMContentLoaded', function() {
         submitTutorRescheduleBtn.addEventListener('click', function(e) {
             e.preventDefault();
 
+            // Check if button is already disabled (preventing duplicate submissions)
+            if (this.disabled) {
+                return;
+            }
+
             // Reset error messages
             document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
             document.getElementById('preferred-times-error').style.display = 'none';
 
-            // Validate form
+            // Get form elements
             const student = document.getElementById('student_select').value;
             const lessonDate = document.getElementById('lesson_date').value;
             const lessonTime = document.getElementById('lesson_time').value;
@@ -1486,43 +1634,74 @@ document.addEventListener('DOMContentLoaded', function() {
             formElements.forEach(el => el.disabled = true);
             submitTutorRescheduleBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
 
-            // Submit form
+            // Use AJAX to submit the form
             const formData = new FormData(rescheduleRequestForm);
 
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(html => {
-                // Show success message
-                document.getElementById('rescheduleRequestSuccessMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
+            // Add a unique submission ID to prevent duplicate processing
+            const submissionId = Date.now().toString();
+            formData.append('submission_id', submissionId);
 
-                // Reset form
-                rescheduleRequestForm.reset();
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', window.location.href, true);
 
-                // Change modal footer
-                const modalFooter = submitTutorRescheduleBtn.closest('.modal-footer');
-                modalFooter.innerHTML = `
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                `;
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    // Show success message
+                    document.getElementById('rescheduleRequestSuccessMessage').style.display = 'block';
+                    document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
 
-                // Reload page after 2 seconds
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
-            })
-            .catch(error => {
-                console.error('Error:', error);
+                    // Change buttons after successful submission
+                    const footerButtons = document.querySelector('#rescheduleRequestForm .modal-footer');
+                    footerButtons.innerHTML = `
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    `;
+
+                    // Reload the page after 2 seconds
+                    setTimeout(function() {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                    document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent =
+                        'There was an error submitting your request. Please try again.';
+                    document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
+
+                    // Re-enable form elements
+                    formElements.forEach(el => el.disabled = false);
+                    submitTutorRescheduleBtn.disabled = false;
+                    submitTutorRescheduleBtn.innerHTML = 'Submit Request';
+                }
+            };
+
+            xhr.onerror = function() {
                 document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
-                    'An error occurred while submitting your request. Please try again.';
-                
-                // Re-enable form elements
+                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent =
+                    'Network error. Please check your connection and try again.';
+                document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
+
                 formElements.forEach(el => el.disabled = false);
+                submitTutorRescheduleBtn.disabled = false;
                 submitTutorRescheduleBtn.innerHTML = 'Submit Request';
-            });
+            };
+
+            // Set a timeout in case the request takes too long
+            const timeoutId = setTimeout(function() {
+                xhr.abort();
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent =
+                    'Request timed out. Please try again.';
+                document.getElementById('rescheduleRequestSuccessMessage').style.display = 'none';
+
+                formElements.forEach(el => el.disabled = false);
+                submitTutorRescheduleBtn.disabled = false;
+                submitTutorRescheduleBtn.innerHTML = 'Submit Request';
+            }, 30000); // 30 seconds timeout
+
+            xhr.onloadend = function() {
+                clearTimeout(timeoutId);
+            };
+
+            xhr.send(formData);
         });
     }
 
@@ -1604,5 +1783,180 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // Development Mode: Generate sample data
+    const devModeCheckbox = document.getElementById('devModeCheckbox');
+    if (devModeCheckbox) {
+        devModeCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                console.log('Development mode enabled - filling form with sample data');
+                
+                // Generate random dates and times
+                const today = new Date();
+                const nextWeek = new Date(today);
+                nextWeek.setDate(today.getDate() + 7);
+                
+                // Random student selection
+                const studentSelect = document.getElementById('student_select');
+                const studentNameInput = document.getElementById('student_name');
+                if (studentSelect && studentSelect.options.length > 1) {
+                    console.log('Setting random student');
+                    const randomIndex = Math.floor(Math.random() * (studentSelect.options.length - 1)) + 1;
+                    studentSelect.selectedIndex = randomIndex;
+                    
+                    // Get the selected option's data-username attribute
+                    const selectedOption = studentSelect.options[randomIndex];
+                    if (selectedOption && studentNameInput) {
+                        studentNameInput.value = selectedOption.getAttribute('data-username') || '';
+                    }
+                    
+                    // Trigger both change and input events
+                    studentSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    studentSelect.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                
+                // Random lesson date (next week)
+                const lessonDate = document.getElementById('lesson_date');
+                if (lessonDate) {
+                    console.log('Setting random lesson date');
+                    const randomDate = new Date(nextWeek);
+                    randomDate.setDate(nextWeek.getDate() + Math.floor(Math.random() * 7));
+                    lessonDate.value = randomDate.toISOString().split('T')[0];
+                    lessonDate.dispatchEvent(new Event('change', { bubbles: true }));
+                    lessonDate.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                
+                // Random lesson time
+                const lessonTime = document.getElementById('lesson_time');
+                if (lessonTime) {
+                    console.log('Setting random lesson time');
+                    const hours = Math.floor(Math.random() * 12) + 9; // 9 AM to 8 PM
+                    const minutes = Math.random() < 0.5 ? '00' : '30';
+                    lessonTime.value = `${hours.toString().padStart(2, '0')}:${minutes}`;
+                    lessonTime.dispatchEvent(new Event('change', { bubbles: true }));
+                    lessonTime.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                
+                // Random reason
+                const reason = document.getElementById('reason');
+                if (reason) {
+                    console.log('Setting random reason');
+                    const reasons = [
+                        "I have a conflicting appointment that came up",
+                        "I need to attend an important family event",
+                        "I'm feeling under the weather and need to reschedule",
+                        "I have an unexpected work commitment",
+                        "I need to reschedule due to an urgent matter",
+                        "I have a scheduling conflict with another student",
+                        "There's an important professional development event I need to attend",
+                        "I need to accommodate an emergency situation"
+                    ];
+                    reason.value = reasons[Math.floor(Math.random() * reasons.length)];
+                    reason.dispatchEvent(new Event('change', { bubbles: true }));
+                    reason.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                
+                // Random preferred times
+                console.log('Setting random preferred times');
+                const usedDates = new Set(); // To ensure unique dates
+                
+                for (let i = 1; i <= 3; i++) {
+                    const dateInput = document.getElementById(`preferred_date_${i}`);
+                    const timeInput = document.getElementById(`preferred_time_${i}`);
+                    
+                    if (dateInput && timeInput) {
+                        let randomDate;
+                        let dateStr;
+                        
+                        // Keep generating dates until we get a unique one
+                        do {
+                            randomDate = new Date(nextWeek);
+                            randomDate.setDate(nextWeek.getDate() + Math.floor(Math.random() * 14) + 1);
+                            dateStr = randomDate.toISOString().split('T')[0];
+                        } while (usedDates.has(dateStr));
+                        
+                        usedDates.add(dateStr);
+                        dateInput.value = dateStr;
+                        
+                        const hours = Math.floor(Math.random() * 12) + 9;
+                        const minutes = Math.random() < 0.5 ? '00' : '30';
+                        timeInput.value = `${hours.toString().padStart(2, '0')}:${minutes}`;
+                        
+                        // Trigger events
+                        dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        dateInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        timeInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        timeInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                }
+                
+                // Validate the form after filling
+                console.log('Validating filled form');
+                const form = document.getElementById('rescheduleRequestForm');
+                if (form) {
+                    // Trigger form validation
+                    form.checkValidity();
+                    form.dispatchEvent(new Event('change', { bubbles: true }));
+                    
+                    // Hide any error messages that might be showing
+                    const errorMessages = form.querySelectorAll('.alert-danger, .text-danger');
+                    errorMessages.forEach(msg => msg.style.display = 'none');
+                }
+                
+                console.log('Sample data population complete');
+            } else {
+                console.log('Development mode disabled - clearing form');
+                // Clear all form fields
+                const form = document.getElementById('rescheduleRequestForm');
+                if (form) {
+                    form.reset();
+                    
+                    // Clear any populated hidden fields
+                    const hiddenFields = form.querySelectorAll('input[type="hidden"]');
+                    hiddenFields.forEach(field => {
+                        if (!['submit_tutor_reschedule_request', 'tutor_id', 'tutor_name', 'active_tab'].includes(field.name)) {
+                            field.value = '';
+                        }
+                    });
+                    
+                    // Trigger form validation
+                    form.checkValidity();
+                    form.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        });
+        
+        // Add keyboard shortcut (Ctrl/Cmd + Shift + D) to toggle dev mode
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+                e.preventDefault(); // Prevent default browser behavior
+                devModeCheckbox.checked = !devModeCheckbox.checked;
+                devModeCheckbox.dispatchEvent(new Event('change'));
+            }
+        });
+    }
+
+    // Fix for the invalid selector error
+    function replaceDeclineButtons() {
+        // Use separate selectors for danger buttons and decline buttons
+        const dangerButtons = document.querySelectorAll('button.btn-danger');
+        const declineButtons = Array.from(document.querySelectorAll('button')).filter(button => 
+            button.textContent.trim().toLowerCase() === 'decline'
+        );
+        
+        // Combine the button collections
+        const allButtons = [...dangerButtons, ...declineButtons];
+        
+        allButtons.forEach(button => {
+            // Your button replacement logic here
+            // For example:
+            button.classList.add('btn-warning');
+            button.classList.remove('btn-danger');
+            button.innerHTML = '<i class="fas fa-times"></i> Unavailable';
+        });
+    }
+
+    // Call the fixed function
+    replaceDeclineButtons();
 });
 </script>
