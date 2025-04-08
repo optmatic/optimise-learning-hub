@@ -1862,3 +1862,56 @@ function wrap_reschedule_content($content) {
     return $content;
 }
 add_filter('the_content', 'wrap_reschedule_content', 999);
+
+// AJAX handler for getting student lessons
+add_action('wp_ajax_get_student_lessons', 'get_student_lessons_ajax');
+function get_student_lessons_ajax() {
+    if (!isset($_POST['student_id'])) {
+        wp_send_json_error('No student ID provided');
+        return;
+    }
+
+    $student_id = intval($_POST['student_id']);
+    $now = new DateTime('now', new DateTimeZone('Australia/Brisbane'));
+    $lesson_schedule = get_user_meta($student_id, 'lesson_schedule_list', true);
+    $options_html = '<option value="">--Select a scheduled lesson--</option>';
+
+    if (!empty($lesson_schedule)) {
+        $lessons = explode("\n", $lesson_schedule);
+        $upcoming_lessons = [];
+        
+        foreach ($lessons as $lesson) {
+            if (!empty(trim($lesson)) && preg_match('/on ([A-Za-z]+) (\d+) ([A-Za-z]+) (\d{4}) at (\d{2}:\d{2})/', $lesson, $matches)) {
+                $date_string = $matches[1] . ' ' . $matches[2] . ' ' . $matches[3] . ' ' . $matches[4] . ' ' . $matches[5];
+                $lesson_date = DateTime::createFromFormat('l d F Y H:i', $date_string, new DateTimeZone('Australia/Brisbane'));
+                
+                if ($lesson_date > $now) {
+                    $subject = 'Lesson';
+                    if (stripos($lesson, 'mathematics') !== false) $subject = 'Mathematics';
+                    elseif (stripos($lesson, 'english') !== false) $subject = 'English';
+                    elseif (stripos($lesson, 'chemistry') !== false) $subject = 'Chemistry';
+                    elseif (stripos($lesson, 'physics') !== false) $subject = 'Physics';
+                    
+                    $upcoming_lessons[] = [
+                        'date' => $lesson_date,
+                        'formatted' => $lesson_date->format('l, jS \of F Y \a\t g:i A'),
+                        'subject' => $subject,
+                        'date_value' => $lesson_date->format('Y-m-d'),
+                        'time_value' => $lesson_date->format('H:i:s')
+                    ];
+                }
+            }
+        }
+        
+        usort($upcoming_lessons, function($a, $b) {
+            return $a['date']->getTimestamp() - $b['date']->getTimestamp();
+        });
+        
+        foreach ($upcoming_lessons as $lesson) {
+            $options_html .= '<option value="' . $lesson['date_value'] . '|' . $lesson['time_value'] . '">' 
+                . $lesson['subject'] . ' - ' . $lesson['formatted'] . '</option>';
+        }
+    }
+
+    wp_send_json_success($options_html);
+}

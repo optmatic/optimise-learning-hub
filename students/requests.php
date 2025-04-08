@@ -5,35 +5,35 @@
     <!-- Notifications Section -->
     <div class="mb-4" id="requestNotifications">
         <?php
-        // Count pending reschedule requests
-        $pending_reschedule_count = count(get_posts(array(
-            'post_type'      => 'progress_report',
-            'posts_per_page' => -1,
-            'meta_query'     => array(
-                'relation' => 'AND',
-                array('key' => 'student_id', 'value' => get_current_user_id(), 'compare' => '='),
-                array('key' => 'request_type', 'value' => 'tutor_reschedule', 'compare' => '='),
-                array('key' => 'status', 'value' => 'pending', 'compare' => '=')
-            ),
-            'fields'         => 'ids'
-        )));
+        $current_user_id = get_current_user_id();
         
-        // Count pending alternative times
-        $alternatives_count = count(get_posts(array(
-            'post_type'      => 'progress_report',
+        // Get counts of pending requests
+        $pending_reschedule_count = count(get_posts([
+            'post_type' => 'progress_report',
             'posts_per_page' => -1,
-            'meta_query'     => array(
+            'meta_query' => [
                 'relation' => 'AND',
-                array('key' => 'student_id', 'value' => get_current_user_id(), 'compare' => '='),
-                array('key' => 'request_type', 'value' => 'tutor_unavailable', 'compare' => '='),
-                array('key' => 'status', 'value' => 'pending', 'compare' => '=')
-            ),
-            'fields'         => 'ids'
-        )));
+                ['key' => 'student_id', 'value' => $current_user_id, 'compare' => '='],
+                ['key' => 'request_type', 'value' => 'tutor_reschedule', 'compare' => '='],
+                ['key' => 'status', 'value' => 'pending', 'compare' => '=']
+            ],
+            'fields' => 'ids'
+        ]));
         
-        // Display notifications if any exist
-        if ($pending_reschedule_count > 0 || $alternatives_count > 0):
-        ?>
+        $alternatives_count = count(get_posts([
+            'post_type' => 'progress_report',
+            'posts_per_page' => -1,
+            'meta_query' => [
+                'relation' => 'AND',
+                ['key' => 'student_id', 'value' => $current_user_id, 'compare' => '='],
+                ['key' => 'request_type', 'value' => 'tutor_unavailable', 'compare' => '='],
+                ['key' => 'status', 'value' => 'pending', 'compare' => '=']
+            ],
+            'fields' => 'ids'
+        ]));
+        
+        // Display notifications
+        if ($pending_reschedule_count > 0 || $alternatives_count > 0): ?>
             <div class="alert alert-info">
                 <h5><i class="fas fa-bell me-2"></i>Notifications</h5>
                 <ul class="mb-0">
@@ -86,44 +86,37 @@
                             </div>
                             <form id="rescheduleRequestForm" method="post">
                                 <input type="hidden" name="submit_student_reschedule_request" value="1">
-                                <input type="hidden" name="student_id" value="<?php echo get_current_user_id(); ?>">
+                                <input type="hidden" name="student_id" value="<?php echo $current_user_id; ?>">
                                 
                                 <div class="mb-3">
                                     <label for="tutor_select" class="form-label">Select Tutor <span class="text-danger">*</span></label>
                                     <?php
-                                    // Get the student's assigned tutors
-                                    $current_user_id = get_current_user_id();
-                                    $tutors = array();
+                                    // Get student's assigned tutors
+                                    $tutors = [];
                                     
-                                    // Query for users with the tutor role
-                                    $tutor_query = new WP_User_Query(array(
+                                    // Query tutors
+                                    $tutor_query = new WP_User_Query([
                                         'role' => 'tutor',
-                                        'fields' => array('ID', 'user_login', 'display_name')
-                                    ));
+                                        'fields' => ['ID', 'user_login', 'display_name']
+                                    ]);
                                     
-                                    // Get all tutors
-                                    $all_tutors = $tutor_query->get_results();
-                                    
-                                    // Check each tutor to see if the current student is assigned to them
-                                    foreach ($all_tutors as $tutor) {
+                                    // Check if current student is assigned to each tutor
+                                    foreach ($tutor_query->get_results() as $tutor) {
                                         $assigned_students = get_user_meta($tutor->ID, 'assigned_students', true);
                                         if (!empty($assigned_students)) {
                                             $student_ids = explode(',', $assigned_students);
                                             if (in_array($current_user_id, $student_ids)) {
-                                                // Get tutor's first and last name
                                                 $first_name = get_user_meta($tutor->ID, 'first_name', true);
                                                 $last_name = get_user_meta($tutor->ID, 'last_name', true);
-                                                
-                                                // Use full name if available, otherwise use display name
                                                 $display_name = (!empty($first_name) && !empty($last_name)) 
                                                     ? $first_name . ' ' . $last_name 
                                                     : $tutor->display_name;
                                                 
-                                                $tutors[] = array(
+                                                $tutors[] = [
                                                     'id' => $tutor->ID,
                                                     'username' => $tutor->user_login,
                                                     'display_name' => $display_name
-                                                );
+                                                ];
                                             }
                                         }
                                     }
@@ -132,7 +125,6 @@
                                         echo '<select name="tutor_name" id="tutor_select" class="form-select" required>';
                                         echo '<option value="">--Select tutor--</option>';
                                         foreach ($tutors as $tutor) {
-                                            // Store username as value but display full name to user
                                             echo '<option value="' . esc_attr($tutor['username']) . '">' . esc_html($tutor['display_name']) . '</option>';
                                         }
                                         echo '</select>';
@@ -146,47 +138,38 @@
                                     <label for="lesson_select" class="form-label">Lesson Date to Reschedule <span class="text-danger">*</span></label>
                                     <select class="form-select" id="lesson_select" name="lesson_select" required>
                                         <option value="">--Select a scheduled lesson--</option>
-                            <?php
-                                        // Get current date for comparison
+                                        <?php
+                                        // Get current date
                                         $now = new DateTime('now', new DateTimeZone('Australia/Brisbane'));
                                         
-                                        // Get the student's lesson schedule
-                                        $lesson_schedule = get_user_meta(get_current_user_id(), 'lesson_schedule_list', true);
+                                        // Get lesson schedule
+                                        $lesson_schedule = get_user_meta($current_user_id, 'lesson_schedule_list', true);
                                         
                                         if (!empty($lesson_schedule)) {
                                             $lessons = explode("\n", $lesson_schedule);
                                             $upcoming_lessons = [];
                                             
-                                            // Process each lesson in the schedule
+                                            // Extract future lessons
                                             foreach ($lessons as $lesson) {
-                                                if (!empty(trim($lesson))) {
-                                                    // Extract date and time using regex
-                                                    if (preg_match('/on ([A-Za-z]+) (\d+) ([A-Za-z]+) (\d{4}) at (\d{2}:\d{2})/', $lesson, $matches)) {
-                                                        $date_string = $matches[1] . ' ' . $matches[2] . ' ' . $matches[3] . ' ' . $matches[4] . ' ' . $matches[5];
-                                                        $lesson_date = DateTime::createFromFormat('l d F Y H:i', $date_string, new DateTimeZone('Australia/Brisbane'));
+                                                if (!empty(trim($lesson)) && preg_match('/on ([A-Za-z]+) (\d+) ([A-Za-z]+) (\d{4}) at (\d{2}:\d{2})/', $lesson, $matches)) {
+                                                    $date_string = $matches[1] . ' ' . $matches[2] . ' ' . $matches[3] . ' ' . $matches[4] . ' ' . $matches[5];
+                                                    $lesson_date = DateTime::createFromFormat('l d F Y H:i', $date_string, new DateTimeZone('Australia/Brisbane'));
+                                                    
+                                                    if ($lesson_date > $now) {
+                                                        // Determine subject
+                                                        $subject = 'Lesson';
+                                                        if (stripos($lesson, 'mathematics') !== false) $subject = 'Mathematics';
+                                                        elseif (stripos($lesson, 'english') !== false) $subject = 'English';
+                                                        elseif (stripos($lesson, 'chemistry') !== false) $subject = 'Chemistry';
+                                                        elseif (stripos($lesson, 'physics') !== false) $subject = 'Physics';
                                                         
-                                                        // Only include future lessons
-                                                        if ($lesson_date > $now) {
-                                                            // Determine subject
-                                                            $subject = 'Lesson';
-                                                            if (stripos($lesson, 'mathematics') !== false) {
-                                                                $subject = 'Mathematics';
-                                                            } elseif (stripos($lesson, 'english') !== false) {
-                                                                $subject = 'English';
-                                                            } elseif (stripos($lesson, 'chemistry') !== false) {
-                                                                $subject = 'Chemistry';
-                                                            } elseif (stripos($lesson, 'physics') !== false) {
-                                                                $subject = 'Physics';
-                                                            }
-                                                            
-                                                            $upcoming_lessons[] = [
-                                                                'date' => $lesson_date,
-                                                                'formatted' => $lesson_date->format('l, jS \of F Y \a\t g:i A'),
-                                                                'subject' => $subject,
-                                                                'date_value' => $lesson_date->format('Y-m-d'),
-                                                                'time_value' => $lesson_date->format('H:i:s')
-                                                            ];
-                                                        }
+                                                        $upcoming_lessons[] = [
+                                                            'date' => $lesson_date,
+                                                            'formatted' => $lesson_date->format('l, jS \of F Y \a\t g:i A'),
+                                                            'subject' => $subject,
+                                                            'date_value' => $lesson_date->format('Y-m-d'),
+                                                            'time_value' => $lesson_date->format('H:i:s')
+                                                        ];
                                                     }
                                                 }
                                             }
@@ -196,7 +179,7 @@
                                                 return $a['date']->getTimestamp() - $b['date']->getTimestamp();
                                             });
                                             
-                                            // Output options for the select dropdown
+                                            // Output options
                                             foreach ($upcoming_lessons as $lesson) {
                                                 echo '<option value="' . $lesson['date_value'] . '|' . $lesson['time_value'] . '">' 
                                                     . $lesson['subject'] . ' - ' . $lesson['formatted'] . '</option>';
@@ -205,7 +188,7 @@
                                         ?>
                                     </select>
                                     
-                                    <!-- Hidden fields to store the selected date and time -->
+                                    <!-- Hidden fields for date/time -->
                                     <input type="hidden" id="original_date" name="original_date">
                                     <input type="hidden" id="original_time" name="original_time">
                                 </div>
@@ -220,47 +203,20 @@
                                     <p class="text-muted small">Please select at least one preferred alternative date and time.</p>
                                     
                                     <div id="preferred-times-container">
-                                        <!-- Preferred Time 1 -->
+                                        <?php for ($i = 1; $i <= 3; $i++): ?>
                                         <div class="preferred-time-row mb-2">
                                             <div class="row">
                                                 <div class="col-md-6">
-                                                    <label class="form-label small">Preferred Date 1:</label>
-                                                    <input type="date" class="form-control preferred-date" name="preferred_date_1" id="preferred_date_1" required>
+                                                    <label class="form-label small">Preferred Date <?php echo $i; ?>:</label>
+                                                    <input type="date" class="form-control preferred-date" name="preferred_date_<?php echo $i; ?>" id="preferred_date_<?php echo $i; ?>" <?php echo $i == 1 ? 'required' : ''; ?>>
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <label class="form-label small">Preferred Time 1:</label>
-                                                    <input type="time" class="form-control preferred-time" name="preferred_time_1" id="preferred_time_1" required>
+                                                    <label class="form-label small">Preferred Time <?php echo $i; ?>:</label>
+                                                    <input type="time" class="form-control preferred-time" name="preferred_time_<?php echo $i; ?>" id="preferred_time_<?php echo $i; ?>" <?php echo $i == 1 ? 'required' : ''; ?>>
                                                 </div>
                                             </div>
                                         </div>
-                                        
-                                        <!-- Preferred Time 2 -->
-                                        <div class="preferred-time-row mb-2">
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <label class="form-label small">Preferred Date 2:</label>
-                                                    <input type="date" class="form-control preferred-date" name="preferred_date_2" id="preferred_date_2">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label small">Preferred Time 2:</label>
-                                                    <input type="time" class="form-control preferred-time" name="preferred_time_2" id="preferred_time_2">
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Preferred Time 3 -->
-                                        <div class="preferred-time-row mb-2">
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <label class="form-label small">Preferred Date 3:</label>
-                                                    <input type="date" class="form-control preferred-date" name="preferred_date_3" id="preferred_date_3">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label small">Preferred Time 3:</label>
-                                                    <input type="time" class="form-control preferred-time" name="preferred_time_3" id="preferred_time_3">
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <?php endfor; ?>
                                     </div>
                                 </div>
                                 <div id="preferred-times-error" class="text-danger mt-2" style="display: none;">
@@ -865,6 +821,177 @@
                 echo '</div>';
                 
                 echo '<button type="submit" class="btn btn-success">Accept Selected Time</button>';
+                echo '</form>';
+            } else {
+                // Show the confirmed alternative
+                $selected_index = get_post_meta($request_id, 'selected_alternative', true);
+                $selected_alternative = $alternatives[$selected_index];
+                
+                $formatted_selected_date = date('l, jS \of F, Y', strtotime($selected_alternative['date']));
+                $formatted_selected_time = date('g:i A', strtotime($selected_alternative['time']));
+                
+                echo '<div class="alert alert-success">';
+                echo '<p><strong>Confirmed Time:</strong> ' . $formatted_selected_date . ' at ' . $formatted_selected_time . '</p>';
+                echo '</div>';
+            }
+            
+            echo '</div>'; // End accordion-body
+            echo '</div>'; // End accordion-collapse
+            echo '</div>'; // End accordion-item
+            
+            $counter++;
+        }
+        
+        echo '</div>'; // End accordion
+        echo '</div>'; // End card-body
+        echo '</div>'; // End card
+    }
+    ?>
+
+    <?php
+    // Get student alternative times requests
+    $student_alternative_args = array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            'relation' => 'AND',
+            array(
+                'key'     => 'tutor_id',
+                'value'   => get_current_user_id(),
+                'compare' => '=',
+            ),
+            array(
+                'key'     => 'request_type',
+                'value'   => 'student_unavailable',
+                'compare' => '=',
+            )
+        ),
+        'order'          => 'DESC',
+        'orderby'        => 'date'
+    );
+
+    $student_alternative_requests = get_posts($student_alternative_args);
+
+    if (!empty($student_alternative_requests)) {
+        echo '<div class="card mb-4" id="studentAlternativeTimesSection">';
+        echo '<div class="card-header bg-info text-white">';
+        echo '<div class="d-flex justify-content-between align-items-center">';
+        echo '<div><i class="fas fa-calendar-alt me-2"></i> Student Alternative Times</div>';
+        
+        // Add notification badge for pending alternatives
+        $pending_student_alternatives = count(get_posts(array(
+            'post_type'      => 'progress_report',
+            'posts_per_page' => -1,
+            'meta_query'     => array(
+                'relation' => 'AND',
+                array('key' => 'tutor_id', 'value' => get_current_user_id(), 'compare' => '='),
+                array('key' => 'request_type', 'value' => 'student_unavailable', 'compare' => '='),
+                array('key' => 'status', 'value' => 'pending', 'compare' => '=')
+            ),
+            'fields'         => 'ids'
+        )));
+        
+        if ($pending_student_alternatives > 0) {
+            echo '<span class="badge bg-danger">' . $pending_student_alternatives . '</span>';
+        }
+        
+        echo '</div>'; // End d-flex
+        echo '</div>'; // End card-header
+        echo '<div class="card-body">';
+        
+        // Display a highlighted message if there are pending alternatives
+        if ($pending_student_alternatives > 0) {
+            echo '<div class="alert alert-warning mb-3">';
+            echo '<i class="fas fa-exclamation-circle me-2"></i> You have <strong>' . $pending_student_alternatives . '</strong> pending student alternative time suggestion';
+            echo $pending_student_alternatives > 1 ? 's' : '';
+            echo ' that require your response.';
+            echo '</div>';
+        }
+        
+        echo '<p>Your students are unavailable for the originally requested times and have provided alternative times. Please review and select a time that works for you:</p>';
+        
+        echo '<div class="accordion" id="studentAlternativeAccordion">';
+        $counter = 1;
+        
+        foreach ($student_alternative_requests as $request) {
+            $request_id = $request->ID;
+            $original_request_id = get_post_meta($request_id, 'original_request_id', true);
+            $student_name = get_post_meta($request_id, 'student_name', true);
+            $student_id = get_post_meta($request_id, 'student_id', true);
+            $alternatives = get_post_meta($request_id, 'alternatives', true);
+            $status = get_post_meta($request_id, 'status', true);
+            $request_date = get_the_date('F j, Y', $request_id);
+            
+            // Get student's full name
+            $student_full_name = get_student_display_name($student_name);
+            
+            // Get original request details
+            $original_date = get_post_meta($original_request_id, 'original_date', true);
+            $original_time = get_post_meta($original_request_id, 'original_time', true);
+            
+            // Format the original date for display
+            $formatted_original_date = !empty($original_date) ? date('l, jS \of F, Y', strtotime($original_date)) : 'N/A';
+            $formatted_original_time = !empty($original_time) ? date('g:i A', strtotime($original_time)) : '';
+            
+            // Set status badge
+            $status_badge = '';
+            if ($status === 'confirmed') {
+                $status_badge = '<span class="badge bg-success">Confirmed</span>';
+            } else {
+                $status_badge = '<span class="badge bg-warning">Pending</span>';
+            }
+            
+            echo '<div class="accordion-item">';
+            echo '<h2 class="accordion-header" id="studentAlternativeHeading' . $counter . '">';
+            echo '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                    data-bs-target="#studentAlternativeCollapse' . $counter . '" aria-expanded="false" 
+                    aria-controls="studentAlternativeCollapse' . $counter . '">';
+            echo 'Alternative Times - ' . $request_date . ' from ' . $student_full_name . ' ' . $status_badge;
+            echo '</button>';
+            echo '</h2>';
+            
+            echo '<div id="studentAlternativeCollapse' . $counter . '" class="accordion-collapse collapse" 
+                    aria-labelledby="studentAlternativeHeading' . $counter . '" data-bs-parent="#studentAlternativeAccordion">';
+            echo '<div class="accordion-body">';
+            
+            echo '<div class="card mb-3">';
+            echo '<div class="card-header bg-light">Original Requested Lesson</div>';
+            echo '<div class="card-body">';
+            echo '<p><strong>Date:</strong> ' . $formatted_original_date . '</p>';
+            if (!empty($formatted_original_time)) {
+                echo '<p><strong>Time:</strong> ' . $formatted_original_time . '</p>';
+            }
+            echo '<p><strong>Student:</strong> ' . esc_html($student_full_name) . '</p>';
+            echo '</div>';
+            echo '</div>';
+            
+            if ($status !== 'confirmed') {
+                echo '<form method="post" class="mt-3">';
+                echo '<input type="hidden" name="select_alternative" value="1">';
+                echo '<input type="hidden" name="request_id" value="' . $request_id . '">';
+                echo '<input type="hidden" name="active_tab" value="requests">';
+                
+                echo '<div class="list-group mb-3">';
+                foreach ($alternatives as $index => $alternative) {
+                    $alt_date = $alternative['date'];
+                    $alt_time = $alternative['time'];
+                    
+                    $formatted_alt_date = date('l, jS \of F, Y', strtotime($alt_date));
+                    $formatted_alt_time = date('g:i A', strtotime($alt_time));
+                    
+                    echo '<div class="list-group-item">';
+                    echo '<div class="form-check">';
+                    echo '<input class="form-check-input" type="radio" name="selected_alternative" 
+                            value="' . $index . '" id="studentAlt' . $request_id . '_' . $index . '" ' . ($index === 0 ? 'checked' : '') . '>';
+                    echo '<label class="form-check-label" for="studentAlt' . $request_id . '_' . $index . '">';
+                    echo 'Option ' . ($index + 1) . ': ' . $formatted_alt_date . ' at ' . $formatted_alt_time;
+                    echo '</label>';
+                    echo '</div>';
+                    echo '</div>';
+                }
+                echo '</div>';
+                
+                echo '<button type="submit" class="btn btn-success">Confirm Selected Time</button>';
                 echo '</form>';
             } else {
                 // Show the confirmed alternative
@@ -1711,4 +1838,6 @@
         color: #dc3545;
     }
 </style>
+
+
 

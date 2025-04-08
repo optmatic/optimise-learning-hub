@@ -543,4 +543,170 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   }
+
+  // Handle tutor reschedule request submission
+  const submitTutorRescheduleBtn = document.getElementById(
+    "submitTutorReschedule"
+  );
+
+  if (submitTutorRescheduleBtn) {
+    submitTutorRescheduleBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+
+      // Check if button is already disabled (preventing duplicate submissions)
+      if (this.disabled) {
+        return;
+      }
+
+      // Get form elements
+      const form = document.getElementById("rescheduleRequestForm");
+      const studentSelect = document.getElementById("student_select");
+      const lessonDate = document.getElementById("lesson_date");
+      const lessonTime = document.getElementById("lesson_time");
+      const reason = document.getElementById("reason");
+
+      // Validate required fields
+      if (
+        !studentSelect.value ||
+        !lessonDate.value ||
+        !lessonTime.value ||
+        !reason.value
+      ) {
+        document.getElementById("rescheduleRequestErrorMessage").style.display =
+          "block";
+        return;
+      }
+
+      // Check if at least one preferred date and time is provided
+      const preferredDates = document.querySelectorAll(
+        "#preferred-times-container .preferred-date"
+      );
+      const preferredTimes = document.querySelectorAll(
+        "#preferred-times-container .preferred-time"
+      );
+      let hasPreferredTime = false;
+
+      for (let i = 0; i < preferredDates.length; i++) {
+        if (preferredDates[i].value && preferredTimes[i].value) {
+          hasPreferredTime = true;
+          break;
+        }
+      }
+
+      if (!hasPreferredTime) {
+        document.getElementById("preferred-times-error").style.display =
+          "block";
+        return;
+      }
+
+      document.getElementById("preferred-times-error").style.display = "none";
+      document.getElementById("rescheduleRequestErrorMessage").style.display =
+        "none";
+
+      // Set the student name from the selected option's data attribute
+      if (studentSelect.selectedIndex > 0) {
+        const selectedOption =
+          studentSelect.options[studentSelect.selectedIndex];
+        document.getElementById("student_name").value =
+          selectedOption.getAttribute("data-username");
+      }
+
+      // Prepare form data
+      const formData = new FormData(form);
+
+      // Add a unique submission ID to prevent duplicates
+      formData.append("submission_id", Date.now().toString());
+
+      // Disable submit button to prevent multiple submissions
+      const submitButton = this;
+      submitButton.disabled = true;
+      submitButton.innerHTML = "Submitting...";
+
+      // Disable other form elements
+      const formElements = form.querySelectorAll("input, select, textarea");
+      formElements.forEach((el) => (el.disabled = true));
+
+      // Submit the form
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", window.location.href, true);
+
+      xhr.onload = function () {
+        if (xhr.status === 200) {
+          document.getElementById(
+            "rescheduleRequestSuccessMessage"
+          ).style.display = "block";
+
+          const footerButtons = document.querySelector(
+            "#rescheduleRequestForm .modal-footer"
+          );
+          footerButtons.innerHTML = `
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          `;
+
+          setTimeout(function () {
+            location.reload();
+          }, 2000);
+        } else {
+          // Handle error
+          document.getElementById(
+            "rescheduleRequestErrorMessage"
+          ).style.display = "block";
+          formElements.forEach((el) => (el.disabled = false));
+          submitButton.disabled = false;
+          submitButton.innerHTML = "Submit Request";
+        }
+      };
+
+      xhr.onerror = function () {
+        document.getElementById("rescheduleRequestErrorMessage").style.display =
+          "block";
+        formElements.forEach((el) => (el.disabled = false));
+        submitButton.disabled = false;
+        submitButton.innerHTML = "Submit Request";
+      };
+
+      // Set timeout for long requests
+      const timeoutId = setTimeout(function () {
+        xhr.abort();
+        document.getElementById("rescheduleRequestErrorMessage").style.display =
+          "block";
+        formElements.forEach((el) => (el.disabled = false));
+        submitButton.disabled = false;
+        submitButton.innerHTML = "Submit Request";
+      }, 30000);
+
+      xhr.onloadend = function () {
+        clearTimeout(timeoutId);
+      };
+
+      xhr.send(formData);
+    });
+  }
+
+  // Direct handler for the Submit Request button in the modal
+  document.addEventListener("DOMContentLoaded", function () {
+    const submitRequestBtn = document.querySelector(
+      '.modal-content .modal-footer button[id="submitTutorReschedule"]'
+    );
+    if (submitRequestBtn) {
+      submitRequestBtn.addEventListener("click", function () {
+        const form = document.getElementById("rescheduleRequestForm");
+
+        // Set the hidden student_name field based on the selected student
+        const studentSelect = document.getElementById("student_select");
+        if (studentSelect && studentSelect.selectedIndex > 0) {
+          const selectedOption =
+            studentSelect.options[studentSelect.selectedIndex];
+          const studentUsername = selectedOption.getAttribute("data-username");
+          const studentNameField = document.getElementById("student_name");
+          if (studentNameField && studentUsername) {
+            studentNameField.value = studentUsername;
+          }
+        }
+
+        // Direct form submission - simplest solution to bypass whatever is blocking
+        form.submit();
+      });
+    }
+  });
 });

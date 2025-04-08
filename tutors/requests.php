@@ -1057,88 +1057,61 @@
     );
     
     $alternative_requests = get_posts($alternative_requests_args);
+    ?>
     
-    // Debugging: Log query details
-    error_log("Alternative Requests Query Args: " . print_r($alternative_requests_args, true));
-    error_log("Number of Alternative Requests Found: " . count($alternative_requests));
-    
-    // If no requests found, log all progress_report posts for this tutor
-    if (empty($alternative_requests)) {
-        $all_progress_reports = get_posts(array(
-            'post_type'      => 'progress_report',
-            'posts_per_page' => -1,
-            'meta_query'     => array(
-                array(
-                    'key'     => 'tutor_id',
-                    'value'   => $current_user_id,
-                    'compare' => '='
-                )
-            )
-        ));
-        
-        error_log("All Progress Reports for this Tutor: " . count($all_progress_reports));
-        
-        // Log details of each progress report
-        foreach ($all_progress_reports as $report) {
-            $meta = get_post_meta($report->ID);
-            error_log("Progress Report ID: " . $report->ID);
-            error_log("Progress Report Meta: " . print_r($meta, true));
-        }
-    }
-    
-    if (!empty($alternative_requests)) {
-        // Check for new (unviewed) alternatives
-        $has_new_alternatives = false;
-        foreach ($alternative_requests as $request) {
-            $viewed = get_post_meta($request->ID, 'viewed_by_tutor', true);
-            $status = get_post_meta($request->ID, 'status', true);
-            if (empty($viewed) && $status === 'pending') {
-                $has_new_alternatives = true;
-                break;
-            }
-        }
-        ?>
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div><i class="fas fa-exchange-alt me-2"></i> Alternative Lesson Times</div>
-                    <?php 
-                    // Count pending alternatives
-                    $pending_alternatives = count(get_posts(array(
-                        'post_type'      => 'progress_report',
-                        'posts_per_page' => -1,
-                        'meta_query'     => array(
-                            'relation' => 'AND',
-                            array(
-                                'key'     => 'tutor_id',
-                                'value'   => $current_user_id,
-                                'compare' => '=',
-                            ),
-                            array(
-                                'key'     => 'request_type',
-                                'value'   => 'student_unavailable',
-                                'compare' => '=',
-                            ),
-                            array(
-                                'key'     => 'status',
-                                'value'   => 'pending',
-                                'compare' => '=',
-                            )
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <div><i class="fas fa-exchange-alt me-2"></i> Alternative Lesson Times</div>
+                <?php 
+                // Count pending alternatives
+                $pending_alternatives = count(get_posts(array(
+                    'post_type'      => 'progress_report',
+                    'posts_per_page' => -1,
+                    'meta_query'     => array(
+                        'relation' => 'AND',
+                        array(
+                            'key'     => 'tutor_id',
+                            'value'   => $current_user_id,
+                            'compare' => '=',
                         ),
-                        'fields'         => 'ids'
-                    )));
-                    
-                    if ($pending_alternatives > 0) {
-                        echo '<span class="badge bg-danger">' . $pending_alternatives . '</span>';
-                    }
-                    ?>
-                </div>
+                        array(
+                            'key'     => 'request_type',
+                            'value'   => 'student_unavailable',
+                            'compare' => '=',
+                        ),
+                        array(
+                            'key'     => 'status',
+                            'value'   => 'pending',
+                            'compare' => '=',
+                        )
+                    ),
+                    'fields'         => 'ids'
+                )));
+                
+                if ($pending_alternatives > 0) {
+                    echo '<span class="badge bg-danger">' . $pending_alternatives . '</span>';
+                }
+                ?>
             </div>
-            <div class="card-body">
-                <?php if ($has_new_alternatives) : ?>
-                <div class="alert alert-info">
-                    <i class="fas fa-bell me-2"></i> <strong>New!</strong> Your student has provided alternative lesson times for you to review.
-                </div>
+        </div>
+        <div class="card-body">
+            <?php if (!empty($alternative_requests)) : 
+                // Check for new (unviewed) alternatives
+                $has_new_alternatives = false;
+                foreach ($alternative_requests as $request) {
+                    $viewed = get_post_meta($request->ID, 'viewed_by_tutor', true);
+                    $status = get_post_meta($request->ID, 'status', true);
+                    if (empty($viewed) && $status === 'pending') {
+                        $has_new_alternatives = true;
+                        break;
+                    }
+                }
+                
+                if ($has_new_alternatives) : ?>
+                    <div class="alert alert-info">
+                        <i class="fas fa-bell me-2"></i> <strong>New!</strong> Your student has provided alternative lesson times for you to review.
+                    </div>
                 <?php endif; ?>
                 
                 <p>Your student is unavailable for the originally requested time and has provided alternative times. Please review and select a time that works for you:</p>
@@ -1258,9 +1231,14 @@
                         <?php $counter++; ?>
                     <?php } ?>
                 </div>
-            </div>
+            <?php else: ?>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    No alternative times have been provided yet. When your students provide alternative times for a lesson, they will appear here.
+                </div>
+            <?php endif; ?>
         </div>
-    <?php } ?>
+    </div>
     
     <!-- Modal for editing a reschedule request -->
     <div class="modal fade" id="editRescheduleRequestModal" tabindex="-1" aria-labelledby="editRescheduleRequestModalLabel" aria-hidden="true">
@@ -1447,6 +1425,104 @@ document.addEventListener('DOMContentLoaded', function() {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true
+        });
+    }
+
+    // Handle student selection to populate hidden field
+    const studentSelect = document.getElementById('student_select');
+    const studentNameInput = document.getElementById('student_name');
+    if (studentSelect && studentNameInput) {
+        studentSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption) {
+                studentNameInput.value = selectedOption.getAttribute('data-username') || '';
+            }
+        });
+    }
+
+    // Handle tutor reschedule request form submission
+    const submitTutorRescheduleBtn = document.getElementById('submitTutorReschedule');
+    const rescheduleRequestForm = document.getElementById('rescheduleRequestForm');
+    
+    if (submitTutorRescheduleBtn && rescheduleRequestForm) {
+        submitTutorRescheduleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+
+            // Reset error messages
+            document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
+            document.getElementById('preferred-times-error').style.display = 'none';
+
+            // Validate form
+            const student = document.getElementById('student_select').value;
+            const lessonDate = document.getElementById('lesson_date').value;
+            const lessonTime = document.getElementById('lesson_time').value;
+            const reason = document.getElementById('reason').value;
+
+            // Check required fields
+            if (!student || !lessonDate || !lessonTime || !reason) {
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                return;
+            }
+
+            // Validate preferred times (at least one required)
+            const preferredDates = document.querySelectorAll('#preferred-times-container .preferred-date');
+            const preferredTimes = document.querySelectorAll('#preferred-times-container .preferred-time');
+            let hasPreferredTime = false;
+
+            for (let i = 0; i < preferredDates.length; i++) {
+                if (preferredDates[i].value && preferredTimes[i].value) {
+                    hasPreferredTime = true;
+                    break;
+                }
+            }
+
+            if (!hasPreferredTime) {
+                document.getElementById('preferred-times-error').style.display = 'block';
+                return;
+            }
+
+            // Disable form elements during submission
+            const formElements = rescheduleRequestForm.querySelectorAll('input, select, textarea, button');
+            formElements.forEach(el => el.disabled = true);
+            submitTutorRescheduleBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+
+            // Submit form
+            const formData = new FormData(rescheduleRequestForm);
+
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(html => {
+                // Show success message
+                document.getElementById('rescheduleRequestSuccessMessage').style.display = 'block';
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
+
+                // Reset form
+                rescheduleRequestForm.reset();
+
+                // Change modal footer
+                const modalFooter = submitTutorRescheduleBtn.closest('.modal-footer');
+                modalFooter.innerHTML = `
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                `;
+
+                // Reload page after 2 seconds
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
+                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
+                    'An error occurred while submitting your request. Please try again.';
+                
+                // Re-enable form elements
+                formElements.forEach(el => el.disabled = false);
+                submitTutorRescheduleBtn.innerHTML = 'Submit Request';
+            });
         });
     }
 
