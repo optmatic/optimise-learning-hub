@@ -87,6 +87,7 @@
                             <form id="rescheduleRequestForm" method="post">
                                 <input type="hidden" name="submit_student_reschedule_request" value="1">
                                 <input type="hidden" name="student_id" value="<?php echo $current_user_id; ?>">
+                                <input type="hidden" name="student_name" value="<?php echo wp_get_current_user()->user_login; ?>">
                                 
                                 <div class="mb-3">
                                     <label for="tutor_select" class="form-label">Select Tutor <span class="text-danger">*</span></label>
@@ -125,9 +126,11 @@
                                         echo '<select name="tutor_name" id="tutor_select" class="form-select" required>';
                                         echo '<option value="">--Select tutor--</option>';
                                         foreach ($tutors as $tutor) {
-                                            echo '<option value="' . esc_attr($tutor['username']) . '">' . esc_html($tutor['display_name']) . '</option>';
+                                            echo '<option value="' . esc_attr($tutor['username']) . '" data-tutor-id="' . esc_attr($tutor['id']) . '">' 
+                                                . esc_html($tutor['display_name']) . '</option>';
                                         }
                                         echo '</select>';
+                                        echo '<input type="hidden" name="tutor_id" id="tutor_id_input">';
                                     } else {
                                         echo '<div class="alert alert-warning">No tutors assigned to you. Please contact support.</div>';
                                     }
@@ -1794,6 +1797,19 @@
             }); // End of submit listener
         } // End of if (unavailableForm)
     } // End of if (unavailableModal)
+
+    // Handle tutor selection to populate tutor ID
+    const tutorSelect = document.getElementById('tutor_select');
+    const tutorIdInput = document.getElementById('tutor_id_input');
+    
+    if (tutorSelect && tutorIdInput) {
+        tutorSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption) {
+                tutorIdInput.value = selectedOption.getAttribute('data-tutor-id') || '';
+            }
+        });
+    }
 
 }); // End of DOMContentLoaded listener
 </script>
