@@ -16,6 +16,7 @@ if (isset($_POST['submit_tutor_reschedule_request']) || isset($_POST['confirm_re
     // Process tutor reschedule request
     if (isset($_POST['submit_tutor_reschedule_request']) && $_POST['submit_tutor_reschedule_request'] === '1') {
         error_log('Processing tutor reschedule request');
+        error_log('POST data: ' . print_r($_POST, true));
         
         $tutor_id = get_current_user_id();
         $tutor_name = wp_get_current_user()->user_login;
@@ -25,90 +26,77 @@ if (isset($_POST['submit_tutor_reschedule_request']) || isset($_POST['confirm_re
         $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
         $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
         
-        error_log("Form data received:");
-        error_log("tutor_id: $tutor_id");
-        error_log("tutor_name: $tutor_name");
-        error_log("student_id: $student_id");
-        error_log("student_name: $student_name");
-        error_log("original_date: $original_date");
-        error_log("original_time: $original_time");
-        error_log("reason: $reason");
-        
         // Validate required fields
-        if (!empty($student_id) && !empty($original_date) && !empty($original_time) && !empty($reason)) {
-            error_log('All required fields present');
+        if (empty($student_id) || empty($student_name) || empty($original_date) || empty($original_time) || empty($reason)) {
+            error_log('Missing required fields for tutor reschedule request');
+            set_transient('tutor_dashboard_message', [
+                'type' => 'error',
+                'text' => 'Please fill in all required fields.'
+            ], 60);
+            return;
+        }
+        
+        // Collect preferred times
+        $preferred_times = [];
+        for ($i = 1; $i <= 3; $i++) {
+            $date = isset($_POST['preferred_date_' . $i]) ? sanitize_text_field($_POST['preferred_date_' . $i]) : '';
+            $time = isset($_POST['preferred_time_' . $i]) ? sanitize_text_field($_POST['preferred_time_' . $i]) : '';
             
-            // Get student username if we only have the ID
-            if (empty($student_name) && !empty($student_id)) {
-                $student = get_user_by('id', $student_id);
-                if ($student) {
-                    $student_name = $student->user_login;
-                    error_log("Found student name: $student_name");
-                } else {
-                    error_log("Could not find student with ID: $student_id");
-                }
+            if (!empty($date) && !empty($time)) {
+                $preferred_times[] = [
+                    'date' => $date,
+                    'time' => $time
+                ];
             }
+        }
+        
+        // Validate at least one preferred time
+        if (empty($preferred_times)) {
+            error_log('No preferred times provided for tutor reschedule request');
+            set_transient('tutor_dashboard_message', [
+                'type' => 'error',
+                'text' => 'Please provide at least one preferred alternative time.'
+            ], 60);
+            return;
+        }
+        
+        // Create the request post
+        $request = [
+            'post_title'   => 'Tutor Reschedule Request',
+            'post_content' => '',
+            'post_status'  => 'publish',
+            'post_type'    => 'progress_report',
+        ];
+        
+        error_log('Creating tutor reschedule request post');
+        $request_id = wp_insert_post($request);
+        
+        if (!is_wp_error($request_id)) {
+            error_log('Successfully created post. Saving meta data...');
             
-            // Collect preferred times
-            $preferred_times = [];
-            for ($i = 1; $i <= 3; $i++) {
-                $date = isset($_POST['preferred_date_' . $i]) ? sanitize_text_field($_POST['preferred_date_' . $i]) : '';
-                $time = isset($_POST['preferred_time_' . $i]) ? sanitize_text_field($_POST['preferred_time_' . $i]) : '';
-                
-                if (!empty($date) && !empty($time)) {
-                    $preferred_times[] = [
-                        'date' => $date,
-                        'time' => $time
-                    ];
-                }
-            }
-            error_log('Collected preferred times: ' . print_r($preferred_times, true));
+            // Save all the necessary meta data
+            update_post_meta($request_id, 'request_type', 'tutor_reschedule');
+            update_post_meta($request_id, 'tutor_id', $tutor_id);
+            update_post_meta($request_id, 'tutor_name', $tutor_name);
+            update_post_meta($request_id, 'student_id', $student_id);
+            update_post_meta($request_id, 'student_name', $student_name);
+            update_post_meta($request_id, 'original_date', $original_date);
+            update_post_meta($request_id, 'original_time', $original_time);
+            update_post_meta($request_id, 'reason', $reason);
+            update_post_meta($request_id, 'preferred_times', $preferred_times);
+            update_post_meta($request_id, 'status', 'pending');
             
-            // Create the request post
-            $request = [
-                'post_title'   => 'Tutor Reschedule Request',
-                'post_content' => '',
-                'post_status'  => 'publish',
-                'post_type'    => 'progress_report',
-            ];
-            
-            error_log('Attempting to create post with data: ' . print_r($request, true));
-            $request_id = wp_insert_post($request);
-            error_log('wp_insert_post result: ' . print_r($request_id, true));
-            
-            if (!is_wp_error($request_id)) {
-                error_log('Successfully created post. Saving meta data...');
-                
-                // Save all the necessary meta data
-                update_post_meta($request_id, 'request_type', 'tutor_reschedule');
-                update_post_meta($request_id, 'tutor_id', $tutor_id);
-                update_post_meta($request_id, 'tutor_name', $tutor_name);
-                update_post_meta($request_id, 'student_id', $student_id);
-                update_post_meta($request_id, 'student_name', $student_name);
-                update_post_meta($request_id, 'original_date', $original_date);
-                update_post_meta($request_id, 'original_time', $original_time);
-                update_post_meta($request_id, 'reason', $reason);
-                update_post_meta($request_id, 'preferred_times', $preferred_times);
-                update_post_meta($request_id, 'status', 'pending');
-                
-                error_log('Successfully saved all meta data');
-                
-                // Set a transient message
-                set_transient('tutor_dashboard_message', [
-                    'type' => 'success',
-                    'text' => 'Your reschedule request has been submitted successfully.'
-                ], 60);
-                
-                error_log('Set success message transient');
-            } else {
-                error_log('Error creating post: ' . $request_id->get_error_message());
-            }
+            error_log('Successfully saved all meta data');
+            set_transient('tutor_dashboard_message', [
+                'type' => 'success',
+                'text' => 'Your reschedule request has been submitted successfully.'
+            ], 60);
         } else {
-            error_log('Missing required fields:');
-            error_log('student_id empty: ' . (empty($student_id) ? 'yes' : 'no'));
-            error_log('original_date empty: ' . (empty($original_date) ? 'yes' : 'no'));
-            error_log('original_time empty: ' . (empty($original_time) ? 'yes' : 'no'));
-            error_log('reason empty: ' . (empty($reason) ? 'yes' : 'no'));
+            error_log('Error creating post: ' . $request_id->get_error_message());
+            set_transient('tutor_dashboard_message', [
+                'type' => 'error',
+                'text' => 'There was an error submitting your request. Please try again.'
+            ], 60);
         }
     }
 }
@@ -1648,25 +1636,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (!hasPreferredTime) {
                 document.getElementById('preferred-times-error').style.display = 'block';
-                return;
-            }
-
-            // Validate that preferred times are different from original time
-            const originalDateTime = new Date(originalDate + 'T' + originalTime);
-            let hasValidAlternative = false;
-
-            for (let i = 0; i < preferredDates.length; i++) {
-                if (preferredDates[i].value && preferredTimes[i].value) {
-                    const preferredDateTime = new Date(preferredDates[i].value + 'T' + preferredTimes[i].value);
-                    if (preferredDateTime.getTime() !== originalDateTime.getTime()) {
-                        hasValidAlternative = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!hasValidAlternative) {
-                alert('Please provide at least one alternative time that is different from the original lesson time.');
                 return;
             }
 
