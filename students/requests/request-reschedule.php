@@ -148,20 +148,7 @@
                                     <p class="text-muted small">Please select at least one preferred alternative date and time.</p>
                                     
                                     <div id="preferred-times-container">
-                                        <?php for ($i = 1; $i <= 3; $i++): ?>
-                                        <div class="preferred-time-row mb-2">
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <label class="form-label small">Preferred Date <?php echo $i; ?>:</label>
-                                                    <input type="date" class="form-control preferred-date" name="preferred_date_<?php echo $i; ?>" id="preferred_date_<?php echo $i; ?>" <?php echo $i == 1 ? 'required' : ''; ?>>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label small">Preferred Time <?php echo $i; ?>:</label>
-                                                    <input type="time" class="form-control preferred-time" name="preferred_time_<?php echo $i; ?>" id="preferred_time_<?php echo $i; ?>" <?php echo $i == 1 ? 'required' : ''; ?>>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <?php endfor; ?>
+                                        <?php render_preferred_time_inputs(); ?>
                                     </div>
                                 </div>
                                 <div id="preferred-times-error" class="text-danger mt-2" style="display: none;">
@@ -216,47 +203,7 @@
                         <p class="text-muted small">Please select up to 3 preferred alternative dates and times.</p>
                         
                         <div id="edit-preferred-times-container">
-                            <!-- Preferred Time 1 -->
-                            <div class="preferred-time-row mb-2">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <label class="form-label small">Preferred Date 1:</label>
-                                        <input type="date" class="form-control preferred-date" name="preferred_date_1" id="edit_preferred_date_1">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label small">Preferred Time 1:</label>
-                                        <input type="time" class="form-control preferred-time" name="preferred_time_1" id="edit_preferred_time_1">
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Preferred Time 2 -->
-                            <div class="preferred-time-row mb-2">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <label class="form-label small">Preferred Date 2:</label>
-                                        <input type="date" class="form-control preferred-date" name="preferred_date_2" id="edit_preferred_date_2">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label small">Preferred Time 2:</label>
-                                        <input type="time" class="form-control preferred-time" name="preferred_time_2" id="edit_preferred_time_2">
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Preferred Time 3 -->
-                            <div class="preferred-time-row mb-2">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <label class="form-label small">Preferred Date 3:</label>
-                                        <input type="date" class="form-control preferred-date" name="preferred_date_3" id="edit_preferred_date_3">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label small">Preferred Time 3:</label>
-                                        <input type="time" class="form-control preferred-time" name="preferred_time_3" id="edit_preferred_time_3">
-                                    </div>
-                                </div>
-                            </div>
+                            <?php render_preferred_time_inputs('edit_', 3, false); // Don't require the first input in the edit modal ?>
                         </div>
                     </div>
                     

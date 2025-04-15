@@ -1916,3 +1916,33 @@ function get_student_lessons_ajax() {
 
     wp_send_json_success($options_html);
 }
+
+/**
+ * Renders HTML input fields for preferred alternative dates and times.
+ *
+ * @param string $id_prefix Optional prefix for element IDs (e.g., 'edit_').
+ * @param int    $count     Number of date/time pairs to render.
+ * @param bool   $firstRequired Whether the first pair should have the 'required' attribute.
+ */
+function render_preferred_time_inputs(string $id_prefix = '', int $count = 3, bool $firstRequired = true) {
+    for ($i = 1; $i <= $count; $i++): ?>
+        <div class="preferred-time-row mb-2">
+            <div class="row">
+                <div class="col-md-6">
+                    <label class="form-label small">Preferred Date <?php echo $i; ?>:</label>
+                    <input type="date" class="form-control preferred-date" 
+                           name="preferred_date_<?php echo $i; ?>" 
+                           id="<?php echo !empty($id_prefix) ? esc_attr($id_prefix) : ''; ?>preferred_date_<?php echo $i; ?>" 
+                           <?php echo ($i == 1 && $firstRequired) ? 'required' : ''; ?>>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small">Preferred Time <?php echo $i; ?>:</label>
+                    <input type="time" class="form-control preferred-time" 
+                           name="preferred_time_<?php echo $i; ?>" 
+                           id="<?php echo !empty($id_prefix) ? esc_attr($id_prefix) : ''; ?>preferred_time_<?php echo $i; ?>" 
+                           <?php echo ($i == 1 && $firstRequired) ? 'required' : ''; ?>>
+                </div>
+            </div>
+        </div>
+    <?php endfor;
+}

@@ -10,9 +10,6 @@
 
 </div>
 
-
-
-
 <!-- Add hidden fields with nonces for AJAX security -->
 <input type="hidden" id="check_student_requests_nonce" value="<?php echo wp_create_nonce('check_student_requests_nonce'); ?>">
 <input type="hidden" id="mark_student_requests_read_nonce" value="<?php echo wp_create_nonce('mark_student_requests_read_nonce'); ?>">
