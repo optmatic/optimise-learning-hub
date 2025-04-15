@@ -310,5 +310,73 @@ document.addEventListener('DOMContentLoaded', function () {
             modalBodyInput.textContent = reason ? reason : 'No reason provided.';
         });
     }
+
+    var editModal = document.getElementById('editRescheduleRequestModal');
+    if (editModal) {
+        editModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget; // Button that triggered the modal
+            var preferredTimesJson = button.getAttribute('data-preferred-times');
+            var preferredTimes = preferredTimesJson ? JSON.parse(preferredTimesJson) : [];
+
+            // Clear previous values first
+            for (let i = 1; i <= 3; i++) {
+                const dateInput = editModal.querySelector('#edit_preferred_date_' + i);
+                const timeInput = editModal.querySelector('#edit_preferred_time_' + i);
+                if (dateInput) dateInput.value = '';
+                if (timeInput) timeInput.value = '';
+            }
+
+            // Populate inputs based on data
+            preferredTimes.forEach((timeSlot, index) => {
+                const slotIndex = index + 1; // Input IDs are 1-based
+                if (slotIndex > 3) return; // Only handle up to 3 slots
+
+                const dateInput = editModal.querySelector('#edit_preferred_date_' + slotIndex);
+                const timeInput = editModal.querySelector('#edit_preferred_time_' + slotIndex);
+
+                if (dateInput && timeSlot.date) {
+                    dateInput.value = timeSlot.date; // Assumes YYYY-MM-DD format
+                }
+                if (timeInput && timeSlot.time) {
+                    // Assumes timeSlot.time is HH:MM:SS, format to HH:MM for time input
+                    timeInput.value = timeSlot.time.substring(0, 5);
+                }
+            });
+
+            // Also prefill other fields like reason, request ID etc. (already handled by attributes on the button)
+             var requestId = button.getAttribute('data-request-id');
+             var tutorName = button.getAttribute('data-tutor-name'); // This is likely the login name
+             var originalDate = button.getAttribute('data-original-date');
+             var originalTime = button.getAttribute('data-original-time');
+             var reason = button.getAttribute('data-reason');
+
+             // Fetch display name if needed - Assuming get_tutor_display_name is available/not needed here if just displaying original login
+             // We might need an AJAX call or pass the display name if required instead of login name.
+             // For now, using the provided tutor name attribute.
+
+             var formattedOriginalDateTime = '';
+             if (originalDate && originalTime) {
+                try {
+                    // Attempt to format nicely - requires date parsing logic similar to PHP
+                    // Simple concatenation for now, adjust if specific format needed
+                    formattedOriginalDateTime = originalDate + ' ' + originalTime.substring(0, 5);
+                } catch (e) {
+                     formattedOriginalDateTime = 'Invalid Date/Time';
+                }
+             } else {
+                 formattedOriginalDateTime = 'N/A';
+             }
+
+
+             editModal.querySelector('#edit_request_id').value = requestId || '';
+             // Assuming edit_tutor_name is display only, set its value
+             const tutorNameInput = editModal.querySelector('#edit_tutor_name');
+             if (tutorNameInput) tutorNameInput.value = tutorName || ''; // Use the login name from button for now
+             const originalDateTimeInput = editModal.querySelector('#edit_original_datetime');
+             if (originalDateTimeInput) originalDateTimeInput.value = formattedOriginalDateTime;
+             editModal.querySelector('#edit_reason').value = reason || '';
+
+        });
+    }
 });
 </script>
