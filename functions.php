@@ -1945,3 +1945,178 @@ function render_preferred_time_inputs(string $id_prefix = '', int $count = 3, bo
         </div>
     <?php endfor;
 }
+
+/**
+ * Fetches outgoing reschedule requests initiated by a tutor.
+ *
+ * @param int $tutor_id The ID of the tutor.
+ * @return WP_Post[] Array of progress report posts representing reschedule requests.
+ */
+function get_tutor_outgoing_reschedule_requests(int $tutor_id): array {
+    $args = array(
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'author'         => $tutor_id, // More direct way to check the author/initiator
+        'meta_query'     => array(
+            array(
+                'key'     => 'request_type',
+                'value'   => 'tutor_reschedule',
+                'compare' => '=',
+            )
+        ),
+        'order'          => 'DESC',
+        'orderby'        => 'date'
+    );
+    
+    return get_posts($args);
+}
+
+/**
+ * Formats a date and time string for display.
+ *
+ * @param string|null $date The date string (Y-m-d).
+ * @param string|null $time The time string (H:i:s or H:i).
+ * @return string Formatted date/time or 'N/A'.
+ */
+function format_lesson_datetime(?string $date, ?string $time): string {
+    if (!empty($date) && !empty($time)) {
+        try {
+            $datetime = new DateTime($date . ' ' . $time);
+            return $datetime->format('M j, Y \a\t g:i A');
+        } catch (Exception $e) {
+            // Handle potential DateTime creation errors
+            return 'Invalid Date/Time';
+        }
+    }
+    return 'N/A';
+}
+
+/**
+ * Generates an HTML status badge for a reschedule request.
+ *
+ * @param string $status The status string.
+ * @return string HTML badge element.
+ */
+function get_reschedule_request_status_badge(string $status): string {
+    $badge_class = 'bg-warning'; // Default to pending
+    $status_text = 'Pending';
+
+    switch (strtolower($status)) {
+        case 'confirmed':
+        case 'accepted':
+            $badge_class = 'bg-success';
+            $status_text = 'Accepted';
+            break;
+        case 'denied':
+        case 'declined':
+            $badge_class = 'bg-danger';
+            $status_text = 'Declined';
+            break;
+        case 'unavailable':
+             $badge_class = 'bg-secondary'; // Use a neutral color
+             $status_text = 'Student Unavailable';
+             break;
+    }
+    
+    return sprintf('<span class="badge %s">%s</span>', esc_attr($badge_class), esc_html($status_text));
+}
+
+/**
+ * Displays the list of preferred reschedule times.
+ *
+ * @param array|null $preferred_times Array of preferred times.
+ * @return string HTML list or message.
+ */
+function display_reschedule_preferred_times(?array $preferred_times): string {
+    if (!empty($preferred_times) && is_array($preferred_times)) {
+        $output = '';
+        foreach ($preferred_times as $index => $time) {
+            if (!empty($time['date']) && !empty($time['time'])) {
+                $formatted_time = format_lesson_datetime($time['date'], $time['time']);
+                if ($formatted_time !== 'Invalid Date/Time' && $formatted_time !== 'N/A') {
+                     $output .= sprintf(
+                         'Option %d: %s<br>',
+                         $index + 1,
+                         esc_html($formatted_time)
+                     );
+                }
+            }
+        }
+        return $output ?: 'No valid preferred times specified'; // Return output or message if empty/invalid
+    }
+    return 'No preferred times specified';
+}
+
+/**
+ * Displays the reason for a reschedule request, truncated with modal trigger.
+ *
+ * @param string|null $reason The reason text.
+ * @return string HTML span or message.
+ */
+function display_reschedule_reason(?string $reason): string {
+    if (!empty($reason)) {
+        $truncated_reason = mb_strlen($reason) > 30 ? mb_substr($reason, 0, 30) . '...' : $reason;
+        return sprintf(
+            '<span class="reason-text" style="cursor: pointer; color: #fcb31e;" data-bs-toggle="modal" data-bs-target="#reasonModal" data-reason="%s" data-bs-original-title="Click to expand" title="Click to expand">%s</span>',
+            esc_attr($reason),
+            esc_html($truncated_reason)
+        );
+    }
+    return '<em>No reason provided</em>';
+}
+
+/**
+ * Displays action buttons (Edit/Delete) for a tutor's outgoing reschedule request based on status.
+ *
+ * @param int $request_id The ID of the request post.
+ * @param string $status The status of the request.
+ * @param string $student_name The student's username or ID.
+ * @param string|null $original_date Original lesson date.
+ * @param string|null $original_time Original lesson time.
+ * @param string|null $reason Reschedule reason.
+ * @return string HTML buttons or message.
+ */
+function display_tutor_reschedule_request_actions(int $request_id, string $status, string $student_name, ?string $original_date, ?string $original_time, ?string $reason): string {
+    // Define non-actionable statuses
+    $non_actionable_statuses = ['confirmed', 'accepted', 'denied', 'declined'];
+
+    if (!in_array(strtolower($status), $non_actionable_statuses)) {
+        $edit_button = sprintf(
+            '<button type="button" class="btn btn-sm btn-primary me-1 edit-request-btn" data-bs-toggle="modal" data-bs-target="#editRescheduleRequestModal" data-request-id="%d" data-student-name="%s" data-original-date="%s" data-original-time="%s" data-reason="%s">
+                <i class="fas fa-edit"></i> Edit
+            </button>',
+            $request_id,
+            esc_attr($student_name),
+            esc_attr($original_date ?? ''),
+            esc_attr($original_time ?? ''),
+            esc_attr($reason ?? '')
+        );
+        
+        $delete_button = sprintf(
+            '<button type="button" class="btn btn-sm btn-danger delete-request-btn" data-request-id="%d">
+                <i class="fas fa-trash"></i> Delete
+            </button>',
+            $request_id
+        );
+        
+        return $edit_button . $delete_button;
+    } else {
+        return '<span class="text-muted">No actions available</span>';
+    }
+}
+
+// Ensure get_student_display_name function exists or define a placeholder
+if (!function_exists('get_student_display_name')) {
+    function get_student_display_name($student_identifier) {
+        // Attempt to get user data by ID or login
+        $user = is_numeric($student_identifier) ? get_userdata((int)$student_identifier) : get_user_by('login', $student_identifier);
+        
+        if ($user) {
+            return $user->display_name ?: $user->user_login;
+        }
+        // Fallback if user not found
+        return is_string($student_identifier) ? esc_html($student_identifier) : 'Unknown Student';
+    }
+}
+
+?>

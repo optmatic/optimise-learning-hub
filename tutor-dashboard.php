@@ -319,7 +319,7 @@ function test_reschedule_requests() {
             include 'tutors/submit-lesson-overview.php';
             include 'tutors/sample-lesson-overview.php';
             include 'tutors/sample-progress-comments.php';
-            include 'tutors/requests.php';
+            include 'tutors/requests/index.php';
 ?>
 
             </div>
@@ -335,71 +335,27 @@ function test_reschedule_requests() {
 
 <?php get_footer(); ?>
 
-<style>
-/* Hide reschedule content when not on the requests tab */
-body:not(.tab-requests) h2:contains("Reschedule Requests"),
-body:not(.tab-requests) h4:contains("Reschedule Requests"),
-body:not(.tab-requests) .reschedule-section,
-body:not(.tab-requests) #rescheduleRequestsSection,
-body:not(.tab-requests) div.card:has(> .card-header:contains("Request Lesson Reschedule")),
-body:not(.tab-requests) div.card:has(> .card-header:contains("Your Outgoing Reschedule Requests")),
-body:not(.tab-requests) div.card:has(> .card-header:contains("Incoming Reschedule Requests")) {
-    display: none !important;
-}
-
-/* Standalone JS-independent solution */
-.tab-pane:not(#requests) h2:contains("Reschedule Requests"),
-.tab-pane:not(#requests) h4:contains("Reschedule Requests"),
-.tab-pane:not(#requests) .reschedule-section,
-.tab-pane:not(#requests) #rescheduleRequestsSection,
-.tab-pane:not(#requests) div.card:has(> .card-header:contains("Request Lesson Reschedule")),
-.tab-pane:not(#requests) div.card:has(> .card-header:contains("Your Outgoing Reschedule Requests")),
-.tab-pane:not(#requests) div.card:has(> .card-header:contains("Incoming Reschedule Requests")) {
-    display: none !important;
-}
-</style>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Check for previously stored active tab in localStorage
     const storedTab = localStorage.getItem('activeTutorTab');
-    
-    // Add this function to ensure reschedule content only shows on the requests tab
-    function hideRescheduleContentOnNonRequestsTabs() {
-        const isRequestsTab = document.querySelector('.nav-link.active')?.getAttribute('href') === '#requests';
-        
-        if (!isRequestsTab) {
-            // Hide any reschedule content that might be on other tabs
-            const rescheduleHeadings = Array.from(document.querySelectorAll('h2, h4')).filter(h => 
-                h.textContent.trim() === 'Reschedule Requests'
-            );
-            
-            rescheduleHeadings.forEach(heading => {
-                // Only hide if not within the #requests tab pane
-                if (!heading.closest('#requests')) {
-                    heading.style.display = 'none';
-                    
-                    // Hide all content after this heading until the next heading
-                    let sibling = heading.nextElementSibling;
-                    while (sibling && !['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(sibling.tagName)) {
-                        sibling.style.display = 'none';
-                        sibling = sibling.nextElementSibling;
-                    }
-                }
-            });
+    if (storedTab) {
+        const tabToSelect = document.querySelector(`a[href="${storedTab}"]`);
+        if (tabToSelect) {
+             // Use bootstrap's Tab instance to show the tab
+             const tab = new bootstrap.Tab(tabToSelect);
+             tab.show();
         }
     }
-    
-    // Run this function on page load
-    hideRescheduleContentOnNonRequestsTabs();
-    
-    // Run this function whenever a tab is clicked
-    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(tab => {
-        tab.addEventListener('shown.bs.tab', function(e) {
-            hideRescheduleContentOnNonRequestsTabs();
+
+    // Handle tab switching - Store which tab was clicked
+    const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
+    tabLinks.forEach(function(tabLink) {
+        tabLink.addEventListener('shown.bs.tab', function(event) { // Use shown.bs.tab for accuracy
+            localStorage.setItem('activeTutorTab', this.getAttribute('href'));
         });
     });
-    
+
     // Handle form submissions to preserve active tab
     const forms = document.querySelectorAll('form');
     forms.forEach(function(form) {
@@ -407,170 +363,94 @@ document.addEventListener('DOMContentLoaded', function() {
             // Add a hidden field with the current active tab
             const activeTab = document.querySelector('.nav-link.active');
             if (activeTab) {
-                const hiddenInput = document.createElement('input');
-                hiddenInput.type = 'hidden';
-                hiddenInput.name = 'active_tab';
+                // Check if the hidden input already exists
+                let hiddenInput = form.querySelector('input[name="active_tab"]');
+                if (!hiddenInput) {
+                    hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'active_tab';
+                    form.appendChild(hiddenInput);
+                }
                 hiddenInput.value = activeTab.getAttribute('href').substring(1); // Remove the # from the href
-                this.appendChild(hiddenInput);
             }
         });
     });
-    
+
     // Function to handle the Delete buttons with AJAX
     const deleteButtons = document.querySelectorAll('.delete-request-btn');
     deleteButtons.forEach(function(button) {
         button.addEventListener('click', function(event) {
             event.preventDefault();
-            
+
             if (!confirm('Are you sure you want to delete this request?')) {
                 return;
             }
-            
+
             const requestId = this.getAttribute('data-request-id');
-            const row = this.closest('tr');
-            
+            const row = this.closest('tr'); // Assuming the button is inside a table row
+
             // Set up AJAX request
             const xhr = new XMLHttpRequest();
-            xhr.open('POST', ajaxurl, true);
+            xhr.open('POST', ajaxurl, true); // Assuming ajaxurl is defined globally by WordPress
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-            
+
             xhr.onload = function() {
                 if (this.status >= 200 && this.status < 400) {
-                    const response = JSON.parse(this.response);
-                    
-                    if (response.success) {
-                        // Remove the table row
-                        row.remove();
-                        
-                        // Show success message
-                        const successAlert = document.createElement('div');
-                        successAlert.className = 'alert alert-success';
-                        successAlert.textContent = 'Request has been deleted successfully.';
-                        
-                        // Insert at the top of the reschedule section
-                        const rescheduleSection = document.getElementById('rescheduleRequestsSection');
-                        rescheduleSection.insertBefore(successAlert, rescheduleSection.firstChild);
-                        
-                        // Auto-hide after 3 seconds
-                        setTimeout(function() {
-                            successAlert.remove();
-                        }, 3000);
-                    } else {
-                        alert('Error: ' + (response.data ? response.data.message : 'Failed to delete request'));
+                    try {
+                        const response = JSON.parse(this.response);
+
+                        if (response.success) {
+                            // Remove the table row if it exists
+                            if (row) {
+                                row.remove();
+                            }
+
+                            // Show success message (find a suitable container or create one)
+                            const messageContainer = document.getElementById('tutor-dashboard-messages') || document.querySelector('.tab-content'); // Example target
+                            if (messageContainer) {
+                                const successAlert = document.createElement('div');
+                                successAlert.className = 'alert alert-success alert-dismissible fade show';
+                                successAlert.role = 'alert';
+                                successAlert.textContent = 'Request has been deleted successfully.';
+                                successAlert.innerHTML += '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+
+                                // Insert at the top
+                                messageContainer.insertBefore(successAlert, messageContainer.firstChild);
+
+                                // Optional: Auto-hide after a few seconds
+                                setTimeout(function() {
+                                    // Use Bootstrap's alert instance to close it properly
+                                    const alertInstance = bootstrap.Alert.getOrCreateInstance(successAlert);
+                                    if (alertInstance) {
+                                        alertInstance.close();
+                                    } else {
+                                        successAlert.remove(); // Fallback
+                                    }
+                                }, 5000); // 5 seconds
+                            }
+
+                        } else {
+                            alert('Error: ' + (response.data ? response.data.message : 'Failed to delete request'));
+                        }
+                    } catch (e) {
+                        console.error("Error parsing JSON response:", e);
+                        alert('Error: Invalid response from server.');
                     }
                 } else {
+                    console.error('Server returned an error:', this.status, this.statusText);
                     alert('Error: Server returned an error');
                 }
             };
-            
+
             xhr.onerror = function() {
-                alert('Error: Request failed');
+                alert('Error: Request failed to send.');
             };
-            
-            xhr.send('action=delete_tutor_request&delete_tutor_request=1&request_id=' + requestId);
-        });
-    });
-});
-</script>
 
-<script>
-    // Initialize tab tracking
-    document.addEventListener('DOMContentLoaded', function() {
-        // Add a direct class to reschedule sections for easier JS targeting
-        document.querySelectorAll('h2').forEach(function(heading) {
-            if (heading.textContent.includes('Reschedule Requests')) {
-                let section = heading;
-                let container = document.createElement('div');
-                container.className = 'reschedule-container';
-                
-                // Move everything from this heading until the next h2 into the container
-                heading.parentNode.insertBefore(container, heading);
-                container.appendChild(heading);
-                
-                let nextSibling = container.nextSibling;
-                while (nextSibling && 
-                       !(nextSibling.tagName === 'H2')) {
-                    const temp = nextSibling.nextSibling;
-                    container.appendChild(nextSibling);
-                    nextSibling = temp;
-                }
-            }
+            // Make sure to include nonce if needed for security
+            // const nonce = document.getElementById('your_nonce_field_id')?.value; // Example
+            // xhr.send('action=delete_tutor_request&delete_tutor_request=1&request_id=' + requestId + '&_ajax_nonce=' + nonce);
+            xhr.send('action=delete_tutor_request&delete_tutor_request=1&request_id=' + requestId); // Adjust action name if needed
         });
-        
-        // Handle tab switching
-        const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
-        tabLinks.forEach(function(tabLink) {
-            tabLink.addEventListener('click', function(event) {
-                // Store which tab was clicked
-                localStorage.setItem('activeTutorTab', this.getAttribute('href'));
-                
-                // Toggle reschedule content visibility
-                const isRequestsTab = this.getAttribute('href') === '#requests';
-                document.querySelectorAll('.reschedule-container').forEach(function(container) {
-                    container.style.display = isRequestsTab ? 'block' : 'none';
-                });
-            });
-        });
-        
-        // Check if we should restore a previously selected tab
-        const storedTab = localStorage.getItem('activeTutorTab');
-        if (storedTab) {
-            const tabToSelect = document.querySelector(`a[href="${storedTab}"]`);
-            if (tabToSelect) {
-                // Trigger a click on the stored tab
-                tabToSelect.click();
-            }
-        }
-        
-        // Hide reschedule sections initially if not on requests tab
-        const activeTab = document.querySelector('.nav-link.active');
-        if (!activeTab || activeTab.getAttribute('href') !== '#requests') {
-            document.querySelectorAll('.reschedule-container').forEach(function(container) {
-                container.style.display = 'none';
-            });
-        }
     });
-</script>
-
-<script>
-// Add this to your existing document.ready function
-document.addEventListener('DOMContentLoaded', function() {
-    // Update body class based on active tab
-    function updateBodyClass() {
-        const activeTab = document.querySelector('.nav-link.active');
-        if (activeTab) {
-            const tabId = activeTab.getAttribute('href').substring(1);
-            document.body.className = document.body.className.replace(/\btab-\S+/g, '');
-            document.body.classList.add('tab-' + tabId);
-        }
-    }
-    
-    // Initial class setting
-    updateBodyClass();
-    
-    // Update class when tab changes
-    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(function(tab) {
-        tab.addEventListener('shown.bs.tab', updateBodyClass);
-    });
-    
-    // Simple direct approach to hide reschedule content on non-requests tabs
-    if (!document.querySelector('.nav-link.active[href="#requests"]')) {
-        document.querySelectorAll('h2, h4').forEach(function(heading) {
-            if (heading.textContent.trim() === 'Reschedule Requests') {
-                // Find its parent .tab-pane
-                const tabPane = heading.closest('.tab-pane');
-                if (tabPane && tabPane.id !== 'requests') {
-                    heading.style.display = 'none';
-                    
-                    // Hide all following sibling elements until next heading
-                    let current = heading.nextElementSibling;
-                    while (current && !['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(current.tagName)) {
-                        current.style.display = 'none';
-                        current = current.nextElementSibling;
-                    }
-                }
-            }
-        });
-    }
 });
 </script>
