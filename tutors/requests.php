@@ -463,24 +463,6 @@ if (isset($_POST['submit_tutor_reschedule_request']) || isset($_POST['confirm_re
         return $badges[$status] ?? $badges['pending'];
     }
     
-    function render_preferred_time_inputs($prefix = '', $required = false) {
-        $req = $required ? 'required' : '';
-        for ($i = 1; $i <= 3; $i++) {
-            echo '<div class="preferred-time-row mb-2"><div class="row">
-                <div class="col-md-6">
-                    <label class="form-label small">Preferred Date ' . $i . ':</label>
-                    <input type="date" class="form-control preferred-date" 
-                           name="preferred_date_' . $i . '" id="' . $prefix . 'preferred_date_' . $i . '" ' . ($i == 1 ? $req : '') . '>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label small">Preferred Time ' . $i . ':</label>
-                    <input type="time" class="form-control preferred-time" 
-                           name="preferred_time_' . $i . '" id="' . $prefix . 'preferred_time_' . $i . '" ' . ($i == 1 ? $req : '') . '>
-                </div>
-            </div></div>';
-        }
-    }
-    
     function get_tutor_students() {
         $current_user_id = get_current_user_id();
         $students = [];

@@ -463,7 +463,6 @@ function show_assigned_students_field( $user ) {
                 $assigned_student_names[] = $student->display_name;
             }
         }
-
         ?>
         <h3>Assigned Students</h3>
         <table class="form-table">
