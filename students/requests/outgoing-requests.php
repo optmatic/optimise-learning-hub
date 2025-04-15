@@ -293,3 +293,22 @@ function render_action_buttons($request_id, $status, $tutor_name, $original_date
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var reasonModal = document.getElementById('reasonModal');
+    if (reasonModal) {
+        reasonModal.addEventListener('show.bs.modal', function (event) {
+            // Button that triggered the modal
+            var button = event.relatedTarget;
+            // Extract info from data-* attributes
+            var reason = button.getAttribute('data-reason');
+            // Update the modal's content.
+            var modalBodyInput = reasonModal.querySelector('#fullReasonText');
+
+            // Use textContent to prevent potential XSS if reason contains HTML/JS
+            modalBodyInput.textContent = reason ? reason : 'No reason provided.';
+        });
+    }
+});
+</script>
