@@ -28,6 +28,7 @@ function enqueue_student_dashboard_styles() {
             'ajaxurl' => admin_url('admin-ajax.php'),
             'student_id' => get_current_user_id(),
             'nonce' => wp_create_nonce('check_incoming_reschedule_requests_nonce'),
+            'markReadNonce' => wp_create_nonce('mark_student_requests_read_nonce'), // Added this nonce
             'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
         ));
     }

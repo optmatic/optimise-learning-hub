@@ -1,0 +1,87 @@
+.table-container {
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 0;
+}
+
+.table-container .table {
+  margin-bottom: 0;
+}
+
+.table-container thead th {
+  position: sticky;
+  top: 0;
+  background-color: #fff;
+  z-index: 1;
+  border-bottom: 2px solid #dee2e6;
+}
+
+/* Custom scrollbar styling */
+.table-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.reason-text:hover {
+  text-decoration: underline;
+}
+
+#fullReasonText {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Style for notification badge */
+.notification-badge {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 50%;
+  position: relative;
+  top: -5px;
+}
+
+/* Add animation for new notifications */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.card-header .badge {
+  animation: pulse 1.5s infinite;
+}
+
+/* Style for alerts in the notification section */
+#requestNotifications .alert {
+  border-left: 4px solid #17a2b8;
+}
+
+/* Improve button styling in notification alerts */
+#requestNotifications .btn {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+}
+
+/* Add some emphasis to the notification count numbers */
+#requestNotifications strong {
+  color: #dc3545;
+}
