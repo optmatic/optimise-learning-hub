@@ -477,7 +477,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p id="fullReasonText"></p>
+                    <div id="fullReasonText" class="p-3"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -526,6 +526,11 @@
         
         .reason-text:hover {
             text-decoration: underline;
+        }
+        
+        #fullReasonText {
+            white-space: pre-wrap;
+            word-break: break-word;
         }
     </style>
     
@@ -1895,20 +1900,195 @@
         });
     }
 
-    // Handle reason modal
+    // Handle reason modal using Bootstrap event
     const reasonModal = document.getElementById('reasonModal');
     if (reasonModal) {
         reasonModal.addEventListener('show.bs.modal', function(event) {
-            // Button that triggered the modal
-            const trigger = event.relatedTarget;
-            // Extract reason from data-* attributes
-            const reason = trigger.getAttribute('data-reason');
-            const modalBody = this.querySelector('#fullReasonText');
+            // Get the element that triggered the modal
+            const triggerElement = event.relatedTarget;
+            // Extract the reason text from the data attribute
+            const reason = triggerElement ? triggerElement.getAttribute('data-reason') : 'Reason not found.';
+            // Find the modal body element
+            const modalBody = reasonModal.querySelector('#fullReasonText');
+            // Update the modal body content
             if (modalBody) {
-                modalBody.textContent = reason;
+                modalBody.innerHTML = reason; // Use innerHTML to render potential formatting
             }
         });
     }
+
+    // Consolidated Date/Time Validation Logic
+    function setupDateTimeValidation() {
+        const now = new Date();
+        // Set time to midnight for accurate date comparison
+        now.setHours(0, 0, 0, 0);
+        const today = now.toISOString().split('T')[0];
+
+        // Get current time components (for today's time validation)
+        const nowForTime = new Date(); // Get current time
+        const currentHour = nowForTime.getHours().toString().padStart(2, '0');
+        const currentMinute = nowForTime.getMinutes().toString().padStart(2, '0');
+        const currentTime = `${currentHour}:${currentMinute}`;
+
+        // Function to setup validation for a pair of date/time inputs
+        function setupPair(dateInput, timeInput) {
+            if (!dateInput || !timeInput) return;
+
+            // Set minimum date allowed to today
+            dateInput.min = today;
+
+            // Function to validate time based on selected date
+            function validateTime() {
+                const selectedDate = dateInput.value;
+                const selectedTime = timeInput.value;
+
+                if (!selectedDate || !selectedTime) return; // Don't validate if incomplete
+
+                // Check if selected date is today
+                if (selectedDate === today) {
+                    // If today, ensure time is not in the past
+                    if (selectedTime < currentTime) {
+                        alert('Please select a future time for today.');
+                        timeInput.value = ''; // Clear invalid time
+                    }
+                }
+                // Check if selected date is in the past (should be prevented by min attribute, but good failsafe)
+                else if (selectedDate < today) {
+                    alert('Please select today or a future date.');
+                    dateInput.value = today; // Reset to today
+                    timeInput.value = ''; // Clear time as date changed
+                    validateTime(); // Re-validate time for today
+                }
+            }
+
+            // Add event listeners
+            dateInput.addEventListener('change', validateTime);
+            timeInput.addEventListener('change', validateTime);
+
+            // Initial check in case the form is pre-filled or edited
+            if (dateInput.value) {
+                validateTime();
+            }
+        }
+
+        // Apply validation setup to New Request preferred times
+        for (let i = 1; i <= 3; i++) {
+            setupPair(
+                document.getElementById(`preferred_date_${i}`),
+                document.getElementById(`preferred_time_${i}`)
+            );
+        }
+
+        // Apply validation setup to Edit Request preferred times
+        for (let i = 1; i <= 3; i++) {
+            setupPair(
+                document.getElementById(`edit_preferred_date_${i}`),
+                document.getElementById(`edit_preferred_time_${i}`)
+            );
+        }
+
+        // Apply validation setup to Unavailable Modal alternative times
+        for (let i = 1; i <= 3; i++) {
+            setupPair(
+                document.getElementById(`alt_date_${i}`),
+                document.getElementById(`alt_time_${i}`)
+            );
+        }
+    }
+
+    // Initialize date/time validation on page load
+    setupDateTimeValidation();
+
+    // Enhanced form submission validation (applied to relevant forms)
+    function validateFormBeforeSubmit(form) {
+        let isValid = true;
+        const dateInputs = form.querySelectorAll('input[type="date"]');
+        const timeInputs = form.querySelectorAll('input[type="time"]');
+        const now = new Date();
+
+        dateInputs.forEach((dateInput, index) => {
+            const timeInput = timeInputs[index];
+            // Only validate pairs where both date and time have values
+            if (dateInput.value && timeInput && timeInput.value) {
+                const selectedDateTime = new Date(`${dateInput.value}T${timeInput.value}`);
+
+                // Check if the selected date/time is in the past
+                if (selectedDateTime < now) {
+                    alert(`The selected time (${dateInput.value} at ${timeInput.value}) is in the past. Please select a future time.`);
+                    isValid = false;
+                    // Optionally focus the invalid input or add a visual indicator
+                    timeInput.focus();
+                    timeInput.classList.add('is-invalid'); // Add Bootstrap invalid class
+                } else {
+                    timeInput.classList.remove('is-invalid'); // Remove class if valid
+                }
+            } else {
+                // If only one part is filled, ensure it's not marked invalid from previous attempt
+                 if (timeInput) timeInput.classList.remove('is-invalid');
+            }
+        });
+
+        return isValid;
+    }
+
+    // Add form submission validation listeners
+    const rescheduleForm = document.getElementById('rescheduleRequestForm');
+    const editRescheduleForm = document.getElementById('editRescheduleRequestForm');
+    const unavailableForm = document.getElementById('unavailableForm'); // Added validation for this form too
+
+    if (rescheduleForm) {
+        // Prevent default form submission, rely on AJAX handler which should include validation
+        rescheduleForm.addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent default only if AJAX is handling it
+            // Validation logic is inside the AJAX submit handler ('submitStudentReschedule' button click)
+            // Ensure validateFormBeforeSubmit is called there if needed.
+        });
+         // We might need to add validation inside the existing AJAX handler for #submitStudentReschedule
+    }
+
+    if (editRescheduleForm) {
+         // Prevent default form submission, rely on AJAX handler which should include validation
+        editRescheduleForm.addEventListener('submit', function(e) {
+             e.preventDefault(); // Prevent default only if AJAX is handling it
+             // Validation logic is inside the AJAX submit handler ('updateStudentReschedule' button click)
+             // Ensure validateFormBeforeSubmit is called there.
+        });
+        // We might need to add validation inside the existing AJAX handler for #updateStudentReschedule
+    }
+
+    if (unavailableForm) {
+        unavailableForm.addEventListener('submit', function(e) {
+            // Standard form submission, so validate here
+            if (!validateFormBeforeSubmit(this)) {
+                e.preventDefault(); // Stop submission if invalid
+            }
+
+            // Also check the requirement for at least one alternative time (existing logic)
+            const altDates = unavailableForm.querySelectorAll('.alt-date');
+            const altTimes = unavailableForm.querySelectorAll('.alt-time');
+            let hasAlternative = false;
+            for (let i = 0; i < altDates.length; i++) {
+                if (altDates[i].value && altTimes[i].value) {
+                    hasAlternative = true;
+                    break;
+                }
+            }
+            if (!hasAlternative) {
+                 e.preventDefault(); // Stop submission
+                 const unavailableError = document.getElementById('unavailableErrorMessage');
+                 if (unavailableError) {
+                     unavailableError.textContent = 'Please provide at least one valid alternative time.'; // More specific message
+                     unavailableError.style.display = 'block';
+                 } else {
+                     alert("Please provide at least one alternative time."); // Fallback
+                 }
+            } else {
+                 const unavailableError = document.getElementById('unavailableErrorMessage');
+                 if (unavailableError) unavailableError.style.display = 'none';
+            }
+        });
+    }
+
 
 }); // End of DOMContentLoaded listener
 </script>

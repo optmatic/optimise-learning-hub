@@ -661,7 +661,7 @@ if (current_user_can('student')) {
                 include 'students/lesson-schedule.php';
                 include 'students/classrooms.php';
                 include 'students/learning-overviews.php';
-                include 'students/requests.php';
+                include 'students/requests/index.php';
                 ?>
             </div>
         </div>
