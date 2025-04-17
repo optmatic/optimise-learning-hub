@@ -58,9 +58,9 @@ function enqueue_tutor_dashboard_styles() {
         wp_enqueue_script(
             'tutor-requests-scripts', // Changed handle for clarity
             get_stylesheet_directory_uri() . '/tutors/requests/index.js', // Corrected path
-            array('jquery', 'child-understrap-scripts'), // Changed 'bootstrap' dependency to 'child-understrap-scripts'
+            array('jquery', 'child-understrap-scripts'), // Ensure Bootstrap (part of child-theme-scripts) is loaded first
             filemtime(get_stylesheet_directory() . '/tutors/requests/index.js'), // Updated path for filemtime
-            true
+            false // Load in <head> instead of footer (temporary test)
         );
 
         // Pass PHP variables to JavaScript (using the new handle)
@@ -1102,6 +1102,7 @@ function my_custom_to_admin_emails( $args ) {
 // require_once get_stylesheet_directory() . '/tutor-request-handler.php';
 
 // Add custom scripts for handling tutor requests
+/* COMMENTING OUT - This inline script conflicts with enqueued tutor-requests-scripts.js
 add_action('wp_footer', 'add_custom_tutor_request_scripts');
 
 function add_custom_tutor_request_scripts() {
@@ -1304,6 +1305,7 @@ function add_custom_tutor_request_scripts() {
     </style>
     <?php
 }
+*/
 
 // Add custom JavaScript to override the browser alert/prompt functions
 add_action('wp_head', function() {
@@ -1966,6 +1968,12 @@ function handle_tutor_reschedule_ajax() {
         return;
     }
 
+    // *** TEMPORARY DEBUG: Send success immediately after nonce check ***
+    wp_send_json_success(['message' => 'AJAX handler reached (Debug).']);
+    exit; // Always exit after wp_send_json_*
+    // *** END TEMPORARY DEBUG ***
+
+    /* --- Original Logic Start (Commented out for debugging) ---
     // Check user permissions (ensure user is a tutor)
     if (!current_user_can('tutor')) {
          wp_send_json_error(['message' => 'Permission denied.'], 403);
@@ -2032,7 +2040,8 @@ function handle_tutor_reschedule_ajax() {
     update_post_meta($request_id, 'status', 'pending'); // Initial status
 
     wp_send_json_success(['message' => 'Reschedule request submitted successfully.', 'request_id' => $request_id]);
-    exit; // Always exit after wp_send_json_* 
+    exit; // Always exit after wp_send_json_*
+    --- Original Logic End --- */
 }
 
 // AJAX handler for getting student lessons
