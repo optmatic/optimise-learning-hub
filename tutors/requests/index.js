@@ -74,17 +74,29 @@ document.addEventListener("DOMContentLoaded", function () {
       document.getElementById("preferred-times-error").style.display = "none";
 
       // Get form elements
-      const student = document.getElementById("student_select").value;
+      const studentId = document.getElementById("student_id").value;
       const originalDate = document.getElementById("original_date").value;
       const originalTime = document.getElementById("original_time").value;
       const reason = document.getElementById("reason").value;
 
+      // *** Add logging here ***
+      console.log("--- Reschedule Form Validation ---");
+      console.log("Student ID value:", studentId);
+      console.log("Original Date value:", originalDate);
+      console.log("Original Time value:", originalTime);
+      console.log("Reason value:", reason);
+      console.log("Checking required fields...");
+
       // Check required fields
-      if (!student || !originalDate || !originalTime || !reason) {
+      if (!studentId || !originalDate || !originalTime || !reason) {
+        console.log(
+          "Validation FAILED: One or more required fields are empty."
+        ); // Log failure
         document.getElementById("rescheduleRequestErrorMessage").style.display =
           "block";
         return;
       }
+      console.log("Validation PASSED: Basic required fields are present."); // Log success
 
       // Validate preferred times (at least one required)
       const preferredDates = document.querySelectorAll(
@@ -116,8 +128,79 @@ document.addEventListener("DOMContentLoaded", function () {
       submitTutorRescheduleBtn.innerHTML =
         '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
 
-      // Submit the form
-      rescheduleRequestForm.submit();
+      // --- Submit the form using Fetch API ---
+      const formData = new FormData(rescheduleRequestForm);
+
+      // Log FormData contents for debugging
+      // console.log("--- FormData --- ");
+      // for (let [key, value] of formData.entries()) {
+      //   console.log(`${key}: ${value}`);
+      // }
+      // console.log("AJAX URL:", tutorDashboardData.ajaxurl);
+
+      fetch(tutorDashboardData.ajaxurl, {
+        method: "POST",
+        body: formData,
+      })
+        .then((response) => {
+          if (!response.ok) {
+            // Try to get error message from server if possible
+            return response.json().then((err) => {
+              throw new Error(
+                err.data?.message || "Network response was not ok."
+              );
+            });
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data.success) {
+            console.log("AJAX success:", data);
+            // Show success message inside the modal
+            document.getElementById(
+              "rescheduleRequestSuccessMessage"
+            ).style.display = "block";
+            document.getElementById(
+              "rescheduleRequestErrorMessage"
+            ).style.display = "none";
+            // Hide form fields and buttons in modal footer except close button
+            rescheduleRequestForm.querySelector(".modal-body").style.display =
+              "none";
+            const footer = rescheduleRequestForm.querySelector(".modal-footer");
+            footer.innerHTML =
+              '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
+
+            // Optionally close modal and reload page after a delay
+            setTimeout(() => {
+              const modalInstance = bootstrap.Modal.getInstance(
+                document.getElementById("newRescheduleRequestModal")
+              );
+              if (modalInstance) {
+                modalInstance.hide();
+              }
+              location.reload(); // Reload to show the updated outgoing requests table
+            }, 2500); // 2.5 second delay
+          } else {
+            // Throw error to be caught by .catch()
+            throw new Error(
+              data.data?.message || "Submission failed. Please try again."
+            );
+          }
+        })
+        .catch((error) => {
+          console.error("Error submitting form:", error);
+          // Show error message
+          const errorDiv = document.getElementById(
+            "rescheduleRequestErrorMessage"
+          );
+          errorDiv.querySelector("p").textContent = "Error: " + error.message;
+          errorDiv.style.display = "block";
+          // Re-enable form
+          formElements.forEach((el) => (el.disabled = false));
+          submitTutorRescheduleBtn.innerHTML = "Submit Request";
+        });
+
+      // rescheduleRequestForm.submit(); // REMOVED standard form submission
     });
   }
 
@@ -211,194 +294,148 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // Development Mode: Generate sample data
-  const devModeCheckbox = document.getElementById("devModeCheckbox");
-  if (devModeCheckbox) {
-    devModeCheckbox.addEventListener("change", function () {
-      if (this.checked) {
-        console.log("Development mode enabled - filling form with sample data");
+  // Development Mode: Autofill form data
+  const devModeButton = document.getElementById("devModeCheckbox");
+  if (devModeButton) {
+    devModeButton.addEventListener("click", function () {
+      console.log("Autofill button clicked - filling form with sample data");
 
-        // Generate random dates and times
-        const today = new Date();
-        const nextWeek = new Date(today);
-        nextWeek.setDate(today.getDate() + 7);
+      // Target elements within the modal
+      const modal = document.getElementById("newRescheduleRequestModal");
+      if (!modal) {
+        console.error("Could not find the reschedule request modal.");
+        return;
+      }
 
-        // Random student selection
-        const studentSelect = document.getElementById("student_select");
-        const studentNameInput = document.getElementById("student_name");
-        if (studentSelect && studentSelect.options.length > 1) {
-          console.log("Setting random student");
-          const randomIndex =
-            Math.floor(Math.random() * (studentSelect.options.length - 1)) + 1;
-          studentSelect.selectedIndex = randomIndex;
-
-          // Get the selected option's data-username attribute
-          const selectedOption = studentSelect.options[randomIndex];
-          if (selectedOption && studentNameInput) {
-            studentNameInput.value =
-              selectedOption.getAttribute("data-username") || "";
-          }
-
-          // Trigger both change and input events
-          studentSelect.dispatchEvent(new Event("change", { bubbles: true }));
-          studentSelect.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-
-        // Random lesson date (next week)
-        const lessonDate = document.getElementById("lesson_date");
-        if (lessonDate) {
-          console.log("Setting random lesson date");
-          const randomDate = new Date(nextWeek);
-          randomDate.setDate(
-            nextWeek.getDate() + Math.floor(Math.random() * 7)
-          );
-          lessonDate.value = randomDate.toISOString().split("T")[0];
-          lessonDate.dispatchEvent(new Event("change", { bubbles: true }));
-          lessonDate.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-
-        // Random lesson time
-        const lessonTime = document.getElementById("lesson_time");
-        if (lessonTime) {
-          console.log("Setting random lesson time");
-          const hours = Math.floor(Math.random() * 12) + 9; // 9 AM to 8 PM
-          const minutes = Math.random() < 0.5 ? "00" : "30";
-          lessonTime.value = `${hours.toString().padStart(2, "0")}:${minutes}`;
-          lessonTime.dispatchEvent(new Event("change", { bubbles: true }));
-          lessonTime.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-
-        // Random reason
-        const reason = document.getElementById("reason");
-        if (reason) {
-          console.log("Setting random reason");
-          const reasons = [
-            "I have a conflicting appointment that came up",
-            "I need to attend an important family event",
-            "I'm feeling under the weather and need to reschedule",
-            "I have an unexpected work commitment",
-            "I need to reschedule due to an urgent matter",
-            "I have a scheduling conflict with another student",
-            "There's an important professional development event I need to attend",
-            "I need to accommodate an emergency situation",
-          ];
-          reason.value = reasons[Math.floor(Math.random() * reasons.length)];
-          reason.dispatchEvent(new Event("change", { bubbles: true }));
-          reason.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-
-        // Random preferred times
-        console.log("Setting random preferred times");
-        const usedDates = new Set(); // To ensure unique dates
-
-        for (let i = 1; i <= 3; i++) {
-          const dateInput = document.getElementById(`preferred_date_${i}`);
-          const timeInput = document.getElementById(`preferred_time_${i}`);
-
-          if (dateInput && timeInput) {
-            let randomDate;
-            let dateStr;
-
-            // Keep generating dates until we get a unique one
-            do {
-              randomDate = new Date(nextWeek);
-              randomDate.setDate(
-                nextWeek.getDate() + Math.floor(Math.random() * 14) + 1
-              );
-              dateStr = randomDate.toISOString().split("T")[0];
-            } while (usedDates.has(dateStr));
-
-            usedDates.add(dateStr);
-            dateInput.value = dateStr;
-
-            const hours = Math.floor(Math.random() * 12) + 9;
-            const minutes = Math.random() < 0.5 ? "00" : "30";
-            timeInput.value = `${hours.toString().padStart(2, "0")}:${minutes}`;
-
-            // Trigger events
-            dateInput.dispatchEvent(new Event("change", { bubbles: true }));
-            dateInput.dispatchEvent(new Event("input", { bubbles: true }));
-            timeInput.dispatchEvent(new Event("change", { bubbles: true }));
-            timeInput.dispatchEvent(new Event("input", { bubbles: true }));
-          }
-        }
-
-        // Validate the form after filling
-        console.log("Validating filled form");
-        const form = document.getElementById("rescheduleRequestForm");
-        if (form) {
-          // Trigger form validation
-          form.checkValidity();
-          form.dispatchEvent(new Event("change", { bubbles: true }));
-
-          // Hide any error messages that might be showing
-          const errorMessages = form.querySelectorAll(
-            ".alert-danger, .text-danger"
-          );
-          errorMessages.forEach((msg) => (msg.style.display = "none"));
-        }
-
-        console.log("Sample data population complete");
+      // --- Select Student ---
+      const studentSelect = modal.querySelector("#student_select");
+      const studentIdInput = modal.querySelector("#student_id");
+      if (studentSelect && studentIdInput && studentSelect.options.length > 1) {
+        // Select a random student (excluding the placeholder "--Select student--")
+        const randomIndex =
+          Math.floor(Math.random() * (studentSelect.options.length - 1)) + 1;
+        studentSelect.selectedIndex = randomIndex;
+        // Trigger change event to update hidden ID field
+        studentSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        console.log(
+          "Selected student:",
+          studentSelect.options[randomIndex].text
+        );
       } else {
-        console.log("Development mode disabled - clearing form");
-        // Clear all form fields
-        const form = document.getElementById("rescheduleRequestForm");
-        if (form) {
-          form.reset();
+        console.warn("Could not select student or no students available.");
+      }
 
-          // Clear any populated hidden fields
-          const hiddenFields = form.querySelectorAll('input[type="hidden"]');
-          hiddenFields.forEach((field) => {
-            if (
-              ![
-                "submit_tutor_reschedule_request",
-                "tutor_id",
-                "tutor_name",
-                "active_tab",
-              ].includes(field.name)
-            ) {
-              field.value = "";
-            }
-          });
+      // --- Lesson to Reschedule ---
+      const today = new Date();
+      const nextWeek = new Date(today);
+      nextWeek.setDate(today.getDate() + 7);
+      const originalDateInput = modal.querySelector("#original_date");
+      const originalTimeInput = modal.querySelector("#original_time");
 
-          // Trigger form validation
-          form.checkValidity();
-          form.dispatchEvent(new Event("change", { bubbles: true }));
+      if (originalDateInput) {
+        const randomDate = new Date(nextWeek);
+        randomDate.setDate(nextWeek.getDate() + Math.floor(Math.random() * 7)); // Date within the next week
+        originalDateInput.value = randomDate.toISOString().split("T")[0];
+        console.log("Set original date:", originalDateInput.value);
+      }
+      if (originalTimeInput) {
+        const hours = Math.floor(Math.random() * 10) + 9; // 9 AM to 6 PM
+        const minutes = Math.random() < 0.5 ? "00" : "30";
+        originalTimeInput.value = `${hours
+          .toString()
+          .padStart(2, "0")}:${minutes}`;
+        console.log("Set original time:", originalTimeInput.value);
+      }
+
+      // --- Reason ---
+      const reasonInput = modal.querySelector("#reason");
+      if (reasonInput) {
+        const reasons = [
+          "Conflicting appointment",
+          "Family event",
+          "Feeling unwell",
+          "Unexpected work commitment",
+          "Urgent matter",
+          "Scheduling conflict",
+          "Professional development",
+          "Emergency situation",
+        ];
+        reasonInput.value = reasons[Math.floor(Math.random() * reasons.length)];
+        console.log("Set reason:", reasonInput.value);
+      }
+
+      // --- Preferred Alternative Times ---
+      const usedDates = new Set(); // To ensure unique dates
+      for (let i = 1; i <= 3; i++) {
+        const preferredDateInput = modal.querySelector(`#preferred_date_${i}`);
+        const preferredTimeInput = modal.querySelector(`#preferred_time_${i}`);
+        if (preferredDateInput && preferredTimeInput) {
+          let randomDate, dateStr;
+          let attempts = 0;
+          do {
+            randomDate = new Date(nextWeek);
+            // Pick a date 1-14 days after next week starts
+            randomDate.setDate(
+              nextWeek.getDate() + Math.floor(Math.random() * 14) + 1
+            );
+            dateStr = randomDate.toISOString().split("T")[0];
+            attempts++;
+          } while (usedDates.has(dateStr) && attempts < 10); // Prevent infinite loop
+
+          if (attempts < 10) {
+            usedDates.add(dateStr);
+            preferredDateInput.value = dateStr;
+
+            const hours = Math.floor(Math.random() * 10) + 9; // 9 AM to 6 PM
+            const minutes = Math.random() < 0.5 ? "00" : "30";
+            preferredTimeInput.value = `${hours
+              .toString()
+              .padStart(2, "0")}:${minutes}`;
+            console.log(
+              `Set preferred time ${i}:`,
+              preferredDateInput.value,
+              preferredTimeInput.value
+            );
+          } else {
+            console.warn(`Could not find unique date for preferred time ${i}`);
+            preferredDateInput.value = "";
+            preferredTimeInput.value = "";
+          }
         }
       }
-    });
 
-    // Add keyboard shortcut (Ctrl/Cmd + Shift + D) to toggle dev mode
-    document.addEventListener("keydown", function (e) {
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        e.shiftKey &&
-        e.key.toLowerCase() === "d"
-      ) {
-        e.preventDefault(); // Prevent default browser behavior
-        devModeCheckbox.checked = !devModeCheckbox.checked;
-        devModeCheckbox.dispatchEvent(new Event("change"));
-      }
+      // Clear validation messages just in case
+      const errorMsg = modal.querySelector("#rescheduleRequestErrorMessage");
+      const preferredErrorMsg = modal.querySelector("#preferred-times-error");
+      if (errorMsg) errorMsg.style.display = "none";
+      if (preferredErrorMsg) preferredErrorMsg.style.display = "none";
+
+      console.log("Form autofill complete.");
     });
   }
 
   // Fix for the invalid selector error
   function replaceDeclineButtons() {
-    // Use separate selectors for danger buttons and decline buttons
-    const dangerButtons = document.querySelectorAll("button.btn-danger");
-    const declineButtons = Array.from(
-      document.querySelectorAll("button")
-    ).filter((button) => button.textContent.trim().toLowerCase() === "decline");
+    // Find all buttons first
+    const allButtons = document.querySelectorAll("button");
 
-    // Combine the button collections
-    const allButtons = [...dangerButtons, ...declineButtons];
+    // Filter buttons: those with btn-danger class OR those whose text content is "Decline"
+    const targetButtons = Array.from(allButtons).filter(
+      (button) =>
+        button.classList.contains("btn-danger") ||
+        button.textContent.trim().toLowerCase() === "decline"
+    );
 
-    allButtons.forEach((button) => {
+    targetButtons.forEach((button) => {
       // Your button replacement logic here
-      // For example:
-      button.classList.add("btn-warning");
-      button.classList.remove("btn-danger");
-      button.innerHTML = '<i class="fas fa-times"></i> Unavailable';
+      // Example: Make them warning buttons with an 'Unavailable' icon/text
+      button.classList.remove("btn-danger"); // Remove danger class if present
+      button.classList.add("btn-warning"); // Add warning class
+      // Set icon and text (ensure Font Awesome is loaded or adjust as needed)
+      button.innerHTML = '<i class="fas fa-times me-1"></i> Unavailable';
+      // Add necessary Bootstrap attributes if this button should open the 'unavailableModal'
+      button.setAttribute("data-bs-toggle", "modal");
+      button.setAttribute("data-bs-target", "#unavailableModal");
     });
   }
 

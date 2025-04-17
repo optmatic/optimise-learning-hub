@@ -47,19 +47,28 @@ function enqueue_tutor_dashboard_styles() {
             filemtime(get_stylesheet_directory() . '/tutors/styles.css')
         );
 
+        // wp_enqueue_script(
+        //     'tutor-dashboard-scripts',
+        //     get_stylesheet_directory_uri() . '/tutors/index.js',
+        //     array('jquery'),
+        //     filemtime(get_stylesheet_directory() . '/tutors/index.js'),
+        //     true
+        // ); // Commented out - loading tutor-requests-scripts instead
+
         wp_enqueue_script(
-            'tutor-dashboard-scripts',
-            get_stylesheet_directory_uri() . '/tutors/index.js',
-            array('jquery'),
-            filemtime(get_stylesheet_directory() . '/tutors/index.js'),
+            'tutor-requests-scripts', // Changed handle for clarity
+            get_stylesheet_directory_uri() . '/tutors/requests/index.js', // Corrected path
+            array('jquery', 'child-understrap-scripts'), // Changed 'bootstrap' dependency to 'child-understrap-scripts'
+            filemtime(get_stylesheet_directory() . '/tutors/requests/index.js'), // Updated path for filemtime
             true
         );
 
-        // Pass PHP variables to JavaScript
-        wp_localize_script('tutor-dashboard-scripts', 'tutorDashboardData', array(
+        // Pass PHP variables to JavaScript (using the new handle)
+        wp_localize_script('tutor-requests-scripts', 'tutorDashboardData', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
+            'rescheduleNonce' => wp_create_nonce('tutor_reschedule_request_action'), // Nonce for the AJAX request
             'tutor_id' => get_current_user_id(),
-            'nonce' => wp_create_nonce('check_incoming_reschedule_requests_nonce'),
+            'nonce' => wp_create_nonce('check_incoming_reschedule_requests_nonce'), // Existing nonce, maybe rename?
             'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
         ));
     }
@@ -1945,3 +1954,86 @@ function render_preferred_time_inputs(string $id_prefix = '', int $count = 3, bo
         </div>
     <?php endfor;
 }
+
+add_filter('the_content', 'wrap_reschedule_content', 999);
+
+// AJAX handler for submitting tutor reschedule request
+add_action('wp_ajax_submit_tutor_reschedule', 'handle_tutor_reschedule_ajax');
+function handle_tutor_reschedule_ajax() {
+    // Verify Nonce
+    if (!isset($_POST['tutor_reschedule_nonce']) || !wp_verify_nonce($_POST['tutor_reschedule_nonce'], 'tutor_reschedule_request_action')) {
+        wp_send_json_error(['message' => 'Nonce verification failed.'], 403);
+        return;
+    }
+
+    // Check user permissions (ensure user is a tutor)
+    if (!current_user_can('tutor')) {
+         wp_send_json_error(['message' => 'Permission denied.'], 403);
+        return;
+    }
+    
+    // Get and sanitize form data
+    $tutor_id = get_current_user_id();
+    $tutor_name = wp_get_current_user()->user_login;
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+    $student_name = isset($_POST['student_name']) ? sanitize_text_field($_POST['student_name']) : '';
+    $original_date = isset($_POST['original_date']) ? sanitize_text_field($_POST['original_date']) : '';
+    $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
+    $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
+
+    // Basic Validation
+    if (empty($student_id) || empty($original_date) || empty($original_time) || empty($reason)) {
+        wp_send_json_error(['message' => 'Missing required fields (Student, Lesson Date/Time, Reason).'], 400);
+        return;
+    }
+
+    // Collect preferred times
+    $preferred_times = [];
+    for ($i = 1; $i <= 3; $i++) {
+        $date = isset($_POST['preferred_date_' . $i]) ? sanitize_text_field($_POST['preferred_date_' . $i]) : '';
+        $time = isset($_POST['preferred_time_' . $i]) ? sanitize_text_field($_POST['preferred_time_' . $i]) : '';
+        
+        if (!empty($date) && !empty($time)) {
+            $preferred_times[] = ['date' => $date, 'time' => $time];
+        }
+    }
+    
+    // Require at least one preferred time
+     if (empty($preferred_times)) {
+        wp_send_json_error(['message' => 'Please provide at least one preferred alternative time.'], 400);
+        return;
+    }
+
+    // Create the request post
+    $request = [
+        'post_title'   => 'Tutor Reschedule Request: ' . $tutor_name . ' for ' . $student_name,
+        'post_content' => '',
+        'post_status'  => 'publish',
+        'post_type'    => 'progress_report',
+    ];
+    
+    $request_id = wp_insert_post($request);
+    
+    if (is_wp_error($request_id)) {
+         wp_send_json_error(['message' => 'Error creating request post: ' . $request_id->get_error_message()], 500);
+         return;
+    }
+
+    // Save meta data
+    update_post_meta($request_id, 'request_type', 'tutor_reschedule');
+    update_post_meta($request_id, 'tutor_id', $tutor_id);
+    update_post_meta($request_id, 'tutor_name', $tutor_name);
+    update_post_meta($request_id, 'student_id', $student_id);
+    update_post_meta($request_id, 'student_name', $student_name); // Store student name used in title/lookup
+    update_post_meta($request_id, 'original_date', $original_date);
+    update_post_meta($request_id, 'original_time', $original_time);
+    update_post_meta($request_id, 'reason', $reason);
+    update_post_meta($request_id, 'preferred_times', $preferred_times);
+    update_post_meta($request_id, 'status', 'pending'); // Initial status
+
+    wp_send_json_success(['message' => 'Reschedule request submitted successfully.', 'request_id' => $request_id]);
+    exit; // Always exit after wp_send_json_* 
+}
+
+// AJAX handler for getting student lessons
+// ... existing code ...

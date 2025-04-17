@@ -129,6 +129,7 @@
     }
     
     // Add this function to handle the tutor-initiated request submission
+    /* COMMENTED OUT - Logic moved to handle_tutor_reschedule_ajax() in functions.php
     function process_tutor_reschedule_request() {
         error_log('process_tutor_reschedule_request called');
         error_log('POST data: ' . print_r($_POST, true));
@@ -221,6 +222,7 @@
         }
         return false;
     }
+    */
     
     // Add this function near the top with the other process functions
     function process_delete_tutor_request() {
@@ -314,7 +316,6 @@
     // Process these request actions
     process_confirm_reschedule();
     process_decline_reschedule();
-    process_tutor_reschedule_request();
     process_delete_tutor_request();
     process_select_alternative();
     
@@ -690,6 +691,9 @@
             <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#newRescheduleRequestModal">
                 Request Lesson Reschedule
             </button>
+
+            <!-- Dev Autofill Button - REMOVED FROM HERE -->
+            <!-- <button type="button" id="devModeCheckbox" class="btn btn-secondary mb-3 ms-2" title="Autofill form with sample data">Autofill Form (Dev)</button> -->
             
             <!-- Modal for creating a new reschedule request -->
             <div class="modal fade" id="newRescheduleRequestModal" tabindex="-1" aria-labelledby="newRescheduleRequestModalLabel" aria-hidden="true">
@@ -707,6 +711,8 @@
                                 <p>Please fill in all required fields (student, lesson, and reason).</p>
                             </div>
                             <form id="rescheduleRequestForm" method="post">
+                                <?php wp_nonce_field( 'tutor_reschedule_request_action', 'tutor_reschedule_nonce' ); ?>
+                                <input type="hidden" name="action" value="submit_tutor_reschedule">
                                 <input type="hidden" name="submit_tutor_reschedule_request" value="1">
                                 <input type="hidden" name="tutor_id" value="<?php echo get_current_user_id(); ?>">
                                 <input type="hidden" name="tutor_name" value="<?php echo wp_get_current_user()->user_login; ?>">
@@ -778,6 +784,8 @@
                                 </div>
                                 
                                 <div class="modal-footer">
+                                    <!-- ADDED DEV BUTTON HERE -->
+                                    <button type="button" id="devModeCheckbox" class="btn btn-outline-secondary me-auto" title="Autofill form with sample data (Dev)">Autofill</button>
                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                                     <button type="button" class="btn btn-primary" id="submitTutorReschedule">Submit Request</button>
                                 </div>
