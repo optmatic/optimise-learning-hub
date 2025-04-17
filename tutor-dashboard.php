@@ -331,7 +331,104 @@ function test_reschedule_requests() {
 }
 ?>
 
+<!-- Modals from incoming-requests.php -->
+<!-- Modal for Providing Alternative Times -->
+<div class="modal fade" id="unavailableModal" tabindex="-1" aria-labelledby="unavailableModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg"> <!-- Consider larger modal for better layout -->
+        <div class="modal-content">
+            <form id="unavailableForm" method="post">
+                <?php wp_nonce_field('decline_reschedule_action', 'decline_reschedule_nonce'); ?>
+                <input type="hidden" name="action" value="decline_reschedule">
+                <input type="hidden" name="request_id" id="unavailable_request_id">
+                <input type="hidden" name="student_id" id="unavailable_student_id">
+                <input type="hidden" name="active_tab" value="requests"> <!-- Consider if still needed -->
 
+                <div class="modal-header">
+                    <h5 class="modal-title" id="unavailableModalLabel">Suggest Alternative Times</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="unavailableErrorMessage" class="alert alert-danger" style="display: none;">
+                        Please provide at least one valid alternative date and time.
+                    </div>
+
+                    <p class="lead mb-3">You've indicated you're unavailable for the student's preferred times. Please suggest your own alternatives.</p>
+
+                    <!-- Student Request Details -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header bg-light">
+                            <i class="fas fa-user-clock me-2"></i> <strong>Student's Request</strong>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Student:</strong> <span id="unavailable_student_name" class="text-primary fw-bold"></span></p>
+                            <p><strong>Original Lesson:</strong> <span id="unavailable_original_time" class="text-secondary"></span></p>
+
+                            <div id="student_preferred_times_container" class="mb-2">
+                                <p class="mb-1"><strong>Student's Preferred Alternatives:</strong></p>
+                                <ul id="preferred_times_list" class="list-unstyled ps-3"></ul>
+                            </div>
+
+                            <div id="student_reason_container">
+                                <p class="mb-1"><strong>Reason:</strong></p>
+                                <blockquote class="blockquote blockquote-sm mb-0 border-start border-3 ps-3">
+                                    <p id="unavailable_reason" class="mb-0"></p>
+                                </blockquote>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tutor Alternative Times -->
+                    <h5 class="mt-4"><i class="fas fa-calendar-alt me-2"></i> Your Alternative Times</h5>
+                    <p class="text-muted small mb-3">Provide up to 3 alternative times that work for you. The first option is required.</p>
+
+                    <div id="alternative-times-container">
+                        <?php
+                        // Use the helper function from functions.php
+                        // Assumes render_preferred_time_inputs generates appropriate HTML structure
+                        // including labels, inputs (date & time), required attributes, and classes.
+                        if (function_exists('render_preferred_time_inputs')) {
+                            render_preferred_time_inputs('alt_', 3, true); // prefix, count, first required
+                        } else {
+                            // Fallback or error message if function doesn't exist
+                            echo '<p class="text-danger">Error: Could not render time input fields.</p>';
+                            // Basic fallback (less ideal)
+                            for ($i = 1; $i <= 3; $i++) {
+                                echo '<div class="mb-2 row">';
+                                echo '<div class="col-md-6"><label class="form-label small">Alternative Date ' . $i . ':</label><input type="date" class="form-control alt-date" name="alt_date_' . $i . '" id="alt_date_' . $i . '" ' . ($i == 1 ? 'required' : '') . '></div>';
+                                echo '<div class="col-md-6"><label class="form-label small">Alternative Time ' . $i . ':</label><input type="time" class="form-control alt-time" name="alt_time_' . $i . '" id="alt_time_' . $i . '" ' . ($i == 1 ? 'required' : '') . '></div>';
+                                echo '</div>';
+                            }
+                        }
+                        ?>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submitUnavailable"><i class="fas fa-paper-plane me-2"></i> Submit Alternatives</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Displaying Full Reason Text -->
+<div class="modal fade" id="reasonModal" tabindex="-1" aria-labelledby="reasonModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reasonModalLabel"><i class="fas fa-info-circle me-2"></i> Full Reschedule Reason</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="fullReasonText"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- End Modals -->
 
 <?php get_footer(); ?>
 
