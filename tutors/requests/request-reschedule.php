@@ -704,16 +704,31 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
-                            <div id="rescheduleRequestSuccessMessage" class="alert alert-success" style="display: none;">
-                                <p>Your reschedule request has been successfully submitted. Your student will be notified.</p>
+                            
+                            <!-- Add success/error message containers -->
+                            <div id="tutorRescheduleSuccessMessage" class="alert alert-success" style="display: none;">
+                                <p>Your reschedule request has been successfully submitted.</p>
                             </div>
-                            <div id="rescheduleRequestErrorMessage" class="alert alert-danger" style="display: none;">
-                                <p>Please fill in all required fields (student, lesson, and reason).</p>
+                            <div id="tutorRescheduleErrorMessage" class="alert alert-danger" style="display: none;">
+                                <p>There was an error submitting your request. Please check the fields and try again.</p>
                             </div>
-                            <form id="rescheduleRequestForm" method="post">
-                                <?php wp_nonce_field( 'tutor_reschedule_request_action', 'tutor_reschedule_nonce' ); ?>
-                                <input type="hidden" name="action" value="submit_tutor_reschedule">
-                                <input type="hidden" name="submit_tutor_reschedule_request" value="1">
+
+                            <!-- Display feedback messages based on URL parameter -->
+                            <?php 
+                            if (isset($_GET['reschedule_success']) && $_GET['reschedule_success'] === '1'): ?>
+                                <div class="alert alert-success">
+                                    Reschedule request submitted successfully.
+                                </div>
+                            <?php endif; 
+                            // You could add checks for error parameters here too if needed
+                            // elseif (isset($_GET['reschedule_error'])) { ... }
+                            ?>
+
+                            <form id="rescheduleRequestForm" method="post" action="">
+                                <?php wp_nonce_field( 'tutor_reschedule_request_post_action', 'tutor_reschedule_post_nonce' ); ?>
+                                <!-- Keep action hidden field for consistency if needed, but the main check will be the submit button name -->
+                                <input type="hidden" name="action" value="submit_tutor_reschedule_post"> 
+                                <input type="hidden" name="submit_tutor_reschedule_request" value="1"> <!-- Keep this for potential reuse -->
                                 <input type="hidden" name="tutor_id" value="<?php echo get_current_user_id(); ?>">
                                 <input type="hidden" name="tutor_name" value="<?php echo wp_get_current_user()->user_login; ?>">
                                 <input type="hidden" name="active_tab" value="requests">
@@ -787,6 +802,7 @@
                                     <!-- ADDED DEV BUTTON HERE -->
                                     <button type="button" id="devModeCheckbox" class="btn btn-outline-secondary me-auto" title="Autofill form with sample data (Dev)">Autofill</button>
                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <!-- Change button type to button and add ID -->
                                     <button type="button" class="btn btn-primary" id="submitTutorReschedule">Submit Request</button>
                                 </div>
                             </form>

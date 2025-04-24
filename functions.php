@@ -1968,12 +1968,6 @@ function handle_tutor_reschedule_ajax() {
         return;
     }
 
-    // *** TEMPORARY DEBUG: Send success immediately after nonce check ***
-    wp_send_json_success(['message' => 'AJAX handler reached (Debug).']);
-    exit; // Always exit after wp_send_json_*
-    // *** END TEMPORARY DEBUG ***
-
-    /* --- Original Logic Start (Commented out for debugging) ---
     // Check user permissions (ensure user is a tutor)
     if (!current_user_can('tutor')) {
          wp_send_json_error(['message' => 'Permission denied.'], 403);
@@ -2041,8 +2035,117 @@ function handle_tutor_reschedule_ajax() {
 
     wp_send_json_success(['message' => 'Reschedule request submitted successfully.', 'request_id' => $request_id]);
     exit; // Always exit after wp_send_json_*
-    --- Original Logic End --- */
 }
 
 // AJAX handler for getting student lessons
-// ... existing code ...
+
+// require_once get_stylesheet_directory() . '/inc/acf-fields.php';
+
+// Function to process tutor reschedule request via POST
+function process_tutor_reschedule_request_post() {
+    global $tutor_reschedule_feedback; // Use a global variable for feedback
+
+    // Check if our specific form was submitted
+    if (isset($_POST['submit_tutor_reschedule_post'])) {
+        error_log('[Tutor Reschedule POST] Form submitted.'); // LOGGING
+
+        // Verify Nonce
+        if (!isset($_POST['tutor_reschedule_post_nonce']) || !wp_verify_nonce($_POST['tutor_reschedule_post_nonce'], 'tutor_reschedule_request_post_action')) {
+            error_log('[Tutor Reschedule POST] Nonce verification failed.'); // LOGGING
+            $tutor_reschedule_feedback = ['type' => 'danger', 'message' => 'Security check failed. Please try again.'];
+            return;
+        }
+        error_log('[Tutor Reschedule POST] Nonce verified.'); // LOGGING
+
+        // Check user permissions (ensure user is a tutor)
+        if (!current_user_can('tutor')) {
+            error_log('[Tutor Reschedule POST] Permission denied for user ID: ' . get_current_user_id()); // LOGGING
+            $tutor_reschedule_feedback = ['type' => 'danger', 'message' => 'Permission denied.'];
+            return;
+        }
+        error_log('[Tutor Reschedule POST] Permissions check passed.'); // LOGGING
+        
+        // Get and sanitize form data (same as AJAX handler)
+        $tutor_id = get_current_user_id();
+        $tutor_name = wp_get_current_user()->user_login;
+        $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+        $student_name = isset($_POST['student_name']) ? sanitize_text_field($_POST['student_name']) : '';
+        $original_date = isset($_POST['original_date']) ? sanitize_text_field($_POST['original_date']) : '';
+        $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
+        $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
+
+        error_log('[Tutor Reschedule POST] Received Data: ' . print_r($_POST, true)); // LOGGING POST DATA
+
+        // Basic Validation
+        if (empty($student_id) || empty($original_date) || empty($original_time) || empty($reason)) {
+            error_log('[Tutor Reschedule POST] Validation failed - missing required fields.'); // LOGGING
+            $tutor_reschedule_feedback = ['type' => 'danger', 'message' => 'Missing required fields (Student, Lesson Date/Time, Reason).'];
+            return;
+        }
+        error_log('[Tutor Reschedule POST] Basic validation passed.'); // LOGGING
+
+        // Collect preferred times
+        $preferred_times = [];
+        for ($i = 1; $i <= 3; $i++) {
+            $date = isset($_POST['preferred_date_' . $i]) ? sanitize_text_field($_POST['preferred_date_' . $i]) : '';
+            $time = isset($_POST['preferred_time_' . $i]) ? sanitize_text_field($_POST['preferred_time_' . $i]) : '';
+            
+            if (!empty($date) && !empty($time)) {
+                $preferred_times[] = ['date' => $date, 'time' => $time];
+            }
+        }
+        error_log('[Tutor Reschedule POST] Preferred Times: ' . print_r($preferred_times, true)); // LOGGING
+        
+        // Require at least one preferred time
+         if (empty($preferred_times)) {
+            error_log('[Tutor Reschedule POST] Validation failed - no preferred times provided.'); // LOGGING
+            $tutor_reschedule_feedback = ['type' => 'danger', 'message' => 'Please provide at least one preferred alternative time.'];
+            return;
+        }
+        error_log('[Tutor Reschedule POST] Preferred times validation passed.'); // LOGGING
+
+        // Create the request post
+        $request = [
+            'post_title'   => 'Tutor Reschedule Request: ' . $tutor_name . ' for ' . $student_name,
+            'post_content' => '', // Content is not used, meta fields store details
+            'post_status'  => 'publish',
+            'post_type'    => 'progress_report',
+        ];
+        
+        error_log('[Tutor Reschedule POST] Attempting wp_insert_post with data: ' . print_r($request, true)); // LOGGING
+        $request_id = wp_insert_post($request);
+        
+        if (is_wp_error($request_id)) {
+             error_log('[Tutor Reschedule POST] wp_insert_post failed: ' . $request_id->get_error_message()); // LOGGING
+             $tutor_reschedule_feedback = ['type' => 'danger', 'message' => 'Error creating request: ' . $request_id->get_error_message()];
+             return;
+        }
+        error_log('[Tutor Reschedule POST] wp_insert_post successful. New post ID: ' . $request_id); // LOGGING
+
+        // Save meta data
+        update_post_meta($request_id, 'request_type', 'tutor_reschedule');
+        update_post_meta($request_id, 'tutor_id', $tutor_id);
+        update_post_meta($request_id, 'tutor_name', $tutor_name);
+        update_post_meta($request_id, 'student_id', $student_id);
+        update_post_meta($request_id, 'student_name', $student_name); 
+        update_post_meta($request_id, 'original_date', $original_date);
+        update_post_meta($request_id, 'original_time', $original_time);
+        update_post_meta($request_id, 'reason', $reason);
+        update_post_meta($request_id, 'preferred_times', $preferred_times);
+        update_post_meta($request_id, 'status', 'pending'); 
+        error_log('[Tutor Reschedule POST] Meta data saved for post ID: ' . $request_id); // LOGGING
+
+        // Set success message
+        // $tutor_reschedule_feedback = ['type' => 'success', 'message' => 'Reschedule request submitted successfully.']; // Keep this commented, feedback handled by redirect param
+        error_log('[Tutor Reschedule POST] Success feedback set.'); // LOGGING
+        
+        // Redirect back to the requests tab with a success flag
+        $redirect_url = add_query_arg(['active_tab' => 'requests', 'reschedule_success' => '1'], get_permalink()); // Assuming this runs on the tutor dashboard page
+        if ($redirect_url) {
+            error_log('[Tutor Reschedule POST] Redirecting to: ' . $redirect_url); // LOGGING
+            wp_safe_redirect($redirect_url);
+            exit;
+        }
+    }
+}
+add_action('init', 'process_tutor_reschedule_request_post'); // Hook into init to catch POST request early
