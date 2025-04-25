@@ -120,10 +120,9 @@ document.addEventListener("DOMContentLoaded", function () {
     submitTutorRescheduleBtn.addEventListener("click", function (e) {
       console.log("Tutor Requests JS: Submit button CLICKED."); // <-- Log C
       e.preventDefault();
-      console.log("Tutor Requests JS: Submit button clicked!");
 
-      // Check if button is already disabled (preventing duplicate submissions)
       if (this.disabled) {
+        // Check if already submitting
         return;
       }
 
@@ -148,6 +147,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // Check required fields
       if (!studentId || !originalDate || !originalTime || !reason) {
+        // <-- Validation 1
         console.log(
           "Validation FAILED: One or more required fields are empty."
         ); // Log failure
@@ -174,6 +174,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       if (!hasPreferredTime) {
+        // <-- Validation 2
         document.getElementById("preferred-times-error").style.display =
           "block";
         return;
@@ -186,6 +187,10 @@ document.addEventListener("DOMContentLoaded", function () {
       formElements.forEach((el) => (el.disabled = true));
       submitTutorRescheduleBtn.innerHTML =
         '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+
+      console.log(
+        "Tutor Requests JS: Basic validation passed. Preparing fetch..."
+      ); // <-- Log 4
 
       // --- Submit the form using Fetch API ---
       const formData = new FormData(rescheduleRequestForm);
@@ -774,4 +779,238 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // --- End New Reschedule Request Modal Logic ---
+
+  // Get the modal element
+  const rescheduleModal = document.getElementById("newRescheduleRequestModal");
+
+  if (rescheduleModal) {
+    console.log(
+      "Tutor Requests JS: Found modal (#newRescheduleRequestModal). Attaching delegated listener."
+    );
+
+    rescheduleModal.addEventListener("click", function (event) {
+      // --- Handle Submit Button Click ---
+      if (event.target.id === "submitTutorReschedule") {
+        const submitBtn = event.target; // The button that was clicked
+        const form = document.getElementById("rescheduleRequestForm"); // Get form
+        console.log(
+          "Tutor Requests JS: Delegated listener caught click on #submitTutorReschedule."
+        ); // <-- Log C (modified)
+        event.preventDefault();
+
+        if (submitBtn.disabled) return;
+
+        // Reset error messages (assuming IDs are correct)
+        const errorMsgDiv = document.getElementById(
+          "rescheduleRequestErrorMessage"
+        );
+        const preferredErrorDiv = document.getElementById(
+          "preferred-times-error"
+        );
+        if (errorMsgDiv) errorMsgDiv.style.display = "none";
+        if (preferredErrorDiv) preferredErrorDiv.style.display = "none";
+
+        // Get form elements & Validate (same logic as before)
+        const studentId = document.getElementById("student_id")?.value;
+        const originalDate = document.getElementById("original_date")?.value;
+        const originalTime = document.getElementById("original_time")?.value;
+        const reason = document.getElementById("reason")?.value;
+
+        console.log("--- (Delegated) Reschedule Form Validation ---");
+        console.log(
+          "Student ID:",
+          studentId,
+          "Date:",
+          originalDate,
+          "Time:",
+          originalTime,
+          "Reason:",
+          reason ? "Present" : "Missing"
+        );
+
+        if (
+          !studentId ||
+          !originalDate ||
+          !originalTime ||
+          !reason ||
+          !reason.trim()
+        ) {
+          console.log("Validation FAILED: Required fields empty.");
+          if (errorMsgDiv) errorMsgDiv.style.display = "block";
+          return;
+        }
+
+        const preferredDates = form.querySelectorAll(
+          "#preferred-times-container .preferred-date"
+        );
+        const preferredTimes = form.querySelectorAll(
+          "#preferred-times-container .preferred-time"
+        );
+        let hasPreferredTime = false;
+        for (let i = 0; i < preferredDates.length; i++) {
+          if (preferredDates[i].value && preferredTimes[i].value) {
+            hasPreferredTime = true;
+            break;
+          }
+        }
+        if (!hasPreferredTime) {
+          console.log("Validation FAILED: No preferred time.");
+          if (preferredErrorDiv) preferredErrorDiv.style.display = "block";
+          return;
+        }
+        console.log("Validation PASSED. Preparing fetch...");
+
+        // Disable form & Submit via Fetch (same logic as before)
+        const formElements = form.querySelectorAll(
+          "input, select, textarea, button"
+        );
+        formElements.forEach((el) => (el.disabled = true));
+        submitBtn.innerHTML =
+          '<span class="spinner-border spinner-border-sm"></span> Submitting...';
+
+        const formData = new FormData(form);
+        console.log(
+          "Tutor Requests JS: Sending fetch request (delegated) to:",
+          tutorDashboardData.ajaxurl
+        );
+        fetch(tutorDashboardData.ajaxurl, {
+          /* ... fetch options ... */
+        })
+          .then((response) => {
+            /* ... response handling ... */
+          })
+          .then((data) => {
+            /* ... success handling ... */
+          })
+          .catch((error) => {
+            /* ... error handling ... */
+          });
+      } // --- End Submit Button Logic ---
+
+      // --- Handle Autofill Button Click ---
+      else if (event.target.id === "devModeCheckbox") {
+        const autofillBtn = event.target;
+        console.log(
+          "Tutor Requests JS: Delegated listener caught click on #devModeCheckbox."
+        ); // <-- Log F (modified)
+        console.log("Autofill button clicked - filling form with sample data");
+
+        const modal = document.getElementById("newRescheduleRequestModal"); // Get modal reference again inside handler
+        if (!modal) {
+          console.error(
+            "Could not find the reschedule request modal for autofill."
+          );
+          return;
+        }
+        // ... (rest of the autofill logic from lines 379-492) ...
+        // --- Ensure all querySelectors inside autofill logic use 'modal.querySelector' ---
+        const studentSelect = modal.querySelector("#student_select");
+        const studentIdInput = modal.querySelector("#student_id");
+        // etc. for all other elements inside autofill logic
+        if (
+          studentSelect &&
+          studentIdInput &&
+          studentSelect.options.length > 1
+        ) {
+          const randomIndex =
+            Math.floor(Math.random() * (studentSelect.options.length - 1)) + 1;
+          studentSelect.selectedIndex = randomIndex;
+          studentSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          console.log(
+            "Selected student:",
+            studentSelect.options[randomIndex].text
+          );
+        } else {
+          console.warn("Could not select student or no students available.");
+        }
+        const today = new Date();
+        const nextWeek = new Date(today);
+        nextWeek.setDate(today.getDate() + 7);
+        const originalDateInput = modal.querySelector("#original_date");
+        const originalTimeInput = modal.querySelector("#original_time");
+        if (originalDateInput) {
+          const randomDate = new Date(nextWeek);
+          randomDate.setDate(
+            nextWeek.getDate() + Math.floor(Math.random() * 7)
+          );
+          originalDateInput.value = randomDate.toISOString().split("T")[0];
+          console.log("Set original date:", originalDateInput.value);
+        }
+        if (originalTimeInput) {
+          const hours = Math.floor(Math.random() * 10) + 9;
+          const minutes = Math.random() < 0.5 ? "00" : "30";
+          originalTimeInput.value = `${hours
+            .toString()
+            .padStart(2, "0")}:${minutes}`;
+          console.log("Set original time:", originalTimeInput.value);
+        }
+        const reasonInput = modal.querySelector("#reason");
+        if (reasonInput) {
+          const reasons = [
+            "Conflicting appointment",
+            "Family event",
+            "Feeling unwell",
+            "Unexpected work commitment",
+            "Urgent matter",
+            "Scheduling conflict",
+            "Professional development",
+            "Emergency situation",
+          ];
+          reasonInput.value =
+            reasons[Math.floor(Math.random() * reasons.length)];
+          console.log("Set reason:", reasonInput.value);
+        }
+        const usedDates = new Set();
+        for (let i = 1; i <= 3; i++) {
+          const preferredDateInput = modal.querySelector(
+            `#preferred_date_${i}`
+          );
+          const preferredTimeInput = modal.querySelector(
+            `#preferred_time_${i}`
+          );
+          if (preferredDateInput && preferredTimeInput) {
+            let randomDate, dateStr;
+            let attempts = 0;
+            do {
+              randomDate = new Date(nextWeek);
+              randomDate.setDate(
+                nextWeek.getDate() + Math.floor(Math.random() * 14) + 1
+              );
+              dateStr = randomDate.toISOString().split("T")[0];
+              attempts++;
+            } while (usedDates.has(dateStr) && attempts < 10);
+            if (attempts < 10) {
+              usedDates.add(dateStr);
+              preferredDateInput.value = dateStr;
+              const hours = Math.floor(Math.random() * 10) + 9;
+              const minutes = Math.random() < 0.5 ? "00" : "30";
+              preferredTimeInput.value = `${hours
+                .toString()
+                .padStart(2, "0")}:${minutes}`;
+              console.log(
+                `Set preferred time ${i}:`,
+                preferredDateInput.value,
+                preferredTimeInput.value
+              );
+            } else {
+              console.warn(
+                `Could not find unique date for preferred time ${i}`
+              );
+              preferredDateInput.value = "";
+              preferredTimeInput.value = "";
+            }
+          }
+        }
+        const errorMsg = modal.querySelector("#rescheduleRequestErrorMessage");
+        const preferredErrorMsg = modal.querySelector("#preferred-times-error");
+        if (errorMsg) errorMsg.style.display = "none";
+        if (preferredErrorMsg) preferredErrorMsg.style.display = "none";
+        console.log("Form autofill complete.");
+      } // --- End Autofill Button Logic ---
+    }); // End modal click listener
+  } else {
+    console.error(
+      "Tutor Requests JS: ERROR - Could not find modal element #newRescheduleRequestModal to attach delegated listener."
+    );
+  }
 });
