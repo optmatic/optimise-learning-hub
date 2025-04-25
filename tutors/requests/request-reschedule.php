@@ -725,9 +725,9 @@
                             ?>
 
                             <form id="rescheduleRequestForm" method="post" action="">
-                                <?php wp_nonce_field( 'tutor_reschedule_request_post_action', 'tutor_reschedule_post_nonce' ); ?>
+                                <?php wp_nonce_field( 'tutor_reschedule_request_action', 'tutor_reschedule_nonce' ); ?>
                                 <!-- Keep action hidden field for consistency if needed, but the main check will be the submit button name -->
-                                <input type="hidden" name="action" value="submit_tutor_reschedule_post"> 
+                                <input type="hidden" name="action" value="submit_tutor_reschedule"> 
                                 <input type="hidden" name="submit_tutor_reschedule_request" value="1"> <!-- Keep this for potential reuse -->
                                 <input type="hidden" name="tutor_id" value="<?php echo get_current_user_id(); ?>">
                                 <input type="hidden" name="tutor_name" value="<?php echo wp_get_current_user()->user_login; ?>">

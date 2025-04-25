@@ -37,7 +37,16 @@ if (!function_exists('format_reschedule_request_data')) {
             }
         }
 
-        // Priority 3: 'alternatives' array (use the first one)
+        // Priority 3: 'preferred_times' array (use the first one)
+        if (empty($data['new_date']) || empty($data['new_time'])) {
+            $preferred_times = get_post_meta($request_id, 'preferred_times', true);
+            if (!empty($preferred_times) && is_array($preferred_times) && isset($preferred_times[0])) {
+                $data['new_date'] = $preferred_times[0]['date'] ?? $data['new_date'];
+                $data['new_time'] = $preferred_times[0]['time'] ?? $data['new_time'];
+            }
+        }
+
+        // Priority 4: 'alternatives' array (use the first one)
         if (empty($data['new_date']) || empty($data['new_time'])) {
             $alternatives = get_post_meta($request_id, 'alternatives', true);
             if (!empty($alternatives) && is_array($alternatives) && isset($alternatives[0])) {
