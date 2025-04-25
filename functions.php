@@ -39,31 +39,26 @@ add_action('wp_enqueue_scripts', 'enqueue_student_dashboard_styles');
 
 
 function enqueue_tutor_dashboard_styles() {
-    if (is_page('tutor-dashboard')) {
+    // if (is_page('tutor-dashboard')) { // <-- Keep condition commented out for now
+
+        // RESTORE STYLE ENQUEUE
         wp_enqueue_style(
-            'tutor-dashboard-styles', 
+            'tutor-dashboard-styles',
             get_stylesheet_directory_uri() . '/tutors/styles.css',
             array(),
             filemtime(get_stylesheet_directory() . '/tutors/styles.css')
         );
 
-        // wp_enqueue_script(
-        //     'tutor-dashboard-scripts',
-        //     get_stylesheet_directory_uri() . '/tutors/index.js',
-        //     array('jquery'),
-        //     filemtime(get_stylesheet_directory() . '/tutors/index.js'),
-        //     true
-        // ); // Commented out - loading tutor-requests-scripts instead
-
+        // SIMPLIFIED SCRIPT ENQUEUE (Keep dependencies minimal for now)
         wp_enqueue_script(
-            'tutor-requests-scripts', // Changed handle for clarity
-            get_stylesheet_directory_uri() . '/tutors/requests/index.js', // Corrected path
-            array('jquery', 'child-understrap-scripts'), // Ensure Bootstrap (part of child-theme-scripts) is loaded first
-            filemtime(get_stylesheet_directory() . '/tutors/requests/index.js'), // Updated path for filemtime
-            false // Load in <head> instead of footer (temporary test)
+            'tutor-requests-scripts',
+            get_stylesheet_directory_uri() . '/tutors/requests/index.js',
+            array('jquery'), // Only depend on jQuery
+            null, // No versioning
+            true // Load in footer
         );
 
-        // Pass PHP variables to JavaScript (using the new handle)
+        // RESTORE wp_localize_script
         wp_localize_script('tutor-requests-scripts', 'tutorDashboardData', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
             'rescheduleNonce' => wp_create_nonce('tutor_reschedule_request_action'), // Nonce for the AJAX request
@@ -71,7 +66,8 @@ function enqueue_tutor_dashboard_styles() {
             'nonce' => wp_create_nonce('check_incoming_reschedule_requests_nonce'), // Existing nonce, maybe rename?
             'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
         ));
-    }
+
+    // } // <-- Keep condition commented out for now
 }
 add_action('wp_enqueue_scripts', 'enqueue_tutor_dashboard_styles');
     
@@ -358,7 +354,8 @@ function theme_enqueue_styles() {
 
 	$js_version = $theme_version . '.' . filemtime( get_stylesheet_directory() . $theme_scripts );
 
-	wp_enqueue_script( 'child-understrap-scripts', get_stylesheet_directory_uri() . $theme_scripts, array(), $js_version, true );
+	// Child theme script depends only on jQuery again
+	wp_enqueue_script( 'child-understrap-scripts', get_stylesheet_directory_uri() . $theme_scripts, array('jquery'), $js_version, true );
 	if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
 		wp_enqueue_script( 'comment-reply' );
 	}

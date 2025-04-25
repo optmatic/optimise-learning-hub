@@ -1,4 +1,45 @@
 document.addEventListener("DOMContentLoaded", function () {
+  console.log("Tutor Requests JS: DOMContentLoaded fired.");
+
+  // --- Defer Tab Activation slightly --- START ---
+  // setTimeout(() => {
+  //   console.log("Tutor Requests JS: Running deferred tab activation.");
+  //   try {
+  //     const storedTab = localStorage.getItem('activeTutorTab');
+  //     console.log("Tutor Requests JS: Stored active tab:", storedTab);
+  //     if (storedTab) {
+  //         const tabToSelect = document.querySelector(`a[data-bs-toggle="tab"][href="${storedTab}"]`);
+  //         console.log("Tutor Requests JS: Found tab element to select:", tabToSelect);
+  //         if (tabToSelect) {
+  //             // Use bootstrap's Tab instance to show the tab
+  //             // >>>>>>>> THIS LINE CAUSES THE ERROR <<<<<<<<<<
+  //             // const tab = new bootstrap.Tab(tabToSelect);
+  //             // console.log("Tutor Requests JS: Creating bootstrap Tab instance.");
+  //             // tab.show();
+  //             // console.log("Tutor Requests JS: Tab shown.");
+  //              console.warn("Tutor Requests JS: Tab activation using new bootstrap.Tab() is temporarily disabled.");
+  //         } else {
+  //             console.log("Tutor Requests JS: Could not find tab element for stored href:", storedTab);
+  //         }
+  //     } else {
+  //       console.log("Tutor Requests JS: No active tab found in localStorage.");
+  //     }
+  //     // Add listener to store active tab on change
+  //     const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
+  //     console.log(`Tutor Requests JS: Found ${tabLinks.length} tab links to attach storage listener.`);
+  //     tabLinks.forEach(function(tabLink) {
+  //         tabLink.addEventListener('shown.bs.tab', function(event) {
+  //             const activeTabHref = this.getAttribute('href');
+  //             console.log("Tutor Requests JS: Tab changed, storing href:", activeTabHref);
+  //             localStorage.setItem('activeTutorTab', activeTabHref);
+  //         });
+  //     });
+  //   } catch (e) {
+  //     console.error("Tutor Requests JS: Error in tab activation/storage logic:", e);
+  //   }
+  // }, 100); // Delay execution by 100ms
+  // --- Defer Tab Activation slightly --- END ---
+
   // Existing tooltip initialization code
   const tooltipTriggerList = [].slice.call(
     document.querySelectorAll('[data-bs-toggle="tooltip"]')
@@ -52,6 +93,9 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // Handle form submission
+  console.log(
+    "Tutor Requests JS: Attempting to find submit button and form..."
+  ); // <-- Log A
   const submitTutorRescheduleBtn = document.getElementById(
     "submitTutorReschedule"
   );
@@ -59,9 +103,24 @@ document.addEventListener("DOMContentLoaded", function () {
     "rescheduleRequestForm"
   );
 
+  // *** Add logging here ***
+  console.log(
+    "Tutor Requests JS: submitTutorRescheduleBtn found:",
+    submitTutorRescheduleBtn // Log the element itself
+  );
+  console.log(
+    "Tutor Requests JS: rescheduleRequestForm found:",
+    rescheduleRequestForm // Log the element itself
+  );
+
   if (submitTutorRescheduleBtn && rescheduleRequestForm) {
+    console.log(
+      "Tutor Requests JS: Found submit button and form. Attaching click listener..."
+    ); // <-- Log B
     submitTutorRescheduleBtn.addEventListener("click", function (e) {
+      console.log("Tutor Requests JS: Submit button CLICKED."); // <-- Log C
       e.preventDefault();
+      console.log("Tutor Requests JS: Submit button clicked!");
 
       // Check if button is already disabled (preventing duplicate submissions)
       if (this.disabled) {
@@ -138,6 +197,11 @@ document.addEventListener("DOMContentLoaded", function () {
       // }
       // console.log("AJAX URL:", tutorDashboardData.ajaxurl);
 
+      console.log(
+        "Tutor Requests JS: Sending fetch request to:",
+        tutorDashboardData.ajaxurl
+      );
+
       fetch(tutorDashboardData.ajaxurl, {
         method: "POST",
         body: formData,
@@ -202,6 +266,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // rescheduleRequestForm.submit(); // REMOVED standard form submission
     });
+  } else {
+    console.error(
+      "Tutor Requests JS: ERROR - Could not find submit button or form to attach listener."
+    );
   }
 
   // Handle the Unavailable button click
@@ -295,9 +363,16 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // Development Mode: Autofill form data
+  console.log("Tutor Requests JS: Attempting to find autofill button..."); // <-- Log D
   const devModeButton = document.getElementById("devModeCheckbox");
+  console.log("Tutor Requests JS: devModeButton found:", devModeButton); // Log the element itself
+
   if (devModeButton) {
+    console.log(
+      "Tutor Requests JS: Found autofill button. Attaching click listener..."
+    ); // <-- Log E
     devModeButton.addEventListener("click", function () {
+      console.log("Tutor Requests JS: Autofill button CLICKED."); // <-- Log F
       console.log("Autofill button clicked - filling form with sample data");
 
       // Target elements within the modal
@@ -412,6 +487,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
       console.log("Form autofill complete.");
     });
+  } else {
+    console.error("Tutor Requests JS: ERROR - Could not find autofill button.");
   }
 
   // Fix for the invalid selector error
