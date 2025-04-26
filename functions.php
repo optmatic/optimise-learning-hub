@@ -1959,32 +1959,54 @@ add_filter('the_content', 'wrap_reschedule_content', 999);
 // AJAX handler for submitting tutor reschedule request
 add_action('wp_ajax_submit_tutor_reschedule', 'handle_tutor_reschedule_ajax');
 function handle_tutor_reschedule_ajax() {
+    error_log('[AJAX handle_tutor_reschedule] Handler started. <<< TEST SIMPLIFIED >>>'); // <<< MODIFIED LOG
+
+    // --- START: TEMPORARILY COMMENTED OUT FOR TESTING --- 
+    /*
     // Verify Nonce
     if (!isset($_POST['tutor_reschedule_nonce']) || !wp_verify_nonce($_POST['tutor_reschedule_nonce'], 'tutor_reschedule_request_action')) {
+        error_log('[AJAX handle_tutor_reschedule] Nonce verification FAILED.'); 
         wp_send_json_error(['message' => 'Nonce verification failed.'], 403);
-        return;
+        return; 
     }
+    error_log('[AJAX handle_tutor_reschedule] Nonce verification PASSED.');
 
     // Check user permissions (ensure user is a tutor)
     if (!current_user_can('tutor')) {
+         error_log('[AJAX handle_tutor_reschedule] Permission check FAILED.');
          wp_send_json_error(['message' => 'Permission denied.'], 403);
-        return;
+        return; 
     }
+    error_log('[AJAX handle_tutor_reschedule] Permission check PASSED.');
     
     // Get and sanitize form data
     $tutor_id = get_current_user_id();
     $tutor_name = wp_get_current_user()->user_login;
     $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
-    $student_name = isset($_POST['student_name']) ? sanitize_text_field($_POST['student_name']) : '';
+    $student_name = ''; // Will be looked up
     $original_date = isset($_POST['original_date']) ? sanitize_text_field($_POST['original_date']) : '';
     $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
     $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
 
+    error_log('[AJAX handle_tutor_reschedule] Received Data: ' . print_r($_POST, true)); 
+
     // Basic Validation
     if (empty($student_id) || empty($original_date) || empty($original_time) || empty($reason)) {
+        error_log('[AJAX handle_tutor_reschedule] Basic validation FAILED.');
         wp_send_json_error(['message' => 'Missing required fields (Student, Lesson Date/Time, Reason).'], 400);
+        return; 
+    }
+    error_log('[AJAX handle_tutor_reschedule] Basic validation PASSED.');
+
+    // Add student name lookup 
+    $student_user = get_userdata($student_id);
+    if (!$student_user) {
+        error_log('[AJAX handle_tutor_reschedule] Failed to get student user data for ID: ' . $student_id); 
+        wp_send_json_error(['message' => 'Invalid student selected.'], 400);
         return;
     }
+    $student_name = $student_user->user_login; 
+    error_log('[AJAX handle_tutor_reschedule] Found student name: ' . $student_name); 
 
     // Collect preferred times
     $preferred_times = [];
@@ -1996,42 +2018,56 @@ function handle_tutor_reschedule_ajax() {
             $preferred_times[] = ['date' => $date, 'time' => $time];
         }
     }
+    error_log('[AJAX handle_tutor_reschedule] Preferred Times: ' . print_r($preferred_times, true)); 
     
     // Require at least one preferred time
      if (empty($preferred_times)) {
+        error_log('[AJAX handle_tutor_reschedule] Preferred times validation FAILED.'); 
         wp_send_json_error(['message' => 'Please provide at least one preferred alternative time.'], 400);
-        return;
+        return; 
     }
+    error_log('[AJAX handle_tutor_reschedule] Preferred times validation PASSED.');
 
     // Create the request post
     $request = [
         'post_title'   => 'Tutor Reschedule Request: ' . $tutor_name . ' for ' . $student_name,
         'post_content' => '',
         'post_status'  => 'publish',
-        'post_type'    => 'progress_report',
+        'post_type'    => 'progress_report', 
     ];
     
+    error_log('[AJAX handle_tutor_reschedule] Attempting wp_insert_post with data: ' . print_r($request, true)); 
     $request_id = wp_insert_post($request);
     
-    if (is_wp_error($request_id)) {
-         wp_send_json_error(['message' => 'Error creating request post: ' . $request_id->get_error_message()], 500);
-         return;
+    if (is_wp_error($request_id) || $request_id === 0) { 
+         $error_message = is_wp_error($request_id) ? $request_id->get_error_message() : 'wp_insert_post returned 0';
+         error_log('[AJAX handle_tutor_reschedule] wp_insert_post FAILED: ' . $error_message); 
+         wp_send_json_error(['message' => 'Error creating request post: ' . $error_message], 500);
+         return; 
     }
+    error_log('[AJAX handle_tutor_reschedule] wp_insert_post SUCCEEDED. New post ID: ' . $request_id);
 
     // Save meta data
     update_post_meta($request_id, 'request_type', 'tutor_reschedule');
     update_post_meta($request_id, 'tutor_id', $tutor_id);
     update_post_meta($request_id, 'tutor_name', $tutor_name);
     update_post_meta($request_id, 'student_id', $student_id);
-    update_post_meta($request_id, 'student_name', $student_name); // Store student name used in title/lookup
+    update_post_meta($request_id, 'student_name', $student_name); 
     update_post_meta($request_id, 'original_date', $original_date);
     update_post_meta($request_id, 'original_time', $original_time);
     update_post_meta($request_id, 'reason', $reason);
-    update_post_meta($request_id, 'preferred_times', $preferred_times);
-    update_post_meta($request_id, 'status', 'pending'); // Initial status
+    update_post_meta($request_id, 'preferred_times', $preferred_times); 
+    update_post_meta($request_id, 'status', 'pending'); 
+    error_log('[AJAX handle_tutor_reschedule] Meta data update calls finished for post ID: ' . $request_id); 
 
+    error_log('[AJAX handle_tutor_reschedule] Attempting wp_send_json_success.'); 
     wp_send_json_success(['message' => 'Reschedule request submitted successfully.', 'request_id' => $request_id]);
-    exit; // Always exit after wp_send_json_*
+    */
+    // --- END: TEMPORARILY COMMENTED OUT FOR TESTING --- 
+
+    // Minimal success response for testing
+    wp_send_json_success(['message' => 'AJAX handler reached successfully (Simplified Test).']);
+
 }
 
 // AJAX handler for getting student lessons

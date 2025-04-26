@@ -802,7 +802,7 @@
                                     <!-- ADDED DEV BUTTON HERE -->
                                     <button type="button" id="devModeCheckbox" class="btn btn-outline-secondary me-auto" title="Autofill form with sample data (Dev)">Autofill</button>
                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                    <!-- Change button type to button and add ID -->
+                                    <!-- Ensure button type is "button" -->
                                     <button type="button" class="btn btn-primary" id="submitTutorReschedule">Submit Request</button>
                                 </div>
                             </form>
