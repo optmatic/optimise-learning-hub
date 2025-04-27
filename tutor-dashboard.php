@@ -188,8 +188,8 @@ function test_reschedule_requests() {
                     <a class="nav-link position-relative" id="requests-tab" data-bs-toggle="tab" href="#requests">
                         Requests 
                         <?php
-                        // Count pending student reschedule requests
-                        $student_requests_args = array(
+                        // Count pending tutor reschedule requests
+                        $tutor_requests_args = array(
                             'post_type'      => 'progress_report',
                             'posts_per_page' => -1,
                             'meta_query'     => array(
@@ -201,7 +201,7 @@ function test_reschedule_requests() {
                                 ),
                                 array(
                                     'key'     => 'request_type',
-                                    'value'   => array('student_reschedule', 'reschedule_unavailable_all'),
+                                    'value'   => array('tutor_reschedule', 'reschedule_unavailable_all'),
                                     'compare' => 'IN',
                                 ),
                                 array(
@@ -212,7 +212,7 @@ function test_reschedule_requests() {
                             ),
                             'fields'         => 'ids'
                         );
-                        $requests_notification_count = count(get_posts($student_requests_args));
+                        $requests_notification_count = count(get_posts($tutor_requests_args));
                         
                         if ($requests_notification_count > 0): 
                         ?>

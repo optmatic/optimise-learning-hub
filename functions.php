@@ -49,23 +49,24 @@ function enqueue_tutor_dashboard_styles() {
             filemtime(get_stylesheet_directory() . '/tutors/styles.css')
         );
 
-        // SIMPLIFIED SCRIPT ENQUEUE (Keep dependencies minimal for now)
-        wp_enqueue_script(
-            'tutor-requests-scripts',
-            get_stylesheet_directory_uri() . '/tutors/requests/index.js',
-            array('jquery'), // Only depend on jQuery
-            null, // No versioning
-            true // Load in footer
-        );
+        // // SIMPLIFIED SCRIPT ENQUEUE (Keep dependencies minimal for now)
+        // wp_enqueue_script(
+        //     'tutor-requests-scripts',
+        //     get_stylesheet_directory_uri() . '/tutors/requests/index.js',
+        //     array('jquery'), // Only depend on jQuery
+        //     null, // No versioning
+        //     true // Load in footer
+        // );
 
         // RESTORE wp_localize_script
-        wp_localize_script('tutor-requests-scripts', 'tutorDashboardData', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'rescheduleNonce' => wp_create_nonce('tutor_reschedule_request_action'), // Nonce for the AJAX request
-            'tutor_id' => get_current_user_id(),
-            'nonce' => wp_create_nonce('check_incoming_reschedule_requests_nonce'), // Existing nonce, maybe rename?
-            'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
-        ));
+        wp_localize_script(
+            'jquery',                    // <--- Change handle to 'jquery'
+            'tutorDashboardData',        // Name of the JavaScript object
+            array(                       // Data array
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'rescheduleNonce' => wp_create_nonce('tutor_reschedule_request_action'), // Nonce for the AJAX request
+            )
+        );
 
     // } // <-- Keep condition commented out for now
 }
@@ -1955,14 +1956,11 @@ function render_preferred_time_inputs(string $id_prefix = '', int $count = 3, bo
 }
 
 add_filter('the_content', 'wrap_reschedule_content', 999);
-
 // AJAX handler for submitting tutor reschedule request
 add_action('wp_ajax_submit_tutor_reschedule', 'handle_tutor_reschedule_ajax');
 function handle_tutor_reschedule_ajax() {
-    error_log('[AJAX handle_tutor_reschedule] Handler started. <<< TEST SIMPLIFIED >>>'); // <<< MODIFIED LOG
+    error_log('[AJAX handle_tutor_reschedule] Handler started.');
 
-    // --- START: TEMPORARILY COMMENTED OUT FOR TESTING --- 
-    /*
     // Verify Nonce
     if (!isset($_POST['tutor_reschedule_nonce']) || !wp_verify_nonce($_POST['tutor_reschedule_nonce'], 'tutor_reschedule_request_action')) {
         error_log('[AJAX handle_tutor_reschedule] Nonce verification FAILED.'); 
@@ -2062,12 +2060,6 @@ function handle_tutor_reschedule_ajax() {
 
     error_log('[AJAX handle_tutor_reschedule] Attempting wp_send_json_success.'); 
     wp_send_json_success(['message' => 'Reschedule request submitted successfully.', 'request_id' => $request_id]);
-    */
-    // --- END: TEMPORARILY COMMENTED OUT FOR TESTING --- 
-
-    // Minimal success response for testing
-    wp_send_json_success(['message' => 'AJAX handler reached successfully (Simplified Test).']);
-
 }
 
 // AJAX handler for getting student lessons
