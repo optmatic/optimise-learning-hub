@@ -62,17 +62,17 @@ function enqueue_tutor_dashboard_styles() {
             'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
         ));
 
-        // Enqueue the new requests specific script
+        // Enqueue the requests script, dependent on the parent theme's script handle
         wp_enqueue_script(
             'tutor-requests-script',
             get_stylesheet_directory_uri() . '/tutors/requests.js',
-            array('jquery', 'understrap-scripts'),
+            array('jquery', 'understrap-scripts'), // Depend on parent theme's handle
             filemtime(get_stylesheet_directory() . '/tutors/requests.js'),
-            true
+            true // Load in footer
         );
     }   
 }
-add_action('wp_enqueue_scripts', 'enqueue_tutor_dashboard_styles');
+add_action('wp_enqueue_scripts', 'enqueue_tutor_dashboard_styles', 21);
 
 // Add classroom URL field to user profile // THIS IS THE TUTOR DASHBOARD //
 function add_classroom_url_field($user) {

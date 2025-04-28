@@ -3,6 +3,87 @@
     <h4>Reschedule Requests</h4>
     
     <?php
+    // --- Start Tutor Notification Logic ---
+    $current_tutor_id = get_current_user_id();
+
+    // 1. Count pending student requests 
+    // Re-using logic from get_student_initiated_requests() but simplified for count
+    $student_requests_args = [
+        'post_type' => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query' => [
+            'relation' => 'AND',
+            // Ensure we query by tutor_id reliably
+            [
+                'key' => 'tutor_id', 
+                'value' => $current_tutor_id, 
+                'compare' => '='
+            ],
+            [
+                'key' => 'request_type',
+                'value' => 'student_reschedule',
+                'compare' => '=',
+            ],
+            [
+                'key' => 'status',
+                'value' => 'pending',
+                'compare' => '=',
+            ]
+        ],
+        'fields' => 'ids' // Only need IDs for counting
+    ];
+    $pending_student_request_count = count(get_posts($student_requests_args));
+
+    // 2. Count pending alternative time suggestions from students (check if viewed)
+    $alternatives_args = [
+        'post_type' => 'progress_report',
+        'posts_per_page' => -1,
+        'meta_query' => [
+            'relation' => 'AND',
+            ['key' => 'tutor_id', 'value' => $current_tutor_id, 'compare' => '='],
+            ['key' => 'request_type', 'value' => 'reschedule_alternatives', 'compare' => '='], // Type set by student when suggesting alternatives
+            ['key' => 'status', 'value' => 'pending', 'compare' => '='],
+            [
+                'relation' => 'OR', // Not viewed yet
+                 [
+                    'key' => 'viewed_by_tutor', 
+                    'compare' => 'NOT EXISTS'
+                 ],
+                 [
+                    'key' => 'viewed_by_tutor',
+                    'value' => '1',
+                    'compare' => '!='
+                 ]
+            ]
+        ],
+        'fields' => 'ids'
+    ];
+    $pending_alternatives_count = count(get_posts($alternatives_args));
+
+    // Display Notifications Box if needed
+    if ($pending_student_request_count > 0 || $pending_alternatives_count > 0):
+    ?>
+        <div class="alert alert-info mb-4" id="tutorRequestNotifications">
+             <h5><i class="fas fa-bell me-2"></i>Notifications</h5>
+             <ul class="mb-0" style="list-style: none; padding-left: 0;">
+                 <?php if ($pending_student_request_count > 0): ?>
+                     <li>
+                         <i class="fas fa-arrow-right me-1 text-warning"></i> You have <strong><?php echo $pending_student_request_count; ?></strong> pending reschedule request<?php echo ($pending_student_request_count > 1 ? 's' : ''); ?> from students.
+                         <a href="#incomingRequestsSection" class="btn btn-sm btn-primary ms-2">View</a>
+                     </li>
+                 <?php endif; ?>
+                 <?php if ($pending_alternatives_count > 0): ?>
+                     <li class="mt-2"> 
+                         <i class="fas fa-exchange-alt me-1 text-primary"></i> You have <strong><?php echo $pending_alternatives_count; ?></strong> alternative time suggestion<?php echo ($pending_alternatives_count > 1 ? 's' : ''); ?> from students.
+                         <a href="#alternativeAccordion" class="btn btn-sm btn-primary ms-2">View</a>
+                     </li>
+                 <?php endif; ?>
+             </ul>
+        </div>
+    <?php
+    endif;
+    // --- End Tutor Notification Logic ---
+
     // Process confirmation of reschedule request
     function process_confirm_reschedule() {
         if (isset($_POST['confirm_reschedule']) && $_POST['confirm_reschedule'] === '1') {
@@ -924,7 +1005,7 @@
     </div>
     
     <!-- Incoming Reschedule Requests (Student-initiated) -->
-    <div class="card mb-4">
+    <div class="card mb-4" id="incomingRequestsSection">
         <div class="card-header bg-warning text-dark">
             <i class="fas fa-arrow-right me-2"></i> Incoming Reschedule Requests
         </div>
