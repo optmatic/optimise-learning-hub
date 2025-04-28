@@ -49,7 +49,7 @@ function enqueue_tutor_dashboard_styles() {
         wp_enqueue_script(
             'tutor-dashboard-scripts',
             get_stylesheet_directory_uri() . '/tutors/index.js',
-            array('jquery'),
+            array('jquery', 'understrap-bootstrap-scripts'), // Depend on our bootstrap script
             filemtime(get_stylesheet_directory() . '/tutors/index.js'),
             true
         );
@@ -62,11 +62,11 @@ function enqueue_tutor_dashboard_styles() {
             'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
         ));
 
-        // Enqueue the requests script, dependent on the parent theme's script handle
+        // Enqueue the requests script, dependent on our bootstrap script handle
         wp_enqueue_script(
             'tutor-requests-script',
             get_stylesheet_directory_uri() . '/tutors/requests.js',
-            array('jquery', 'understrap-scripts'), // Depend on parent theme's handle
+            array('jquery', 'understrap-bootstrap-scripts'), // Depend on our bootstrap script handle
             filemtime(get_stylesheet_directory() . '/tutors/requests.js'),
             true // Load in footer
         );
@@ -331,8 +331,8 @@ function understrap_remove_scripts() {
 	wp_dequeue_style( 'understrap-styles' );
 	wp_deregister_style( 'understrap-styles' );
 
-	// wp_dequeue_script( 'understrap-scripts' ); // Keep the parent script (contains Bootstrap JS)
-	// wp_deregister_script( 'understrap-scripts' ); // Keep the parent script
+	wp_dequeue_script( 'understrap-scripts' ); // Dequeue parent script
+	wp_deregister_script( 'understrap-scripts' ); // Deregister parent script
 }
 add_action( 'wp_enqueue_scripts', 'understrap_remove_scripts', 20 );
 
@@ -348,15 +348,22 @@ function theme_enqueue_styles() {
 	// Grab asset urls.
 	$theme_styles  = "/css/child-theme{$suffix}.css";
 	$theme_scripts = "/js/child-theme{$suffix}.js";
+	$bootstrap_scripts = "/js/understrap-bootstrap.min.js"; // Path to our new bootstrap script
 
 	$css_version = $theme_version . '.' . filemtime( get_stylesheet_directory() . $theme_styles );
 
 	wp_enqueue_style( 'child-understrap-styles', get_stylesheet_directory_uri() . $theme_styles, array(), $css_version );
 	wp_enqueue_script( 'jquery' );
 
-	$js_version = $theme_version . '.' . filemtime( get_stylesheet_directory() . $theme_scripts );
+	// Enqueue the combined Bootstrap JS from the child theme
+	$bootstrap_js_version = $theme_version . '.' . filemtime( get_stylesheet_directory() . $bootstrap_scripts );
+	wp_enqueue_script( 'understrap-bootstrap-scripts', get_stylesheet_directory_uri() . $bootstrap_scripts, array( 'jquery' ), $bootstrap_js_version, true );
 
-	wp_enqueue_script( 'child-understrap-scripts', get_stylesheet_directory_uri() . $theme_scripts, array(), $js_version, true );
+
+	// Enqueue the child theme's main JS file
+	$js_version = $theme_version . '.' . filemtime( get_stylesheet_directory() . $theme_scripts );
+	wp_enqueue_script( 'child-understrap-scripts', get_stylesheet_directory_uri() . $theme_scripts, array('jquery'), $js_version, true ); // Ensure it depends on jquery
+
 	if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
 		wp_enqueue_script( 'comment-reply' );
 	}
@@ -1658,26 +1665,3 @@ function should_show_reschedule_content() {
     // Either the URL parameter or the stored tab cookie indicates we're on the requests tab
     return $active_tab === 'requests' || $stored_tab === 'requests';
 }
-
-/**
- * Filter that wraps reschedule content in a conditional
- */
-function wrap_reschedule_content($content) {
-    if (strpos($content, '<h2>Reschedule Requests</h2>') !== false || 
-        strpos($content, '<h4>Reschedule Requests</h4>') !== false) {
-        
-        // Replace with conditional
-        $content = preg_replace(
-            '/<(h[24])>Reschedule Requests<\/\1>/',
-            '<?php if (function_exists("should_show_reschedule_content") && should_show_reschedule_content()): ?>' .
-            '<$1>Reschedule Requests</$1>',
-            $content
-        );
-        
-        // Add closing conditional
-        $content .= '<?php endif; ?>';
-    }
-    
-    return $content;
-}
-add_filter('the_content', 'wrap_reschedule_content', 999);
