@@ -240,11 +240,61 @@
         return false;
     }
     
+    // Add this function to handle the tutor-initiated request UPDATE submission
+    function process_update_tutor_reschedule_request() {
+        if (isset($_POST['update_tutor_reschedule_request']) && $_POST['update_tutor_reschedule_request'] === '1') {
+            $request_id = isset($_POST['request_id']) ? intval($_POST['request_id']) : 0;
+            $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
+            $current_user_id = get_current_user_id();
+
+            // Validate required fields
+            if (empty($request_id) || empty($reason)) {
+                // Consider adding an error message here
+                return false;
+            }
+            
+            // Verify the request belongs to the current tutor
+            $tutor_id = get_post_meta($request_id, 'tutor_id', true);
+            if ($tutor_id != $current_user_id) {
+                 // echo '<div class="alert alert-danger">Error: You do not have permission to edit this request.</div>'; // Avoid echo before redirect
+                 return false;
+            }
+            
+            // Collect preferred times from the edit form (prefixed with edit_)
+            $preferred_times = [];
+            for ($i = 1; $i <= 3; $i++) {
+                $date = isset($_POST['edit_preferred_date_' . $i]) ? sanitize_text_field($_POST['edit_preferred_date_' . $i]) : '';
+                $time = isset($_POST['edit_preferred_time_' . $i]) ? sanitize_text_field($_POST['edit_preferred_time_' . $i]) : '';
+                
+                // Note: The name attributes in the modal form need to match this (e.g., name="edit_preferred_date_1")
+                if (!empty($date) && !empty($time)) {
+                    $preferred_times[] = [
+                        'date' => $date,
+                        'time' => $time
+                    ];
+                }
+            }
+
+            // Update the post meta
+            update_post_meta($request_id, 'reason', $reason);
+            update_post_meta($request_id, 'preferred_times', $preferred_times);
+            
+            // Optionally: update post title or add a revision note?
+            // update_post_meta($request_id, 'status', 'pending'); // Ensure status remains pending if needed?
+
+            // Redirect to prevent resubmission
+            wp_redirect(add_query_arg('active_tab', 'requests', remove_query_arg('update_tutor_reschedule_request'))); // Remove the update param
+            exit;
+        }
+        return false;
+    }
+    
     // Process these request actions
     process_confirm_reschedule();
     process_decline_reschedule();
     process_tutor_reschedule_request();
     process_delete_tutor_request();
+    process_update_tutor_reschedule_request(); // Add the new handler here
     
     // Helper functions for reusability
     function format_datetime($date, $time, $format = 'M j, Y \a\t g:i A') {
@@ -281,12 +331,12 @@
                 <div class="col-md-6">
                     <label class="form-label small">Preferred Date ' . $i . ':</label>
                     <input type="date" class="form-control preferred-date" 
-                           name="preferred_date_' . $i . '" id="' . $prefix . 'preferred_date_' . $i . '" ' . ($i == 1 ? $req : '') . '>
+                           name="' . $prefix . 'preferred_date_' . $i . '" id="' . $prefix . 'preferred_date_' . $i . '" ' . ($i == 1 ? $req : '') . '>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label small">Preferred Time ' . $i . ':</label>
                     <input type="time" class="form-control preferred-time" 
-                           name="preferred_time_' . $i . '" id="' . $prefix . 'preferred_time_' . $i . '" ' . ($i == 1 ? $req : '') . '>
+                           name="' . $prefix . 'preferred_time_' . $i . '" id="' . $prefix . 'preferred_time_' . $i . '" ' . ($i == 1 ? $req : '') . '>
                 </div>
             </div></div>';
         }
@@ -1162,7 +1212,7 @@
                             <p class="text-muted small">Please select up to 3 preferred alternative dates and times.</p>
                             
                             <div id="edit-preferred-times-container">
-                                <?php render_preferred_time_inputs('edit_'); ?>
+                                <?php render_preferred_time_inputs('edit_', false); ?>
                             </div>
                         </div>
                         

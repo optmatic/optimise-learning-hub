@@ -1,29 +1,66 @@
 document.addEventListener("DOMContentLoaded", function () {
   console.log("Tutor requests specific JS loaded.");
 
-  // Initialize tooltips without delay
-  const tooltipTriggerList = [].slice.call(
-    document.querySelectorAll('[data-bs-toggle="tooltip"]')
-  );
-  tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-    // Ensure bootstrap is loaded before trying to use it
-    if (typeof bootstrap !== "undefined") {
-      const tooltip = new bootstrap.Tooltip(tooltipTriggerEl, {
-        delay: { show: 0, hide: 0 }, // Ensure no delay
-      });
+  // Wrap Bootstrap-dependent initializations in a short timeout
+  setTimeout(() => {
+    console.log("Initializing Bootstrap components...");
+    // Initialize tooltips without delay
+    const tooltipTriggerList = [].slice.call(
+      document.querySelectorAll('[data-bs-toggle="tooltip"]')
+    );
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+      // Ensure bootstrap is loaded before trying to use it
+      if (typeof bootstrap !== "undefined") {
+        const tooltip = new bootstrap.Tooltip(tooltipTriggerEl, {
+          delay: { show: 0, hide: 0 }, // Ensure no delay
+        });
 
-      // Manually handle mouse events for instant display
-      tooltipTriggerEl.addEventListener("mouseenter", function () {
-        tooltip.show();
-      });
+        // Manually handle mouse events for instant display
+        tooltipTriggerEl.addEventListener("mouseenter", function () {
+          tooltip.show();
+        });
 
-      tooltipTriggerEl.addEventListener("mouseleave", function () {
-        tooltip.hide();
-      });
-    } else {
-      console.warn("Bootstrap not loaded when trying to initialize tooltips.");
+        tooltipTriggerEl.addEventListener("mouseleave", function () {
+          tooltip.hide();
+        });
+      } else {
+        console.warn("Bootstrap not available for tooltips.");
+      }
+    });
+
+    // Handle tab state using URL parameters (preferred over session storage)
+    const params = new URLSearchParams(window.location.search);
+    const activeTab = params.get("active_tab");
+
+    if (activeTab) {
+      const tabElement = document.querySelector(
+        `.nav-link[href="#${activeTab}"]`
+      ); // Target nav-link
+      if (tabElement && typeof bootstrap !== "undefined") {
+        try {
+          const tab = new bootstrap.Tab(tabElement);
+          tab.show();
+          console.log(`Successfully activated tab: #${activeTab}`);
+        } catch (e) {
+          console.error(`Error activating tab #${activeTab}:`, e);
+        }
+      } else if (!tabElement) {
+        console.warn(`Tab element not found for #${activeTab}`);
+      } else {
+        console.warn("Bootstrap not available for tab activation.");
+      }
     }
-  });
+
+    // Keep track of active tab across page loads by updating URL
+    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach((tabLink) => {
+      tabLink.addEventListener("shown.bs.tab", function (e) {
+        const id = e.target.getAttribute("href").substring(1);
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.set("active_tab", id);
+        history.replaceState(null, "", newUrl);
+      });
+    });
+  }, 100); // Delay slightly (100ms)
 
   // Handle student selection - update hidden input with username
   const studentSelect = document.getElementById("student_select");
@@ -235,32 +272,4 @@ document.addEventListener("DOMContentLoaded", function () {
           : "No reason provided.";
       });
     });
-
-  // Handle tab state using URL parameters (preferred over session storage)
-  const params = new URLSearchParams(window.location.search);
-  const activeTab = params.get("active_tab");
-
-  if (activeTab) {
-    const tabElement = document.querySelector(
-      `.nav-link[href="#${activeTab}"]`
-    ); // Target nav-link
-    if (tabElement && typeof bootstrap !== "undefined") {
-      const tab = new bootstrap.Tab(tabElement);
-      tab.show();
-    } else if (!tabElement) {
-      console.warn(`Tab element not found for #${activeTab}`);
-    } else {
-      console.warn("Bootstrap not loaded when trying to show active tab.");
-    }
-  }
-
-  // Keep track of active tab across page loads by updating URL
-  document.querySelectorAll('a[data-bs-toggle="tab"]').forEach((tabLink) => {
-    tabLink.addEventListener("shown.bs.tab", function (e) {
-      const id = e.target.getAttribute("href").substring(1);
-      const newUrl = new URL(window.location);
-      newUrl.searchParams.set("active_tab", id);
-      history.replaceState(null, "", newUrl);
-    });
-  });
 });
