@@ -823,7 +823,6 @@
                         $truncated_reason = strlen($reason) > 30 ? substr($reason, 0, 30) . '...' : $reason;
                         echo '<span class="reason-text" style="cursor: pointer; color: #fcb31e;" 
                                data-bs-toggle="modal" data-bs-target="#reasonModal" 
-                               data-reason="' . esc_attr($reason) . '"
                                data-bs-toggle="tooltip" title="Click to expand">' . esc_html($truncated_reason) . '</span>';
                     } else {
                         echo '<em>No reason provided</em>';
@@ -835,13 +834,19 @@
                     
                     // Only show edit/delete buttons for pending requests
                     if ($status !== 'confirmed' && $status !== 'denied' && $status !== 'accepted' && $status !== 'declined') {
+                        // Get display names and formatted date/time for the modal
+                        $student_display_name_for_modal = get_student_display_name($student_name);
+                        $formatted_original_for_modal = format_datetime($original_date, $original_time);
+
                         echo '<button type="button" class="btn btn-sm btn-primary me-1 edit-request-btn" 
                             data-bs-toggle="modal" data-bs-target="#editRescheduleRequestModal" 
                             data-request-id="' . $request_id . '"
-                            data-student-name="' . esc_attr($student_name) . '"
+                            data-student-name="' . esc_attr($student_display_name_for_modal) . '"
+                            data-original-datetime-formatted="' . esc_attr($formatted_original_for_modal) . '"
                             data-original-date="' . esc_attr($original_date) . '"
                             data-original-time="' . esc_attr($original_time) . '"
-                            data-reason="' . esc_attr($reason) . '">
+                            data-reason="' . esc_attr($reason) . '"
+                            data-preferred-times=\'' . esc_attr(json_encode($preferred_times)) . '\'>
                             <i class="fas fa-edit"></i> Edit
                         </button>';
                         
@@ -1248,195 +1253,6 @@
         </div>
     </div>
 </div>
-
-<!-- Add JavaScript to handle the unavailable modal -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize tooltips without delay
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-        const tooltip = new bootstrap.Tooltip(tooltipTriggerEl, {
-            delay: { show: 0, hide: 0 } // Ensure no delay
-        });
-
-        // Manually handle mouse events for instant display
-        tooltipTriggerEl.addEventListener('mouseenter', function() {
-            tooltip.show();
-        });
-
-        tooltipTriggerEl.addEventListener('mouseleave', function() {
-            tooltip.hide();
-        });
-    });
-
-    // Handle student selection - update hidden input with username
-    const studentSelect = document.getElementById('student_select');
-    const studentNameInput = document.getElementById('student_name');
-    
-    if (studentSelect && studentNameInput) {
-        studentSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            if (selectedOption.value) {
-                const username = selectedOption.getAttribute('data-username');
-                studentNameInput.value = username;
-            } else {
-                studentNameInput.value = '';
-            }
-        });
-    }
-
-    // Submit form handling for reschedule request
-    const submitTutorRescheduleBtn = document.getElementById('submitTutorReschedule');
-    if (submitTutorRescheduleBtn) {
-        submitTutorRescheduleBtn.addEventListener('click', function() {
-            const form = document.getElementById('rescheduleRequestForm');
-            
-            // Check if student is selected
-            if (!form.student_id.value) {
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
-                    'Please select a student.';
-                return;
-            }
-            
-            // Check if date and time are filled
-            if (!form.original_date.value || !form.original_time.value) {
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
-                    'Please provide the lesson date and time to reschedule.';
-                return;
-            }
-            
-            // Check for reason
-            if (!form.reason.value) {
-                document.getElementById('rescheduleRequestErrorMessage').style.display = 'block';
-                document.getElementById('rescheduleRequestErrorMessage').querySelector('p').textContent = 
-                    'Please provide a reason for the reschedule request.';
-                return;
-            }
-            
-            // Check for at least one preferred time
-            let hasPreferredTime = false;
-            for (let i = 1; i <= 3; i++) {
-                if (form['preferred_date_' + i].value && form['preferred_time_' + i].value) {
-                    hasPreferredTime = true;
-                    break;
-                }
-            }
-            
-            if (!hasPreferredTime) {
-                document.getElementById('preferred-times-error').style.display = 'block';
-                return;
-            } else {
-                document.getElementById('preferred-times-error').style.display = 'none';
-            }
-            
-            // Hide error messages
-            document.getElementById('rescheduleRequestErrorMessage').style.display = 'none';
-            
-            // Add a hidden input for active tab
-            const activeTabInput = document.createElement('input');
-            activeTabInput.type = 'hidden';
-            activeTabInput.name = 'active_tab';
-            activeTabInput.value = 'requests';
-            form.appendChild(activeTabInput);
-            
-            // Store the current tab in session storage
-            sessionStorage.setItem('activeTab', 'requests');
-            
-            // Submit the form
-            form.submit();
-        });
-    }
-    
-    // Delete request button click handler
-    document.querySelectorAll('.delete-request-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            if (!confirm('Are you sure you want to delete this request?')) {
-                return;
-            }
-            
-            const requestId = this.getAttribute('data-request-id');
-            const row = this.closest('tr');
-            
-            // Create a form data object
-            const formData = new FormData();
-            formData.append('delete_tutor_request', '1');
-            formData.append('request_id', requestId);
-            formData.append('action', 'delete_tutor_request');
-            
-            // Send AJAX request
-            fetch(ajaxurl, {
-                method: 'POST',
-                body: formData,
-                credentials: 'same-origin'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Remove the row from the table
-                    row.remove();
-                    
-                    // Show success message
-                    const alertDiv = document.createElement('div');
-                    alertDiv.className = 'alert alert-success';
-                    alertDiv.textContent = 'Request has been deleted successfully.';
-                    
-                    // Insert the alert at the top of the card body
-                    const cardBody = document.querySelector('.card-body');
-                    cardBody.insertBefore(alertDiv, cardBody.firstChild);
-                    
-                    // Auto-hide the alert after 3 seconds
-                    setTimeout(() => {
-                        alertDiv.remove();
-                    }, 3000);
-                } else {
-                    alert('Error: Failed to delete the request.');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Error: Failed to delete the request.');
-            });
-        });
-    });
-
-    // Modified Session handling for tab retention
-    // Check if we should activate the requests tab
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('active_tab') === 'requests') {
-        // Show the requests tab
-        const requestsTab = document.querySelector('[href="#requests"]');
-        if (requestsTab) {
-            const tab = new bootstrap.Tab(requestsTab);
-            tab.show();
-        }
-    }
-    
-    // Keep track of active tab across page loads
-    document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(tab => {
-        tab.addEventListener('shown.bs.tab', function (e) {
-            // Update the URL with the active tab
-            const id = e.target.getAttribute('href').substring(1);
-            history.replaceState(null, null, `?active_tab=${id}`);
-        });
-    });
-    
-    // When the page loads, check for the active tab in URL
-    document.addEventListener('DOMContentLoaded', function() {
-        const params = new URLSearchParams(window.location.search);
-        const activeTab = params.get('active_tab');
-        
-        if (activeTab) {
-            const tabElement = document.querySelector(`a[href="#${activeTab}"]`);
-            if (tabElement) {
-                const tab = new bootstrap.Tab(tabElement);
-                tab.show();
-            }
-        }
-    });
-});
-</script>
 
 <!-- Clear marker to ensure the content only appears in the requests tab -->
 <?php

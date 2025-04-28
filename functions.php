@@ -61,10 +61,18 @@ function enqueue_tutor_dashboard_styles() {
             'nonce' => wp_create_nonce('check_incoming_reschedule_requests_nonce'),
             'markAlternativesViewedUrl' => add_query_arg(array("mark_alternatives_viewed" => "1"), get_permalink()),
         ));
-    }
+
+        // Enqueue the new requests specific script
+        wp_enqueue_script(
+            'tutor-requests-script',
+            get_stylesheet_directory_uri() . '/tutors/requests.js',
+            array('jquery', 'understrap-scripts'),
+            filemtime(get_stylesheet_directory() . '/tutors/requests.js'),
+            true
+        );
+    }   
 }
 add_action('wp_enqueue_scripts', 'enqueue_tutor_dashboard_styles');
-    
 
 // Add classroom URL field to user profile // THIS IS THE TUTOR DASHBOARD //
 function add_classroom_url_field($user) {
@@ -323,8 +331,8 @@ function understrap_remove_scripts() {
 	wp_dequeue_style( 'understrap-styles' );
 	wp_deregister_style( 'understrap-styles' );
 
-	wp_dequeue_script( 'understrap-scripts' );
-	wp_deregister_script( 'understrap-scripts' );
+	// wp_dequeue_script( 'understrap-scripts' ); // Keep the parent script (contains Bootstrap JS)
+	// wp_deregister_script( 'understrap-scripts' ); // Keep the parent script
 }
 add_action( 'wp_enqueue_scripts', 'understrap_remove_scripts', 20 );
 
@@ -1091,210 +1099,6 @@ function my_custom_to_admin_emails( $args ) {
 
 // Include the custom request handler
 // require_once get_stylesheet_directory() . '/tutor-request-handler.php';
-
-// Add custom scripts for handling tutor requests
-add_action('wp_footer', 'add_custom_tutor_request_scripts');
-
-function add_custom_tutor_request_scripts() {
-    if (!is_page('tutor-dashboard')) return;
-    
-    // Localize the script with new data
-    wp_localize_script('jquery', 'customTutorData', array(
-        'ajaxurl' => admin_url('admin-ajax.php'),
-        'security' => wp_create_nonce('custom_tutor_request_action')
-    ));
-    
-    ?>
-    <script>
-    console.log('Custom tutor request scripts loaded');
-    
-    // Wait for DOM to be fully loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM loaded, initializing custom handlers');
-        
-        // Replace all decline buttons with our custom implementation
-        replaceDeclineButtons();
-        
-        // Add mutation observer to handle dynamically added elements
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.addedNodes.length) {
-                    replaceDeclineButtons();
-                }
-            });
-        });
-        
-        observer.observe(document.body, { childList: true, subtree: true });
-    });
-    
-    function replaceDeclineButtons() {
-        // Find all decline buttons
-        const declineButtons = document.querySelectorAll('button.btn-danger, button:contains("Decline")');
-        console.log('Found decline buttons:', declineButtons.length);
-        
-        declineButtons.forEach(function(button, index) {
-            // Skip if already processed
-            if (button.hasAttribute('data-custom-processed')) {
-                return;
-            }
-            
-            console.log('Processing button:', button);
-            
-            // Mark as processed
-            button.setAttribute('data-custom-processed', 'true');
-            
-            // Find the request ID
-            let requestId = button.getAttribute('data-request-id');
-            if (!requestId) {
-                // Try to find it from a parent form
-                const parentForm = button.closest('form');
-                if (parentForm) {
-                    const requestIdInput = parentForm.querySelector('input[name="request_id"]');
-                    if (requestIdInput) {
-                        requestId = requestIdInput.value;
-                    }
-                }
-            }
-            
-            if (!requestId) {
-                // Generate a fallback ID based on position
-                requestId = 'unknown-' + index;
-            }
-            
-            console.log('Request ID for button:', requestId);
-            
-            // Find or create reason input
-            let reasonInput = null;
-            const parentContainer = button.parentNode;
-            
-            // Look for existing input
-            reasonInput = parentContainer.querySelector('input[type="text"]');
-            
-            if (!reasonInput) {
-                // Create a new input if none exists
-                reasonInput = document.createElement('input');
-                reasonInput.type = 'text';
-                reasonInput.className = 'form-control form-control-sm d-inline-block custom-reason-input';
-                reasonInput.style.width = '150px';
-                reasonInput.placeholder = 'Reason';
-                reasonInput.id = 'custom-reason-' + requestId;
-                
-                // Insert before the button
-                parentContainer.insertBefore(reasonInput, button);
-            }
-            
-            // Create error message container
-            const errorContainer = document.createElement('div');
-            errorContainer.className = 'text-danger small mt-1 custom-error-message';
-            errorContainer.style.display = 'none';
-            errorContainer.textContent = 'Please provide a reason for declining';
-            errorContainer.id = 'custom-error-' + requestId;
-            
-            // Add after the button
-            if (button.nextSibling) {
-                parentContainer.insertBefore(errorContainer, button.nextSibling);
-            } else {
-                parentContainer.appendChild(errorContainer);
-            }
-            
-            // Replace the button's click handler
-            button.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                console.log('Custom decline button clicked');
-                
-                // Get the reason
-                const reason = reasonInput.value.trim();
-                console.log('Reason:', reason);
-                
-                // Validate reason
-                if (!reason) {
-                    console.log('No reason provided, showing error');
-                    errorContainer.style.display = 'block';
-                    reasonInput.focus();
-                    return;
-                }
-                
-                // Hide error if shown
-                errorContainer.style.display = 'none';
-                
-                // Show loading state
-                button.disabled = true;
-                button.textContent = 'Processing...';
-                
-                // Send AJAX request
-                jQuery.ajax({
-                    url: customTutorData.ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'custom_decline_request',
-                        request_id: requestId,
-                        reason: reason,
-                        security: customTutorData.security
-                    },
-                    success: function(response) {
-                        console.log('AJAX response:', response);
-                        
-                        if (response.success) {
-                            console.log('Request declined successfully');
-                            
-                            // Update UI
-                            const row = button.closest('tr');
-                            if (row) {
-                                // Update status cell
-                                const statusCell = row.querySelector('td:nth-child(4)');
-                                if (statusCell) {
-                                    statusCell.innerHTML = '<span class="badge bg-danger">Declined</span>';
-                                }
-                                
-                                // Update actions cell
-                                const actionsCell = row.querySelector('td:nth-child(5)');
-                                if (actionsCell) {
-                                    actionsCell.innerHTML = 'Reason: ' + reason;
-                                }
-                            } else {
-                                // Fallback: reload the page
-                                window.location.reload();
-                            }
-                        } else {
-                            console.error('Error:', response.data.message);
-                            alert('Error: ' + response.data.message);
-                            
-                            // Reset button
-                            button.disabled = false;
-                            button.textContent = 'Decline';
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('AJAX error:', status, error);
-                        alert('An error occurred. Please try again.');
-                        
-                        // Reset button
-                        button.disabled = false;
-                        button.textContent = 'Decline';
-                    }
-                });
-            });
-            
-            // Add input handler to hide error when typing
-            reasonInput.addEventListener('input', function() {
-                if (this.value.trim()) {
-                    errorContainer.style.display = 'none';
-                }
-            });
-        });
-    }
-    </script>
-    
-    <style>
-    .custom-error-message {
-        font-size: 12px;
-        margin-top: 5px;
-    }
-    </style>
-    <?php
-}
 
 // Add custom JavaScript to override the browser alert/prompt functions
 add_action('wp_head', function() {
