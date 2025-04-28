@@ -1183,21 +1183,27 @@ add_action('wp', 'migrate_old_classroom_url');
  * AJAX handler to check for incoming requests for students
  */
 function check_student_requests_ajax() {
+    error_log('AJAX: check_student_requests_ajax started'); // Log start
     // Verify nonce
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'check_student_requests_nonce')) {
+        error_log('AJAX Error: Invalid nonce'); // Log nonce failure
         wp_send_json_error('Invalid nonce');
-        return;
+        return; // Use return instead of exit here for consistency
     }
     
+    error_log('AJAX: Nonce verified'); // Log nonce success
     // Get student ID
     $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
     if (!$student_id) {
+        error_log('AJAX Error: Invalid student ID'); // Log ID failure
         wp_send_json_error('Invalid student ID');
         return;
     }
+    error_log('AJAX: Student ID received: ' . $student_id); // Log student ID
 
     // Count incoming reschedule requests (tutor-initiated)
-    $tutor_requests_count = count(get_posts(array(
+    error_log('AJAX: Querying for tutor requests...'); // Log before first query
+    $tutor_requests_args = array(
         'post_type'      => 'progress_report',
         'posts_per_page' => -1,
         'meta_query'     => array(
@@ -1223,10 +1229,14 @@ function check_student_requests_ajax() {
             )
         ),
         'fields'         => 'ids'
-    )));
+    );
+    $tutor_requests = get_posts($tutor_requests_args);
+    $tutor_requests_count = is_array($tutor_requests) ? count($tutor_requests) : 0;
+    error_log('AJAX: Tutor requests count: ' . $tutor_requests_count); // Log count
 
     // Count status changes on outgoing requests
-    $status_changes_count = count(get_posts(array(
+    error_log('AJAX: Querying for status changes...'); // Log before second query
+    $status_changes_args = array(
         'post_type'      => 'progress_report',
         'posts_per_page' => -1,
         'meta_query'     => array(
@@ -1247,13 +1257,18 @@ function check_student_requests_ajax() {
             )
         ),
         'fields'         => 'ids'
-    )));
+    );
+    $status_changes = get_posts($status_changes_args);
+    $status_changes_count = is_array($status_changes) ? count($status_changes) : 0;
+    error_log('AJAX: Status changes count: ' . $status_changes_count); // Log count
 
     // Total count
     $total_count = $tutor_requests_count + $status_changes_count;
+    error_log('AJAX: Total count: ' . $total_count); // Log total
     
+    error_log('AJAX: Sending JSON success response.'); // Log before sending
     wp_send_json_success(['count' => $total_count]);
-    exit;
+    // No need for exit/return after wp_send_json_success as it terminates script execution
 }
 add_action('wp_ajax_check_student_requests', 'check_student_requests_ajax');
 
