@@ -56,8 +56,9 @@
                 update_post_meta($new_request_id, 'new_time', $new_time);
                 update_post_meta($new_request_id, 'status', 'pending');
                 
-                // Show confirmation message
-                echo '<div class="alert alert-success">You have accepted the reschedule request.</div>';
+                // Redirect to prevent resubmission
+                wp_redirect(add_query_arg('active_tab', 'requests', $_SERVER['REQUEST_URI']));
+                exit;
             }
             
             return true;
@@ -124,8 +125,9 @@
                 update_post_meta($new_request_id, 'alternatives', $alternatives);
                 update_post_meta($new_request_id, 'status', 'pending');
                 
-                // Show confirmation message
-                echo '<div class="alert alert-success">You have marked yourself as unavailable for this time and provided alternatives.</div>';
+                // Redirect to prevent resubmission
+                wp_redirect(add_query_arg('active_tab', 'requests', $_SERVER['REQUEST_URI']));
+                exit;
             }
             
             return true;
@@ -194,9 +196,9 @@
                 update_post_meta($request_id, 'preferred_times', $preferred_times);
                 update_post_meta($request_id, 'status', 'pending');
                 
-                // Show success message
-                echo '<div class="alert alert-success">Your reschedule request has been submitted successfully.</div>';
-                return true;
+                // Redirect to prevent resubmission
+                wp_redirect(add_query_arg('active_tab', 'requests', $_SERVER['REQUEST_URI']));
+                exit;
             }
         }
         return false;
@@ -216,20 +218,24 @@
                 $result = wp_delete_post($request_id, true);
                 
                 if ($result) {
-                    echo '<div class="alert alert-success">Request has been deleted successfully.</div>';
+                    // echo '<div class="alert alert-success">Request has been deleted successfully.</div>'; // Removed echo
                 } else {
                     echo '<div class="alert alert-danger">Error: Failed to delete the request. Please try again.</div>';
                 }
-                
-                // Set the active tab to ensure we stay on the requests tab
-                $_GET['active_tab'] = 'requests'; // This helps with conditional display
-                
-                return true;
+
+                // Redirect after deletion attempt (success or failure)
+                wp_redirect(add_query_arg('active_tab', 'requests', $_SERVER['REQUEST_URI']));
+                exit;
+
+                // Set the active tab to ensure we stay on the requests tab - Removed as redirect handles this
+                // $_GET['active_tab'] = 'requests';
+
+                // return true; // Unreachable
             } else {
                 echo '<div class="alert alert-danger">Error: You do not have permission to delete this request.</div>';
             }
-            
-            return true;
+
+            return true; // Only reached if permission denied
         }
         return false;
     }
