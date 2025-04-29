@@ -665,4 +665,34 @@ function get_pending_request_count($user_id, $user_role, $request_type) {
      $query = new WP_Query($args);
      return $query->post_count;
  }
+
+/**
+ * Checks if there are pending alternative time suggestions from a student 
+ * for a specific original tutor reschedule request.
+ *
+ * @param int $original_request_id The ID of the original tutor_reschedule request.
+ * @return bool True if pending alternatives exist, false otherwise.
+ */
+function has_pending_student_alternatives(int $original_request_id): bool {
+    if ( empty($original_request_id) ) {
+        return false;
+    }
+
+    $args = [
+        'post_type'      => 'progress_report',
+        'posts_per_page' => 1, // We only need to know if at least one exists
+        'meta_query'     => [
+            'relation' => 'AND',
+            ['key' => 'original_request_id', 'value' => $original_request_id, 'compare' => '='],
+            ['key' => 'request_type', 'value' => 'reschedule_alternatives', 'compare' => '='],
+            ['key' => 'status', 'value' => 'pending', 'compare' => '=']
+        ],
+        'fields'         => 'ids', // Only need the ID
+        'post_status'    => 'publish', // Ensure we only check published posts
+    ];
+
+    $alternative_requests = get_posts($args);
+
+    return !empty($alternative_requests);
+}
 ?> 

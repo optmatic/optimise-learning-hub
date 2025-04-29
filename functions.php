@@ -364,6 +364,47 @@ function theme_enqueue_styles() {
 	$js_version = $theme_version . '.' . filemtime( get_stylesheet_directory() . $theme_scripts );
 	wp_enqueue_script( 'child-understrap-scripts', get_stylesheet_directory_uri() . $theme_scripts, array('jquery'), $js_version, true ); // Ensure it depends on jquery
 
+    // <<< ADDED: Conditionally enqueue and localize student dashboard script >>>
+    if (is_page_template('student-dashboard.php')) {
+        $student_script_path = get_stylesheet_directory() . '/requests/student-requests.js';
+        // Ensure the file exists before trying to get modification time
+        if (file_exists($student_script_path)) {
+            $student_script_version = $theme_version . '.' . filemtime($student_script_path);
+            $student_script_handle = 'ol-hub-student-requests';
+
+            // Check if the Bootstrap script handle is registered before depending on it
+            $bootstrap_handle = 'understrap-bootstrap-scripts';
+            $dependencies = array('jquery');
+            if (wp_script_is($bootstrap_handle, 'registered')) {
+                $dependencies[] = $bootstrap_handle;
+            } else {
+                // Optional: Log a warning if Bootstrap isn't registered
+                error_log("Warning: Bootstrap script handle '{$bootstrap_handle}' not registered when enqueueing '{$student_script_handle}'.");
+            }
+
+            wp_enqueue_script(
+                $student_script_handle,
+                get_stylesheet_directory_uri() . '/requests/student-requests.js',
+                $dependencies, // Use the dynamic dependencies array
+                $student_script_version,
+                true // Load in footer
+            );
+
+            // Localize the script: Pass PHP data to JavaScript
+            wp_localize_script($student_script_handle, 'olHubStudentData', [
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'checkNonce' => wp_create_nonce('check_student_incoming_requests'),
+                // Add other nonces or data as needed by the script
+                'deleteNoncePlaceholder' => wp_create_nonce('delete_student_request_nonce_placeholder'), // Pass a base nonce
+                'unavailableNoncePlaceholder' => wp_create_nonce('unavailable_all_nonce_placeholder') // Pass a base nonce
+            ]);
+        } else {
+            // Optional: Log an error if the script file is missing
+            error_log("Student requests script file not found: " . $student_script_path);
+        }
+    }
+    // <<< END ADDED CODE >>>
+
 	if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
 		wp_enqueue_script( 'comment-reply' );
 	}
@@ -1681,8 +1722,23 @@ function should_show_reschedule_content() {
     return $active_tab === 'requests' || $stored_tab === 'requests';
 }
 
-// Include Reschedule Request Handlers
+// Include Request Handling Functions
 $requests_path = get_stylesheet_directory() . '/requests';
-require_once $requests_path . '/request-functions.php';
-require_once $requests_path . '/ajax-handlers.php';
-require_once $requests_path . '/post-handlers.php';
+if ( file_exists( $requests_path . '/request-functions.php' ) ) {
+    require_once $requests_path . '/request-functions.php';
+}
+if ( file_exists( $requests_path . '/ajax-handlers.php' ) ) {
+    require_once $requests_path . '/ajax-handlers.php';
+}
+if ( file_exists( $requests_path . '/post-handlers.php' ) ) {
+    require_once $requests_path . '/post-handlers.php';
+}
+
+/**
+ * Remove the parent theme's integrations
+ * Note: UnderStrap init works on after_setup_theme priority 10, cleanup works on priority 20
+ */
+function understrap_child_remove_integrations() {
+    remove_action('after_setup_theme', 'understrap_woocommerce_setup');
+}
+add_action('after_setup_theme', 'understrap_child_remove_integrations', 20);

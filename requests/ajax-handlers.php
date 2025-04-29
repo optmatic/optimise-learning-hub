@@ -276,137 +276,131 @@ add_action('wp_ajax_delete_tutor_request', 'delete_tutor_request_ajax');
 
 /**
  * AJAX handler for students to check for incoming tutor reschedule requests
- * and tutor alternative time suggestions (from tutor_unavailable).
+ * and status changes on their own requests.
  */
 function check_student_incoming_requests_ajax() {
-    check_ajax_referer('check_student_requests_nonce', 'nonce');
+    error_log('[AJAX STUDENT] check_student_incoming_requests_ajax started');
 
+    // Verify nonce FIRST
+    if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field($_POST['nonce']), 'check_student_incoming_requests')) {
+        error_log('[AJAX STUDENT ERROR] Nonce verification failed.');
+        status_header(403); // Forbidden
+        wp_send_json_error(['message' => 'Nonce verification failed. Please refresh the page and try again.'], 403);
+        // exit after wp_send_json_error is automatic
+    }
+    error_log('[AJAX STUDENT] Nonce verified.');
+
+    // Check user role and ID AFTER nonce
+    if (!is_user_logged_in() || !current_user_can('student')) {
+        error_log('[AJAX STUDENT ERROR] User not logged in or not a student.');
+        status_header(403);
+        wp_send_json_error(['message' => 'Access denied. You must be logged in as a student.'], 403);
+    }
     $student_id = get_current_user_id();
-    if (!$student_id || !current_user_can('student')) {
-        wp_send_json_error(['message' => 'Invalid student or permissions.']);
-        return;
-    }
+    error_log('[AJAX STUDENT] Student ID: ' . $student_id);
 
-    // 1. Get pending tutor-initiated requests ('tutor_reschedule')
-    $tutor_requests = get_reschedule_requests('tutor_reschedule', $student_id, 'student', 'pending');
-    $pending_tutor_request_count = count($tutor_requests);
 
-    // 2. Get pending tutor alternative time suggestions ('tutor_unavailable')
-    $alternatives_meta_query = [
-         [
-             'relation' => 'OR', // Not viewed yet
-             [ 'key' => 'viewed_by_student', 'compare' => 'NOT EXISTS' ],
-             [ 'key' => 'viewed_by_student', 'value' => '1', 'compare' => '!=' ]
-         ]
+    // --- Query 1: Pending Tutor-Initiated Requests ---
+    $tutor_requests_args = [
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish', // Ensure we query published posts
+        'meta_query'     => [
+            'relation' => 'AND',
+            ['key' => 'student_id', 'value' => $student_id, 'compare' => '='],
+            ['key' => 'request_type', 'value' => 'tutor_reschedule', 'compare' => '='],
+            ['key' => 'status', 'value' => 'pending', 'compare' => '=']
+            // We don't need 'viewed_by_student' here if we just want the count of pending ones
+        ],
+        'fields'         => 'ids'
     ];
-    $alternative_suggestions = get_reschedule_requests('tutor_unavailable', $student_id, 'student', 'pending', $alternatives_meta_query);
-    $pending_alternatives_count = count($alternative_suggestions);
-    
-    // 3. Get unread confirmed/accepted requests ('reschedule_confirmed' or 'tutor_accepted'?)
-    // Need to confirm the request_type used when tutor accepts
-    $confirmed_request_type = 'reschedule_confirmed'; // Assuming this type is set when tutor accepts
-    $unread_confirmed_count = get_unread_confirmed_count($student_id, 'student'); 
-
-    $total_pending_count = $pending_tutor_request_count + $pending_alternatives_count + $unread_confirmed_count;
-
-    // Generate HTML for the notifications section
-    ob_start();
-    if ($pending_tutor_request_count > 0 || $pending_alternatives_count > 0 || $unread_confirmed_count > 0) {
-        ?>
-        <div class="alert alert-info mb-4" id="studentRequestNotifications">
-            <h5><i class="fas fa-bell me-2"></i>Notifications</h5>
-            <ul class="mb-0" style="list-style: none; padding-left: 0;">
-                 <?php if ($unread_confirmed_count > 0): ?>
-                     <li>
-                         <i class="fas fa-check-circle me-1 text-success"></i> You have <strong><?php echo $unread_confirmed_count; ?></strong> accepted reschedule request<?php echo ($unread_confirmed_count > 1 ? 's' : ''); ?>.
-                         <a href="#schedule" class="btn btn-sm btn-primary ms-2">View Schedule</a>
-                     </li>
-                 <?php endif; ?>
-                <?php if ($pending_tutor_request_count > 0): ?>
-                    <li class="mt-2">
-                        <i class="fas fa-arrow-right me-1 text-warning"></i> You have <strong><?php echo $pending_tutor_request_count; ?></strong> pending reschedule request<?php echo ($pending_tutor_request_count > 1 ? 's' : ''); ?> from your tutor.
-                        <a href="#incomingRescheduleSection" class="btn btn-sm btn-primary ms-2">View Requests</a>
-                    </li>
-                <?php endif; ?>
-                <?php if ($pending_alternatives_count > 0): ?>
-                    <li class="mt-2">
-                        <i class="fas fa-exchange-alt me-1 text-primary"></i> Your tutor proposed <strong><?php echo $pending_alternatives_count; ?></strong> alternative time<?php echo ($pending_alternatives_count > 1 ? 's' : ''); ?>.
-                        <a href="#alternativeTimesSection" class="btn btn-sm btn-primary ms-2">View Alternatives</a>
-                    </li>
-                <?php endif; ?>
-            </ul>
-        </div>
-        <?php
+    error_log('[AJAX STUDENT] Querying pending tutor requests...');
+    $pending_tutor_requests = get_posts($tutor_requests_args);
+    if (is_wp_error($pending_tutor_requests)) {
+         error_log('[AJAX STUDENT ERROR] WP_Error querying pending tutor requests: ' . $pending_tutor_requests->get_error_message());
+        wp_send_json_error(['message' => 'Database error fetching requests.'], 500);
     }
-    $notifications_html = ob_get_clean();
+    $pending_tutor_request_count = is_array($pending_tutor_requests) ? count($pending_tutor_requests) : 0;
+    error_log('[AJAX STUDENT] Pending tutor requests count: ' . $pending_tutor_request_count);
 
-    // Generate HTML for the incoming tutor requests table body
-    ob_start();
-    if (!empty($tutor_requests)) {
-        foreach ($tutor_requests as $request) {
-            $request_id = $request->ID;
-            $tutor_id = get_post_meta($request_id, 'tutor_id', true);
-            $tutor_name = get_post_meta($request_id, 'tutor_name', true);
-            $original_date = get_post_meta($request_id, 'original_date', true);
-            $original_time = get_post_meta($request_id, 'original_time', true);
-            $request_date = get_the_date('M j, Y', $request_id);
-            $preferred_times = get_post_meta($request_id, 'preferred_times', true); // Tutor's preferred times
-            $status = get_post_meta($request_id, 'status', true);
-            $tutor_display_name = get_tutor_display_name($tutor_name ?: get_user_by('id', $tutor_id)->user_login);
-            
-            // Assuming tutor provides only *one* proposed new time in this flow for simplicity
-            $new_date = (!empty($preferred_times[0]['date'])) ? $preferred_times[0]['date'] : '';
-            $new_time = (!empty($preferred_times[0]['time'])) ? $preferred_times[0]['time'] : '';
 
-            ?>
-            <tr>
-                <td><?php echo esc_html($request_date); ?></td>
-                <td><?php echo esc_html(format_datetime($original_date, $original_time)); ?></td>
-                <td><?php echo esc_html(format_datetime($new_date, $new_time)); ?></td>
-                <td><?php echo esc_html($tutor_display_name); ?></td>
-                <td><?php echo get_status_badge($status); ?></td>
-                <td>
-                     <?php if ($status == 'pending'): ?>
-                        <form method="post" class="d-inline ajax-confirm-form" data-action="confirm_tutor_reschedule" data-request-id="<?php echo $request_id; ?>">
-                             <?php wp_nonce_field('confirm_tutor_reschedule_' . $request_id); ?>
-                            <input type="hidden" name="request_id" value="<?php echo $request_id; ?>">
-                            <button type="submit" class="btn btn-sm btn-success me-1">Accept</button>
-                        </form>
-                        <form method="post" class="d-inline ajax-decline-form" data-action="decline_tutor_reschedule" data-request-id="<?php echo $request_id; ?>">
-                            <?php wp_nonce_field('decline_tutor_reschedule_' . $request_id); ?>
-                            <input type="hidden" name="request_id" value="<?php echo $request_id; ?>">
-                            <button type="submit" class="btn btn-sm btn-danger">Decline</button>
-                        </form>
-                        
-                         <!-- Removed Unavailable button - Use Decline instead for tutor requests -->
-                         <!-- <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" 
-                                 data-bs-target="#studentUnavailableModal" 
-                                 data-request-id="<?php echo $request_id; ?>"
-                                 data-tutor-name="<?php echo esc_attr($tutor_display_name); ?>"
-                                 data-original-date="<?php echo esc_attr($original_date); ?>"
-                                 data-original-time="<?php echo esc_attr($original_time); ?>">
-                             Unavailable
-                         </button> -->
-                     <?php else: ?>
-                         <span class="text-muted">No actions available</span>
-                     <?php endif; ?>
-                </td>
-            </tr>
-            <?php
-        }
-    } else {
-        echo '<tr><td colspan="6"><p>No incoming reschedule requests from your tutor at this time.</p></td></tr>';
+    // --- Query 2: Unread Status Updates on Student's Outgoing Requests ---
+    $status_changes_args = [
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'author'         => $student_id, // Requests initiated BY the student
+        'post_status'    => 'publish',
+        'meta_query'     => [
+            'relation' => 'AND',
+            ['key' => 'request_type', 'value' => 'student_reschedule', 'compare' => '='],
+            // Check for statuses that require student notification (approved, rejected, alternatives_proposed by tutor)
+            ['key' => 'status', 'value' => ['approved', 'rejected', 'alternatives_proposed'], 'compare' => 'IN'],
+             [
+                 'relation' => 'OR', // Not viewed yet
+                 [ 'key' => 'viewed_by_student', 'compare' => 'NOT EXISTS' ],
+                 [ 'key' => 'viewed_by_student', 'value' => '1', 'compare' => '!=' ]
+             ]
+        ],
+        'fields'         => 'ids'
+    ];
+    error_log('[AJAX STUDENT] Querying unread status changes...');
+    $unread_status_changes = get_posts($status_changes_args);
+     if (is_wp_error($unread_status_changes)) {
+         error_log('[AJAX STUDENT ERROR] WP_Error querying unread status changes: ' . $unread_status_changes->get_error_message());
+        wp_send_json_error(['message' => 'Database error fetching updates.'], 500);
     }
-    $incoming_tutor_requests_html = ob_get_clean();
+    $unread_status_changes_count = is_array($unread_status_changes) ? count($unread_status_changes) : 0;
+    error_log('[AJAX STUDENT] Unread status changes count: ' . $unread_status_changes_count);
 
-    wp_send_json_success([
-        'count' => $total_pending_count, // Total notifications
-        'pendingTutorRequestCount' => $pending_tutor_request_count,
-        'pendingAlternativesCount' => $pending_alternatives_count,
-        'unreadConfirmedCount' => $unread_confirmed_count,
-        'notificationsHtml' => $notifications_html,
-        'incomingTutorRequestsHtml' => $incoming_tutor_requests_html // Table body HTML
-    ]);
+     // --- Query 3: Unread Alternative Proposals from Tutor (response to student unavailability) ---
+     $tutor_alternatives_args = [
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+        'meta_query'     => [
+            'relation' => 'AND',
+            ['key' => 'student_id', 'value' => $student_id, 'compare' => '='],
+            // This type is created when a tutor responds to a student's 'unavailable' action
+            ['key' => 'request_type', 'value' => 'tutor_alternatives', 'compare' => '='],
+            ['key' => 'status', 'value' => 'pending', 'compare' => '='], // Tutor alternatives are pending student review
+             [
+                 'relation' => 'OR', // Not viewed yet
+                 [ 'key' => 'viewed_by_student', 'compare' => 'NOT EXISTS' ],
+                 [ 'key' => 'viewed_by_student', 'value' => '1', 'compare' => '!=' ]
+             ]
+        ],
+        'fields'         => 'ids'
+    ];
+     error_log('[AJAX STUDENT] Querying unread tutor alternatives...');
+     $unread_tutor_alternatives = get_posts($tutor_alternatives_args);
+     if (is_wp_error($unread_tutor_alternatives)) {
+         error_log('[AJAX STUDENT ERROR] WP_Error querying unread tutor alternatives: ' . $unread_tutor_alternatives->get_error_message());
+         wp_send_json_error(['message' => 'Database error fetching alternatives.'], 500);
+     }
+     $unread_tutor_alternatives_count = is_array($unread_tutor_alternatives) ? count($unread_tutor_alternatives) : 0;
+     error_log('[AJAX STUDENT] Unread tutor alternatives count: ' . $unread_tutor_alternatives_count);
+
+
+    // Total count for badge update (pending incoming requests + unread status changes + unread tutor alternatives)
+    $total_unread_count = $pending_tutor_request_count + $unread_status_changes_count + $unread_tutor_alternatives_count;
+    error_log('[AJAX STUDENT] Total unread count: ' . $total_unread_count);
+
+    // Prepare data for JSON response
+    $response_data = [
+        // 'success' => true, // Implicitly added by wp_send_json_success
+        'data' => [
+            'count' => $total_unread_count,
+            'pendingTutorRequestCount' => $pending_tutor_request_count,
+            'unreadStatusChangeCount' => $unread_status_changes_count,
+            'unreadTutorAlternativesCount' => $unread_tutor_alternatives_count
+            // Add HTML snippets here if needed for dynamic updates, similar to tutor AJAX
+        ]
+    ];
+
+    error_log('[AJAX STUDENT] Sending JSON success response.');
+    wp_send_json_success($response_data); // Send success implicitly adds success:true if not present
+
+    // No exit needed after wp_send_json
 }
 add_action('wp_ajax_check_student_incoming_requests', 'check_student_incoming_requests_ajax');
 
