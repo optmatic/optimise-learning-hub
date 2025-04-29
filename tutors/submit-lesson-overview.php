@@ -1,8 +1,7 @@
     <!-- ===========================
                      SUBMIT LESSON OVERVIEW TAB
                      =========================== -->
-                     <div class="tab-pane fade" id="submit-progress-report" role="tabpanel" aria-labelledby="submit-progress-report-tab">
-                    <!-- Your "Submit Progress Report" tab content here -->
+                     <h3>Submit Lesson Overview</h3>
                     <form method="post" enctype="multipart/form-data">
                     <?php
                     global $submission_message;
@@ -111,4 +110,3 @@
 
                     <input type="submit" name="submit_progress_report" value="Submit Lesson Overview" class="btn btn-primary">
                     </form>
-                </div>

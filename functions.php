@@ -1680,3 +1680,9 @@ function should_show_reschedule_content() {
     // Either the URL parameter or the stored tab cookie indicates we're on the requests tab
     return $active_tab === 'requests' || $stored_tab === 'requests';
 }
+
+// Include Reschedule Request Handlers
+$requests_path = get_stylesheet_directory() . '/requests';
+require_once $requests_path . '/request-functions.php';
+require_once $requests_path . '/ajax-handlers.php';
+require_once $requests_path . '/post-handlers.php';
