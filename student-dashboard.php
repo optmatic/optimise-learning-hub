@@ -64,22 +64,41 @@ if (current_user_can('student')) {
              $base_path = get_stylesheet_directory() . '/students/';
              $requests_include_path = get_stylesheet_directory() . '/requests/student-requests.php';
 
-             // Include tab content
-             // Using include_once to avoid potential issues if files are included elsewhere
-             include_once $base_path . 'home-tab.php';
-             include_once $base_path . 'learning-plan.php';
-             include_once $base_path . 'lesson-schedule.php';
-             include_once $base_path . 'classrooms.php';
-             include_once $base_path . 'learning-overviews.php';
+             // Include tab content - EACH wrapped in its own tab-pane div
 
-             // Include the requests tab content
+             // Home Tab
+             echo '<div class="tab-pane fade show active" id="home-tab-pane" role="tabpanel" aria-labelledby="home-tab-button" tabindex="0">';
+             include_once $base_path . 'home-tab.php';
+             echo '</div>';
+
+             // Learning Plan Tab
+             echo '<div class="tab-pane fade" id="learning-goals-tab-pane" role="tabpanel" aria-labelledby="learning-goals-tab-button" tabindex="0">';
+             include_once $base_path . 'learning-plan.php';
+             echo '</div>';
+
+             // Lesson Schedule Tab
+             echo '<div class="tab-pane fade" id="schedule-tab-pane" role="tabpanel" aria-labelledby="schedule-tab-button" tabindex="0">';
+             include_once $base_path . 'lesson-schedule.php';
+             echo '</div>';
+
+             // Classrooms Tab
+             echo '<div class="tab-pane fade" id="classroom-tab-pane" role="tabpanel" aria-labelledby="classroom-tab-button" tabindex="0">';
+             include_once $base_path . 'classrooms.php';
+             echo '</div>';
+
+             // Learning Overviews Tab
+             echo '<div class="tab-pane fade" id="my-progress-tab-pane" role="tabpanel" aria-labelledby="my-progress-tab-button" tabindex="0">';
+             include_once $base_path . 'learning-overviews.php';
+             echo '</div>';
+
+             // Requests Tab
              if (file_exists($requests_include_path)) {
-                 // Wrap in a tab pane div matching the structure of other includes
+                 // Wrap in a tab pane div ONLY if the file exists
                  echo '<div class="tab-pane fade" id="requests-tab-pane" role="tabpanel" aria-labelledby="requests-tab-button" tabindex="0">';
                  include_once $requests_include_path;
                  echo '</div>';
              } else {
-                 // Fallback or error message if the include file doesn't exist
+                 // Fallback or error message if the include file doesn't exist, still needs the wrapper
                  echo '<div class="tab-pane fade" id="requests-tab-pane" role="tabpanel" aria-labelledby="requests-tab-button" tabindex="0"><p>Error loading requests content.</p></div>';
              }
              ?>

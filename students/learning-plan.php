@@ -1,7 +1,5 @@
-
-             <!-- =========================== YOUR LEARNING PLAN TAB =========================== -->
-                <div class="tab-pane fade" id="learning-goals" role="tabpanel" aria-labelledby="learning-goals-tab">
-                  <!--  <h3>Your Learning Plan</h3> -->
+<!-- =========================== LEARNING GOALS TAB =========================== -->
+    <h3>Your Learning Plan</h3>
 <p>Please see your child's <strong>Individual Learning Plan</strong> below, which provides an overview of the curriculum content your child will be studying during their tutoring lessons, and their specific learning goals. This plan is based upon the goals you have for your child's learning and the academic objectives we have developed based on our initial observations and assessments.</p>
 <p>Your child's personalised <strong>Learning Plan</strong> is fully aligned with the Australian National Curriculum and will be regularly reviewed and updated to ensure it supports your child's ongoing academic progress and development.</p>
        <blockquote>
@@ -18,11 +16,14 @@
                 echo '<p><strong>SPECIFIC LEARNING GOALS:</strong><br> ' . get_field('specific_learning_goals', 'user_' . $user->ID) . '</p>';  
             }
         }
+        else {
+            ?>
+             <p>No learning plan found for this student.</p>
+            <?php
+        }
         ?>
     </div>
  	</blockquote>
 					<p>
 						If you have any questions or require further clarification, please do not hesitate to <a href="mailto:info@optimiselearning.com">contact us</a>.
 					</p>
-        
-                </div>

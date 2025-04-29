@@ -1,5 +1,5 @@
 <!-- =========================== YOUR LESSON SCHEDULE TAB =========================== -->
-<div class="tab-pane fade" id="schedule" role="tabpanel" aria-labelledby="your-schedule-tab">
+    <h3>Your Lesson Schedule</h3>
     <?php
     // Mark confirmed reschedule requests as viewed when this tab is opened
     $confirmed_reschedules = get_posts(array(
@@ -257,4 +257,6 @@
         }
         ?>
     </div>
-</div>
+    <!-- iframe or schedule display -->
+    <iframe src="https://docs.google.com/spreadsheets/d/e/<?php echo esc_attr($google_sheet_id); ?>/pubhtml?widget=true&amp;headers=false" 
+            style="width: 100%; height: 500px; border: none;"></iframe>
