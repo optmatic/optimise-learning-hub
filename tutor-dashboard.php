@@ -319,7 +319,7 @@ function test_reschedule_requests() {
             include 'tutors/submit-lesson-overview.php';
             include 'tutors/sample-lesson-overview.php';
             include 'tutors/sample-progress-comments.php';
-            include 'tutors/requests.php';
+            include 'requests/tutor-requests.php';
 ?>
 
             </div>

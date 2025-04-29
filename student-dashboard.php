@@ -612,7 +612,7 @@ function test_reschedule_requests() {
                 include 'students/lesson-schedule.php';
                 include 'students/classrooms.php';
                 include 'students/learning-overviews.php';
-                include 'students/requests.php';
+                include 'requests/student-requests.php';
                 ?>
     
 
