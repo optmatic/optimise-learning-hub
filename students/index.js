@@ -375,57 +375,6 @@ jQuery(document).ready(function ($) {
   if (activeTab === "requests") {
     $("#requests-tab").tab("show");
   }
-
-  // Function to check for incoming reschedule requests
-  function checkIncomingRequests() {
-    console.log("Checking for incoming reschedule requests...");
-
-    $.ajax({
-      url: studentDashboardData.ajaxurl,
-      type: "POST",
-      data: {
-        action: "check_incoming_reschedule_requests",
-        student_id: studentDashboardData.student_id,
-        nonce: studentDashboardData.nonce,
-      },
-      success: function (response) {
-        console.log("AJAX Response:", response);
-
-        if (response.success) {
-          // Update the notification bubble
-          const count = response.data.count;
-          if (count > 0) {
-            $("#requests .notification-bubble").text(count).show();
-          } else {
-            $("#requests .notification-bubble").hide();
-          }
-
-          // Update the existing incoming requests section
-          const $requestsSection = $(
-            '.card-header:contains("Incoming Reschedule Requests")'
-          )
-            .closest(".card")
-            .find(".card-body");
-          if ($requestsSection.length > 0) {
-            $requestsSection.html(response.data.html);
-          } else {
-            console.error(
-              "Could not find the Incoming Reschedule Requests section"
-            );
-          }
-        } else {
-          console.error("Error in response:", response.data);
-        }
-      },
-      error: function (xhr, status, error) {
-        console.error("AJAX Error:", status, error);
-      },
-    });
-  }
-
-  // Initial check and set interval
-  checkIncomingRequests();
-  setInterval(checkIncomingRequests, 60000); // Check every minute
 });
 
 // Update hidden fields when a lesson is selected

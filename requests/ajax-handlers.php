@@ -277,44 +277,141 @@ add_action('wp_ajax_delete_tutor_request', 'delete_tutor_request_ajax');
 /**
  * AJAX handler for students to check for incoming tutor reschedule requests
  * and status changes on their own requests.
- * [MINIMAL DEBUGGING VERSION]
  */
 function check_student_incoming_requests_ajax() {
-    error_log('[AJAX STUDENT - MINIMAL] check_student_incoming_requests_ajax started');
+    error_log('[AJAX STUDENT] check_student_incoming_requests_ajax started');
 
     // Verify nonce FIRST
     if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field($_POST['nonce']), 'check_student_incoming_requests')) {
-        error_log('[AJAX STUDENT ERROR - MINIMAL] Nonce verification failed.');
-        status_header(403);
-        wp_send_json_error(['message' => 'Minimal Handler: Nonce verification failed.'], 403);
-        wp_die();
+        error_log('[AJAX STUDENT ERROR] Nonce verification failed.');
+        status_header(403); // Forbidden
+        wp_send_json_error(['message' => 'Nonce verification failed. Please refresh the page and try again.'], 403);
+        wp_die(); // Explicitly die after sending error
     }
-    error_log('[AJAX STUDENT - MINIMAL] Nonce verified.');
+    error_log('[AJAX STUDENT] Nonce verified.');
 
     // Check user role and ID AFTER nonce
     if (!is_user_logged_in() || !current_user_can('student')) {
-        error_log('[AJAX STUDENT ERROR - MINIMAL] User not logged in or not a student.');
+        error_log('[AJAX STUDENT ERROR] User not logged in or not a student.');
         status_header(403);
-        wp_send_json_error(['message' => 'Minimal Handler: Access denied.'], 403);
+        wp_send_json_error(['message' => 'Access denied. You must be logged in as a student.'], 403);
+        wp_die(); // Explicitly die after sending error
+    }
+    $student_id = get_current_user_id();
+    error_log('[AJAX STUDENT] Student ID: ' . $student_id);
+
+
+    // --- Query 1: Pending Tutor-Initiated Requests ---
+    $tutor_requests_args = [
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+        'meta_query'     => [
+            'relation' => 'AND',
+            ['key' => 'student_id', 'value' => $student_id, 'compare' => '='],
+            ['key' => 'request_type', 'value' => 'tutor_reschedule', 'compare' => '='],
+            ['key' => 'status', 'value' => 'pending', 'compare' => '='],
+             // Check if student has viewed it
+             [
+                 'relation' => 'OR',
+                 [ 'key' => 'viewed_by_student', 'compare' => 'NOT EXISTS' ],
+                 [ 'key' => 'viewed_by_student', 'value' => '1', 'compare' => '!=' ]
+             ]
+        ],
+        'fields'         => 'ids'
+    ];
+    error_log('[AJAX STUDENT] Querying pending tutor requests...');
+    $pending_tutor_requests = get_posts($tutor_requests_args);
+    if (is_wp_error($pending_tutor_requests)) {
+         error_log('[AJAX STUDENT ERROR] WP_Error querying pending tutor requests: ' . $pending_tutor_requests->get_error_message());
+        wp_send_json_error(['message' => 'Database error fetching requests.'], 500);
         wp_die();
     }
-    error_log('[AJAX STUDENT - MINIMAL] User verified.');
+    $pending_tutor_request_count = is_array($pending_tutor_requests) ? count($pending_tutor_requests) : 0;
+    error_log('[AJAX STUDENT] Pending tutor requests count: ' . $pending_tutor_request_count);
 
-    // Bypass all database queries and logic for debugging
 
-    // Send a static success response
+    // --- Query 2: Unread Status Updates on Student's Outgoing Requests ---
+    $status_changes_args = [
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'author'         => $student_id, // Requests initiated BY the student
+        'post_status'    => 'publish',
+        'meta_query'     => [
+            'relation' => 'AND',
+            ['key' => 'request_type', 'value' => 'student_reschedule', 'compare' => '='],
+            // Check for statuses that require student notification (approved, rejected, alternatives_proposed by tutor)
+            ['key' => 'status', 'value' => ['approved', 'rejected', 'alternatives_proposed'], 'compare' => 'IN'],
+             [
+                 'relation' => 'OR', // Not viewed yet
+                 [ 'key' => 'viewed_by_student', 'compare' => 'NOT EXISTS' ],
+                 [ 'key' => 'viewed_by_student', 'value' => '1', 'compare' => '!=' ]
+             ]
+        ],
+        'fields'         => 'ids'
+    ];
+    error_log('[AJAX STUDENT] Querying unread status changes...');
+    $unread_status_changes = get_posts($status_changes_args);
+     if (is_wp_error($unread_status_changes)) {
+         error_log('[AJAX STUDENT ERROR] WP_Error querying unread status changes: ' . $unread_status_changes->get_error_message());
+        wp_send_json_error(['message' => 'Database error fetching updates.'], 500);
+        wp_die();
+    }
+    $unread_status_changes_count = is_array($unread_status_changes) ? count($unread_status_changes) : 0;
+    error_log('[AJAX STUDENT] Unread status changes count: ' . $unread_status_changes_count);
+
+     // --- Query 3: Unread Alternative Proposals from Tutor (response to student unavailability) ---
+     $tutor_alternatives_args = [
+        'post_type'      => 'progress_report',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+        'meta_query'     => [
+            'relation' => 'AND',
+            ['key' => 'student_id', 'value' => $student_id, 'compare' => '='],
+            // This type is created when a tutor responds to a student's 'unavailable' action
+            ['key' => 'request_type', 'value' => 'tutor_alternatives', 'compare' => '='],
+            ['key' => 'status', 'value' => 'pending', 'compare' => '='], // Tutor alternatives are pending student review
+             [
+                 'relation' => 'OR', // Not viewed yet
+                 [ 'key' => 'viewed_by_student', 'compare' => 'NOT EXISTS' ],
+                 [ 'key' => 'viewed_by_student', 'value' => '1', 'compare' => '!=' ]
+             ]
+        ],
+        'fields'         => 'ids'
+    ];
+     error_log('[AJAX STUDENT] Querying unread tutor alternatives...');
+     $unread_tutor_alternatives = get_posts($tutor_alternatives_args);
+     if (is_wp_error($unread_tutor_alternatives)) {
+         error_log('[AJAX STUDENT ERROR] WP_Error querying unread tutor alternatives: ' . $unread_tutor_alternatives->get_error_message());
+         wp_send_json_error(['message' => 'Database error fetching alternatives.'], 500);
+         wp_die();
+     }
+     $unread_tutor_alternatives_count = is_array($unread_tutor_alternatives) ? count($unread_tutor_alternatives) : 0;
+     error_log('[AJAX STUDENT] Unread tutor alternatives count: ' . $unread_tutor_alternatives_count);
+
+
+    // Total count for badge update (pending incoming requests + unread status changes + unread tutor alternatives)
+    $total_unread_count = $pending_tutor_request_count + $unread_status_changes_count + $unread_tutor_alternatives_count;
+    error_log('[AJAX STUDENT] Total unread count: ' . $total_unread_count);
+
+    // Prepare data for JSON response
     $response_data = [
+        // 'success' => true, // Implicitly added by wp_send_json_success
         'data' => [
-            'message' => 'Minimal handler executed successfully.',
-            'count' => 0, // Static count for testing
-            'timestamp' => time()
+            'count' => $total_unread_count,
+            'pendingTutorRequestCount' => $pending_tutor_request_count,
+            'unreadStatusChangeCount' => $unread_status_changes_count,
+            'unreadTutorAlternativesCount' => $unread_tutor_alternatives_count
+            // NOTE: We are NOT sending back HTML snippets here.
+            // The JS in student-requests.js should handle updating the badge ONLY.
+            // Displaying requests is handled by the PHP template (requests/student-requests.php).
         ]
     ];
 
-    error_log('[AJAX STUDENT - MINIMAL] Sending static JSON success response.');
-    wp_send_json_success($response_data);
+    error_log('[AJAX STUDENT] Sending JSON success response.');
+    wp_send_json_success($response_data); // Send success implicitly adds success:true if not present
 
-    wp_die(); // Explicitly terminate script execution
+    wp_die(); // Explicitly terminate script execution after sending JSON
 }
 add_action('wp_ajax_check_student_incoming_requests', 'check_student_incoming_requests_ajax');
 
