@@ -20,30 +20,49 @@ if ( ! is_page_template( 'tutor-dashboard.php' ) || ! current_user_can( 'tutor' 
 $current_user = wp_get_current_user();
 $tutor_id     = $current_user->ID;
 
-// Get outgoing requests initiated by the tutor
-$outgoing_args = [
-    'request_type' => 'tutor_reschedule',
-    'author'       => $tutor_id,
-    'status'       => ['pending', 'approved', 'rejected', 'cancelled', 'alternatives_proposed']
-];
-$outgoing_requests = get_reschedule_requests($outgoing_args);
+// --- Get Outgoing Requests ---
+$outgoing_type = 'tutor_reschedule';
+$outgoing_status = ['pending', 'approved', 'rejected', 'cancelled', 'alternatives_proposed'];
+// Call with individual arguments matching the function definition
+$outgoing_requests = get_reschedule_requests(
+    $outgoing_type, 
+    $tutor_id, 
+    'tutor', // User role
+    $outgoing_status,
+    [] // No extra meta query needed here
+);
 
-// Get alternative time suggestions from students for this tutor's requests
+// --- Get Alternative Time Suggestions from Students ---
 // We need the original request IDs to filter alternatives
 $tutor_request_ids = !empty($outgoing_requests) ? wp_list_pluck($outgoing_requests, 'ID') : [];
-$alternative_args = [
-    'request_type' => 'reschedule_alternatives',
-    'status'       => 'pending', // Only show pending alternatives needing tutor action
-    'meta_query' => [
+
+$alternative_type = 'reschedule_alternatives';
+$alternative_status = 'pending'; // Only show pending alternatives needing tutor action
+$alternative_meta_query = [];
+if (!empty($tutor_request_ids)) {
+    $alternative_meta_query = [
+        'relation' => 'AND', // Ensure this is explicitly set if needed
         [
             'key'     => 'original_request_id',
             'value'   => $tutor_request_ids,
             'compare' => 'IN',
         ]
-    ]
-];
+        // Add other base meta queries for alternatives if necessary (e.g., ensuring it's assigned to this tutor indirectly)
+    ];
+}
+
 // Ensure we only query if there are tutor requests to reference
-$alternative_requests = !empty($tutor_request_ids) ? get_reschedule_requests($alternative_args) : [];
+$alternative_requests = [];
+if (!empty($tutor_request_ids)) {
+    // Call with individual arguments matching the function definition
+    $alternative_requests = get_reschedule_requests(
+        $alternative_type, 
+        $tutor_id, // Check alternatives related to this tutor
+        'tutor', // Perspective is the tutor viewing alternatives
+        $alternative_status,
+        $alternative_meta_query // Pass the constructed meta query
+    );
+}
 
 ?>
 

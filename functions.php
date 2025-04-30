@@ -830,45 +830,30 @@ add_filter( 'login_redirect', 'my_custom_login_redirect', 10, 3 );
 /**
  * Restricts logged-in students/tutors to their respective dashboards.
  * Runs after the template is determined.
+ * [TEMPORARILY DISABLED BY RENAMING]
  */
-function ol_hub_redirect_dashboard_users() {
-    // No need for AJAX check here as template_redirect doesn't run for admin-ajax.php
-    
-    // Only run for logged-in users
-    if ( ! is_user_logged_in() ) {
+function _ol_hub_redirect_dashboard_users_disabled() { // Renamed
+    // Bail if not logged in or during AJAX
+    if ( ! is_user_logged_in() || wp_doing_ajax() ) {
         return;
     }
 
-    global $current_user;
-    if ( empty($current_user->roles) ) {
-        return; // Cannot determine role
-    }
-    $current_user_roles = $current_user->roles;
+    // Check if the current page is a dashboard page
+    $is_dashboard_page = is_page('student-dashboard') || is_page('tutor-dashboard');
 
-    // Allow access to the login/access page and profile page
-    if ( is_page('access') || is_admin() /* Allows profile editing in wp-admin */ ) { 
-        return;
+    if ( ! $is_dashboard_page ) {
+        // Redirect to the default place
+        wp_redirect( home_url() );
+        exit;
     }
-
-    // Check student role
-    if ( in_array( 'student', $current_user_roles ) ) {
-        if ( ! is_page_template('student-dashboard.php') ) {
-            wp_redirect( home_url( '/student-dashboard' ) );
-            exit;
-        }
-    } 
-    // Check tutor role
-    else if ( in_array( 'tutor', $current_user_roles ) ) {
-        if ( ! is_page_template('tutor-dashboard.php') ) {
-             wp_redirect( home_url( '/tutor-dashboard' ) );
-             exit;
-        }
-    }
-    // Add checks for other roles if needed
-
 }
+
+/**
+ * Restricts logged-in students/tutors to their respective dashboards.
+ * Runs after the template is determined.
+ */
 // Hook to template_redirect, which runs after the main query determines the template
-add_action( 'template_redirect', 'ol_hub_redirect_dashboard_users' );
+// add_action( 'template_redirect', 'ol_hub_redirect_dashboard_users' ); // Temporarily disabled V4
 
 
 
@@ -880,17 +865,28 @@ function my_custom_login_url( $url, $path, $scheme, $blog_id ) {
 }
 
 function my_custom_login_redirect( $redirect_to, $request, $user ) {
-    // Is there a user to check?
-    if ( isset( $user->roles ) && is_array( $user->roles ) ) {
-        // Check for admins
-        if ( in_array( 'administrator', $user->roles ) || in_array( 'editor', $user->roles )) {
-            // Redirect them to the default place
-            return $redirect_to;
-        } else {
-            return home_url();
-        }
-    } else {
+    // Is there a user object? Bail if not.
+    if ( !isset( $user->roles ) || !is_array( $user->roles ) ) {
+        return $redirect_to; // Default behavior
+    }
+
+    // Define dashboard page IDs
+    $student_dashboard_id = 9;
+    $tutor_dashboard_id = 23;
+
+    // Check roles and redirect accordingly
+    if ( in_array( 'administrator', $user->roles ) || in_array( 'editor', $user->roles )) {
+        // Admins/Editors go to the default $redirect_to (usually wp-admin)
         return $redirect_to;
+    } elseif ( in_array( 'student', $user->roles ) ) {
+        // Students go to the Student Dashboard
+        return get_permalink( $student_dashboard_id );
+    } elseif ( in_array( 'tutor', $user->roles ) ) {
+        // Tutors go to the Tutor Dashboard
+        return get_permalink( $tutor_dashboard_id );
+    } else {
+        // Default redirect for any other role (shouldn't happen often)
+        return home_url();
     }
 }
 add_filter( 'login_redirect', 'my_custom_login_redirect', 10, 3 );
@@ -903,19 +899,50 @@ function hide_admin_bar_from_non_admins(){
 }
 add_action('after_setup_theme', 'hide_admin_bar_from_non_admins');
 
-// Restrict access to wp-admin for non-admins
+// Restrict access to wp-admin and redirect students/tutors to their dashboards
 function restrict_admin_with_redirect() {
-     // Bail out if this is an AJAX request OR if user CAN access wp-admin.
-    if ( wp_doing_ajax() || current_user_can('edit_posts') /* Allow editors and above */ ) {
+    // Allow AJAX requests
+    if ( wp_doing_ajax() ) {
         return;
     }
     
-    // Check if we are in the admin area BUT NOT doing AJAX
-    // Note: is_admin() is true for admin-ajax.php, so wp_doing_ajax() is crucial
-    if ( is_admin() ) {
-        wp_redirect(home_url());
+    // Ensure user is logged in
+    if ( ! is_user_logged_in() ) {
+        return; // Should not happen on admin_init, but good practice
+    }
+    
+    $current_user = wp_get_current_user();
+    if ( empty($current_user->roles) ) {
+        return; // Cannot determine role
+    }
+    $current_user_roles = $current_user->roles;
+
+    // Define dashboard page IDs
+    $student_dashboard_id = 9;
+    $tutor_dashboard_id = 23;
+
+    // Redirect Students to their dashboard from wp-admin
+    if ( in_array( 'student', $current_user_roles ) ) {
+        wp_redirect( get_permalink( $student_dashboard_id ) );
         exit;
     }
+    
+    // Redirect Tutors to their dashboard from wp-admin
+    if ( in_array( 'tutor', $current_user_roles ) ) {
+        wp_redirect( get_permalink( $tutor_dashboard_id ) );
+        exit;
+    }
+    
+    // --- If not student or tutor --- 
+    // Allow users who can edit posts (editors, admins, etc.)
+    if ( current_user_can('edit_posts') ) {
+        return;
+    }
+    
+    // Redirect any other logged-in user role trying to access wp-admin to home page
+    // This primarily acts as a fallback security measure
+    wp_redirect( home_url() );
+    exit;
 }
 add_action('admin_init', 'restrict_admin_with_redirect');
 
@@ -1771,3 +1798,5 @@ function understrap_child_remove_integrations() {
     remove_action('after_setup_theme', 'understrap_woocommerce_setup');
 }
 add_action('after_setup_theme', 'understrap_child_remove_integrations', 20);
+
+add_action('admin_init', 'restrict_admin_with_redirect'); // Re-enable V4
