@@ -870,23 +870,14 @@ function my_custom_login_redirect( $redirect_to, $request, $user ) {
         return $redirect_to; // Default behavior
     }
 
-    // Define dashboard page IDs
-    $student_dashboard_id = 9;
-    $tutor_dashboard_id = 23;
-
     // Check roles and redirect accordingly
     if ( in_array( 'administrator', $user->roles ) || in_array( 'editor', $user->roles )) {
         // Admins/Editors go to the default $redirect_to (usually wp-admin)
         return $redirect_to;
-    } elseif ( in_array( 'student', $user->roles ) ) {
-        // Students go to the Student Dashboard
-        return get_permalink( $student_dashboard_id );
-    } elseif ( in_array( 'tutor', $user->roles ) ) {
-        // Tutors go to the Tutor Dashboard
-        return get_permalink( $tutor_dashboard_id );
     } else {
-        // Default redirect for any other role (shouldn't happen often)
-        return home_url();
+        // Send ALL other logged-in roles (student, tutor, etc.) to the homepage
+        // Let other mechanisms (like template checks) handle access control after landing.
+        return home_url(); 
     }
 }
 add_filter( 'login_redirect', 'my_custom_login_redirect', 10, 3 );
@@ -944,7 +935,7 @@ function restrict_admin_with_redirect() {
     wp_redirect( home_url() );
     exit;
 }
-add_action('admin_init', 'restrict_admin_with_redirect');
+// add_action('admin_init', 'restrict_admin_with_redirect'); // Temporarily disabled V5
 
 // Custom WordPress New User Registration Email
 function custom_wp_new_user_notification_email($wp_new_user_notification_email, $user, $blogname) {

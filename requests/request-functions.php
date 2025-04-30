@@ -12,23 +12,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Format date and time string.
  *
- * @param string $date Date string.
- * @param string $time Time string.
+ * @param string $datetime_string Date and time string.
  * @param string $format PHP date format string.
  * @return string Formatted date/time or 'N/A'.
  */
-function format_datetime($date, $time, $format = 'M j, Y \\a\\t g:i A') {
-    if (empty($date) || empty($time)) {
+function format_datetime($datetime_string, $format = 'M j, Y \\a\\t g:i A') {
+    if (empty($datetime_string)) {
         return 'N/A';
     }
     // Escape characters for WordPress formatting compatibility if needed
     $format = str_replace('a\\t', '\\a\\t', $format); 
     try {
-        $datetime = new DateTime($date . ' ' . $time, new DateTimeZone('Australia/Brisbane')); // Assuming AEST/AEDT
+        // Create DateTime object directly from the input string
+        $datetime = new DateTime($datetime_string, new DateTimeZone('Australia/Brisbane')); // Assuming AEST/AEDT
         return $datetime->format($format);
     } catch (Exception $e) {
         // Log error or handle gracefully
-        error_log("Error formatting datetime: " . $e->getMessage());
+        error_log("Error formatting datetime string '{$datetime_string}': " . $e->getMessage());
         return 'Invalid Date/Time';
     }
 }

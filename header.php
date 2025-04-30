@@ -10,6 +10,8 @@
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
 
+error_log('[Header Check] header.php is loading for page ID: ' . get_queried_object_id() . ' | User ID: ' . get_current_user_id());
+
 $bootstrap_version = get_theme_mod( 'understrap_bootstrap_version', 'bootstrap4' );
 $navbar_type       = get_theme_mod( 'understrap_navbar_type', 'collapse' );
 ?>

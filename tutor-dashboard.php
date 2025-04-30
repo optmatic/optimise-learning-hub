@@ -7,15 +7,21 @@ Template Name: Tutor Dashboard
 get_header(); ?>
 
 <?php
-// Get current user object
-$current_user = wp_get_current_user();
+// === DEBUGGING START ===
+// Keep this log to see if the template runs at all
+if ( current_user_can('tutor') ) {
+    error_log('[Tutor Dashboard Restore Check] User CAN access. User ID: ' . get_current_user_id());
+} else {
+    error_log('[Tutor Dashboard Restore Check] User CANNOT access or template not running correctly. User ID: ' . get_current_user_id());
+}
+// === DEBUGGING END ===
 
-// Check if user is logged in and has the 'tutor' role directly
-if ( $current_user->exists() && in_array( 'tutor', (array) $current_user->roles ) ) {
-    // PHP logic previously here (lines 15-70, 150-195 approx) has been moved to requests/post-handlers.php and requests/ajax-handlers.php
-    // The handlers are now hooked to 'init' and 'wp_ajax_' respectively in those files.
-    $tutor_id = $current_user->ID; // Keep needed variables for the template
-    $tutor = $current_user; // We already have the user object
+// Check if user is logged in and has the 'tutor' role directly using current_user_can()
+if ( current_user_can('tutor') ) {
+    // Get user object now that we know they are a tutor
+    $current_user = wp_get_current_user();
+    $tutor_id = $current_user->ID;
+    $tutor = $current_user;
 ?>
 
 <div class="container mt-4">
