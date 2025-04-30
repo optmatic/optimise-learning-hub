@@ -250,29 +250,41 @@ function handle_tutor_submit_request() {
         'post_content' => $reason, // Store reason in content maybe?
         'post_status'  => 'publish',
         'post_type'    => 'progress_report',
+        'post_author'  => $tutor_id, // Ensure post author is the tutor
     ];
     $request_id = wp_insert_post($request_post);
 
     if (!is_wp_error($request_id)) {
+        // Combine original date and time for storage
+        $original_lesson_time_string = trim($original_date . ' ' . $original_time);
+        // Combine first preferred date and time for storage
+        $proposed_reschedule_time_string = trim($preferred_times[0]['date'] . ' ' . $preferred_times[0]['time']);
+
+        // Save meta data
         update_post_meta($request_id, 'request_type', 'tutor_reschedule');
         update_post_meta($request_id, 'status', 'pending');
         update_post_meta($request_id, 'tutor_id', $tutor_id);
         update_post_meta($request_id, 'tutor_name', $tutor_name);
         update_post_meta($request_id, 'student_id', $student_id);
-        update_post_meta($request_id, 'student_name', $student_name);
-        update_post_meta($request_id, 'original_date', $original_date);
-        update_post_meta($request_id, 'original_time', $original_time);
-        update_post_meta($request_id, 'reason', $reason); // Also store in meta
-        update_post_meta($request_id, 'preferred_times', $preferred_times); // Store tutor's proposed times
-        update_post_meta($request_id, 'viewed_by_student', '0');
+        update_post_meta($request_id, 'student_name', $student_name); // Store student login for consistency?
+        update_post_meta($request_id, 'reason', $reason);
+        
+        // Save the combined date/time strings
+        update_post_meta($request_id, 'original_lesson_time', $original_lesson_time_string);
+        update_post_meta($request_id, 'proposed_reschedule_time', $proposed_reschedule_time_string);
+        
+        // Save the full array of preferred times as well (for editing/reference)
+        update_post_meta($request_id, 'preferred_times', $preferred_times);
+        
+        update_post_meta($request_id, 'viewed_by_student', '0'); // Mark as unread for student
+
+        // Redirect back to tutor dashboard requests tab
+        $redirect_url = add_query_arg(['active_tab' => 'requests', 'request_status' => 'submitted'], get_permalink(23)); // Use page ID 23
+        wp_safe_redirect($redirect_url);
+        exit;
     } else {
         wp_die('Error creating reschedule request: ' . $request_id->get_error_message());
     }
-
-    // Redirect
-    $redirect_url = add_query_arg(['page' => 'tutor-dashboard', 'active_tab' => 'requests', 'reschedule_status' => 'submitted'], admin_url('admin.php?page=tutor-dashboard')); // Adjust URL
-     wp_safe_redirect(wp_get_referer() ?: $redirect_url);
-    exit;
 }
 
 // Tutor updates their own request

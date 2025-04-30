@@ -34,13 +34,16 @@ function format_datetime($datetime_string, $format = 'M j, Y \\a\\t g:i A') {
 }
 
 /**
- * Get the display name for a student based on login name.
+ * Get the display name for a student based on user ID.
  *
- * @param string $student_name Student's user_login.
- * @return string Student's display name or original login name if not found.
+ * @param int $student_id Student's user ID.
+ * @return string Student's display name or 'Unknown Student' if not found.
  */
-function get_student_display_name($student_name) {
-    $student_user = get_user_by('login', $student_name);
+function get_student_display_name($student_id) {
+    if ( empty($student_id) || !is_numeric($student_id) ) {
+        return 'Unknown Student';
+    }
+    $student_user = get_user_by('id', $student_id); // Changed 'login' to 'id'
     if ($student_user) {
         $first_name = get_user_meta($student_user->ID, 'first_name', true);
         $last_name = get_user_meta($student_user->ID, 'last_name', true);
@@ -49,7 +52,7 @@ function get_student_display_name($student_name) {
             ? esc_html($first_name . ' ' . $last_name)
             : esc_html($student_user->display_name);
     }
-    return esc_html($student_name); // Return escaped input if user not found
+    return 'Unknown Student (ID: ' . esc_html($student_id) . ')'; // Return ID if user not found
 }
 
 /**
