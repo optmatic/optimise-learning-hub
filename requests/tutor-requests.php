@@ -31,7 +31,7 @@ $tutor_id     = $current_user->ID;
     <!-- <hr/> Removed redundant hr -->
 
     <!-- Initiate Lesson Reschedule Request -->
-    <div class="initiate-request-section mb-4 text-end">
+    <div class="initiate-request-section mb-4 text-start">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#tutorRescheduleModal">
             <i class="fa-regular fa-calendar-plus me-2"></i>Initiate Lesson Reschedule Request
         </button>
@@ -41,14 +41,14 @@ $tutor_id     = $current_user->ID;
     <div class="card mb-4">
         <div class="card-header bg-info text-white">
             <div class="d-flex justify-content-between align-items-center">
-                 <span><i class="fas fa-arrow-left me-2"></i> My Outgoing Reschedule Requests</span>
+                 <span><i class="fas fa-arrow-left me-2"></i> Your Outgoing Reschedule Requests</span>
                  <!-- Optional: Add a refresh button -->
                  <!-- <button class="btn btn-sm btn-light refresh-outgoing-tutor-requests"><i class="fas fa-sync-alt"></i></button> -->
             </div>
         </div>
         <div class="card-body" id="tutor-outgoing-requests-container">
              <!-- Outgoing requests will be loaded here via AJAX -->
-             <div class="text-center"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading outgoing requests...</div>
+             <div class="text-center p-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading outgoing requests...</div>
         </div>
     </div>
 
@@ -57,12 +57,12 @@ $tutor_id     = $current_user->ID;
          <div class="card-header bg-warning text-dark">
             <div class="d-flex justify-content-between align-items-center">
                  <span><i class="fas fa-arrow-right me-2"></i> Incoming Requests from Students</span>
-                 <span class="badge bg-danger incoming-student-request-count" style="display: none;"></span> <!-- Badge updated by AJAX -->
+                 <span class="badge bg-danger incoming-student-request-count notification-badge" style="display: none;"></span> <!-- Added notification-badge class -->
             </div>
         </div>
         <div class="card-body" id="tutor-incoming-requests-container">
             <!-- Incoming requests will be loaded here via AJAX -->
-            <div class="text-center"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading incoming requests...</div>
+            <div class="text-center p-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading incoming requests...</div>
         </div>
     </div>
 
@@ -71,12 +71,12 @@ $tutor_id     = $current_user->ID;
         <div class="card-header bg-secondary text-white">
              <div class="d-flex justify-content-between align-items-center">
                  <span><i class="fas fa-calendar-alt me-2"></i> Student Alternative Time Suggestions</span>
-                  <span class="badge bg-danger student-alternatives-count" style="display: none;"></span> <!-- Badge updated by AJAX -->
+                  <span class="badge bg-danger student-alternatives-count notification-badge" style="display: none;"></span> <!-- Added notification-badge class -->
              </div>
         </div>
         <div class="card-body" id="tutor-student-alternatives-container">
              <!-- Alternatives will be loaded here via AJAX -->
-             <div class="text-center"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading student alternatives...</div>
+             <div class="text-center p-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading student alternatives...</div>
         </div>
     </div>
 
@@ -230,86 +230,114 @@ $tutor_id     = $current_user->ID;
     jQuery(document).ready(function($) {
         // Function to load content into a container
         function loadTutorRequestSection(action, nonce, containerId) {
-            $(containerId).html('<div class="text-center"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...</div>'); // Show loading spinner
+            var container = $(containerId);
+            if (!container.length) {
+                 console.error("Container not found:", containerId);
+                 return; // Exit if container doesn't exist
+            }
+            container.html('<div class="text-center p-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...</div>'); // Show loading spinner
+            
             $.ajax({
                 url: ajaxurl, // WordPress AJAX URL
                 type: 'POST',
                 data: {
                     action: action, // e.g., 'load_tutor_outgoing_requests'
                     nonce: nonce,
-                    // Add other parameters if needed, like tutor_id
-                     tutor_id: <?php echo json_encode($tutor_id); ?>
+                    tutor_id: <?php echo json_encode($tutor_id); ?>
                 },
                 success: function(response) {
-                    if(response.success) {
-                        $(containerId).html(response.data.html);
-                        // Reinitialize tooltips if needed
-                        if (typeof bootstrap !== 'undefined') {
-                             var tooltipTriggerList = [].slice.call(document.querySelectorAll(containerId + ' [data-bs-toggle="tooltip"]'));
-                             var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-                                 return new bootstrap.Tooltip(tooltipTriggerEl);
-                             });
+                    if(response.success && response.data && typeof response.data.html !== 'undefined') {
+                        container.html(response.data.html);
+                        // Safely reinitialize tooltips if Bootstrap and Tooltip are available
+                        if (typeof bootstrap !== 'undefined' && typeof bootstrap.Tooltip !== 'undefined') {
+                             try {
+                                 var tooltipTriggerList = [].slice.call(container[0].querySelectorAll('[data-bs-toggle="tooltip"]'));
+                                 var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                                     // Get existing instance or create new one
+                                     return bootstrap.Tooltip.getOrCreateInstance(tooltipTriggerEl); 
+                                 });
+                             } catch (e) {
+                                 console.warn("Error initializing tooltips:", e);
+                             }
+                        } else {
+                            console.warn("Bootstrap Tooltip component not available when trying to initialize after loading", containerId);
                         }
+                        // Trigger a custom event indicating content loaded for this section
+                        $(document).trigger('tutorRequestSectionLoaded', { containerId: containerId, response: response.data });
                     } else {
-                        $(containerId).html('<div class="alert alert-danger">Error loading requests: ' + (response.data.message || 'Unknown error') + '</div>');
+                        console.error("AJAX Error for", action, ":", response.data?.message || 'Unknown error or missing HTML');
+                        container.html('<div class="alert alert-danger">Error loading content: ' + (response.data?.message || 'Unknown error') + '</div>');
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
-                    console.error("AJAX Error:", textStatus, errorThrown);
-                    $(containerId).html('<div class="alert alert-danger">Failed to load requests. Please try again later.</div>');
+                    console.error("AJAX Network/Server Error for", action, ":", textStatus, errorThrown);
+                    var errorMsg = 'Failed to load content.';
+                    if (jqXHR.status === 403) {
+                        errorMsg = 'Permission denied. Please ensure you are logged in.';
+                    } else if (jqXHR.responseText) {
+                         // Try to display server error if available (for debugging)
+                         // errorMsg += "<br><small>Server Response: " + jqXHR.responseText.substring(0, 300) + "</small>"; 
+                         console.error("Server Response: ", jqXHR.responseText);
+                    }
+                     container.html('<div class="alert alert-danger">' + errorMsg + '</div>');
                 }
             });
         }
 
-         // --- Initial Loads ---
-         var loadNonce = $('#tutor_load_requests_nonce_field').val();
-         var notificationNonce = $('#check_tutor_notifications_nonce_field').val();
+         // --- Initial Loads (with slight delay) ---
+         // Use setTimeout to potentially avoid race conditions with other scripts/Bootstrap initialization
+         setTimeout(function() {
+             var loadNonce = $('#tutor_load_requests_nonce_field').val();
+             var notificationNonce = $('#check_tutor_notifications_nonce_field').val();
 
-         // Load Notifications
-         if (notificationNonce) {
-             loadTutorRequestSection('load_tutor_notifications', notificationNonce, '#tutor-notifications-container');
-         } else {
-              console.error("Tutor notification nonce not found.");
-             $('#tutor-notifications-container').html('<div class="alert alert-warning">Could not load notifications (nonce missing).</div>');
-         }
+             // Load Notifications
+             if (notificationNonce) {
+                 loadTutorRequestSection('load_tutor_notifications', notificationNonce, '#tutor-notifications-container');
+             } else {
+                 console.error("Tutor notification nonce not found.");
+                 $('#tutor-notifications-container').html('<div class="alert alert-warning">Could not load notifications (security token missing).</div>');
+             }
 
-         // Load Outgoing Requests
-         if (loadNonce) {
-             loadTutorRequestSection('load_tutor_outgoing_requests', loadNonce, '#tutor-outgoing-requests-container');
-         } else {
-             console.error("Tutor load requests nonce not found.");
-             $('#tutor-outgoing-requests-container').html('<div class="alert alert-warning">Could not load outgoing requests (nonce missing).</div>');
-         }
+             // Load Outgoing Requests
+             if (loadNonce) {
+                 loadTutorRequestSection('load_tutor_outgoing_requests', loadNonce, '#tutor-outgoing-requests-container');
+             } else {
+                 console.error("Tutor load requests nonce not found.");
+                 $('#tutor-outgoing-requests-container').html('<div class="alert alert-warning">Could not load outgoing requests (security token missing).</div>');
+             }
 
-         // Load Incoming Requests
-         if (loadNonce) {
-             loadTutorRequestSection('load_tutor_incoming_requests', loadNonce, '#tutor-incoming-requests-container');
-         } else {
-             // Nonce error already logged
-             $('#tutor-incoming-requests-container').html('<div class="alert alert-warning">Could not load incoming requests (nonce missing).</div>');
-         }
+             // Load Incoming Requests
+             if (loadNonce) {
+                 loadTutorRequestSection('load_tutor_incoming_requests', loadNonce, '#tutor-incoming-requests-container');
+             } else {
+                 $('#tutor-incoming-requests-container').html('<div class="alert alert-warning">Could not load incoming requests (security token missing).</div>');
+             }
 
-         // Load Student Alternatives
-         if (loadNonce) {
-              loadTutorRequestSection('load_tutor_student_alternatives', loadNonce, '#tutor-student-alternatives-container');
-         } else {
-             // Nonce error already logged
-              $('#tutor-student-alternatives-container').html('<div class="alert alert-warning">Could not load student alternatives (nonce missing).</div>');
-         }
+             // Load Student Alternatives
+             if (loadNonce) {
+                 loadTutorRequestSection('load_tutor_student_alternatives', loadNonce, '#tutor-student-alternatives-container');
+             } else {
+                 $('#tutor-student-alternatives-container').html('<div class="alert alert-warning">Could not load student alternatives (security token missing).</div>');
+             }
+         }, 100); // 100ms delay - adjust if needed
+
 
         // --- Event Handlers (Delegated for AJAX-loaded content) ---
 
         // Handle Tutor deleting their own outgoing request
-        $('#tutor-outgoing-requests-container').on('click', '.delete-tutor-request-btn', function() {
-            if (!confirm('Are you sure you want to cancel this reschedule request?')) {
-                return;
-            }
+        $(document).on('click', '#tutor-outgoing-requests-container .delete-tutor-request-btn', function() {
             var button = $(this);
             var requestId = button.data('request-id');
-            var nonce = $('#tutor_delete_request_nonce_field').val(); // Use the generic delete nonce
+            // *** Get specific nonce from the button itself if available (more secure) ***
+            var nonce = button.data('nonce') || $('#tutor_delete_request_nonce_field').val(); 
 
             if (!requestId || !nonce) {
                 alert('Error: Could not identify request or security token.');
+                console.error("Delete error: Missing request ID or nonce.", {requestId, nonce});
+                return;
+            }
+            
+             if (!confirm('Are you sure you want to cancel this reschedule request?')) {
                 return;
             }
 
@@ -321,42 +349,54 @@ $tutor_id     = $current_user->ID;
                 data: {
                     action: 'tutor_delete_outgoing_request', // Specific AJAX action
                     request_id: requestId,
-                    nonce: nonce
+                    nonce: nonce // Send the specific or generic nonce
                 },
                 success: function(response) {
                     if (response.success) {
-                        alert('Request cancelled successfully.');
-                        // Reload the outgoing requests section
-                        loadTutorRequestSection('load_tutor_outgoing_requests', loadNonce, '#tutor-outgoing-requests-container');
+                        // alert('Request cancelled successfully.');
+                        // Visually remove the row
+                        button.closest('tr').fadeOut(300, function() { $(this).remove(); });
+                        // Optionally show a success message somewhere else
+                        // Refresh counts/notifications if necessary
+                        var notificationNonce = $('#check_tutor_notifications_nonce_field').val();
+                        if(notificationNonce) loadTutorRequestSection('load_tutor_notifications', notificationNonce, '#tutor-notifications-container');
+
                     } else {
-                        alert('Error cancelling request: ' + (response.data.message || 'Please try again.'));
-                        button.prop('disabled', false).html('<i class="fa-solid fa-trash-can"></i>'); // Restore button
+                        alert('Error cancelling request: ' + (response.data?.message || 'Please try again.'));
+                        button.prop('disabled', false).html('<i class="fa-solid fa-trash-can"></i> <span class="d-none d-md-inline">Cancel</span>'); // Restore button icon/text
                     }
                 },
                 error: function() {
                     alert('An error occurred while cancelling the request. Please try again.');
-                    button.prop('disabled', false).html('<i class="fa-solid fa-trash-can"></i>'); // Restore button
+                    button.prop('disabled', false).html('<i class="fa-solid fa-trash-can"></i> <span class="d-none d-md-inline">Cancel</span>'); // Restore button icon/text
                 }
             });
         });
 
          // Handle Tutor clicking Accept/Decline/Unavailable on an INCOMING student request
-         $('#tutor-incoming-requests-container').on('click', '.handle-student-request-btn', function() {
-             var requestId = $(this).data('request-id');
-             var actionType = $(this).data('action'); // 'accept', 'decline', 'unavailable'
+         $(document).on('click', '#tutor-incoming-requests-container .handle-student-request-btn', function() {
+             var button = $(this);
+             var requestId = button.data('request-id');
+             var actionType = button.data('action'); // 'accept', 'decline', 'unavailable'
              var handleNonce = $('#tutor_handle_student_request_nonce_field').val();
              var modal = $('#tutorHandleStudentRequestModal');
              var modalBody = $('#tutorHandleStudentRequestModalBody');
              var modalTitle = $('#tutorHandleStudentRequestModalLabel');
 
-             if (!requestId || !actionType || !handleNonce) {
-                 alert('Error: Missing data to handle request.');
+             if (!requestId || !actionType || !handleNonce || !modal.length || !modalBody.length || !modalTitle.length) {
+                 alert('Error: Cannot process request (missing data or modal elements).');
+                 console.error("Handle student request error: Missing elements or data", {requestId, actionType, handleNonce, modalExists: modal.length > 0});
                  return;
              }
 
-             modalTitle.text('Respond to Request: ' + actionType.charAt(0).toUpperCase() + actionType.slice(1));
+             var actionText = actionType.charAt(0).toUpperCase() + actionType.slice(1);
+             if(actionType === 'unavailable') actionText = 'Propose Alternatives';
+             modalTitle.text('Respond to Request: ' + actionText);
              modalBody.html('<div class="text-center p-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading details...</div>');
-             modal.modal('show');
+             
+             // Show modal using Bootstrap 5 method
+             var modalInstance = bootstrap.Modal.getOrCreateInstance(modal[0]);
+             modalInstance.show();
 
              // AJAX call to get the modal content / form
              $.ajax({
@@ -369,11 +409,18 @@ $tutor_id     = $current_user->ID;
                      nonce: handleNonce
                  },
                  success: function(response) {
-                     if (response.success) {
+                     if (response.success && response.data && response.data.html) {
                          modalBody.html(response.data.html);
-                         // Re-initialize any JS needed inside the modal (like form validation, date pickers)
+                         // Initialize components within the modal if necessary (e.g., datepickers)
+                         // Safely initialize tooltips within the modal body
+                         if (typeof bootstrap !== 'undefined' && typeof bootstrap.Tooltip !== 'undefined') {
+                             var tooltipTriggerListModal = [].slice.call(modalBody[0].querySelectorAll('[data-bs-toggle="tooltip"]'));
+                             tooltipTriggerListModal.map(function (tooltipTriggerEl) {
+                                 return bootstrap.Tooltip.getOrCreateInstance(tooltipTriggerEl);
+                             });
+                         }
                      } else {
-                         modalBody.html('<div class="alert alert-danger">' + (response.data.message || 'Error loading details.') + '</div>');
+                         modalBody.html('<div class="alert alert-danger">' + (response.data?.message || 'Error loading details.') + '</div>');
                      }
                  },
                  error: function() {
@@ -382,126 +429,297 @@ $tutor_id     = $current_user->ID;
              });
          });
 
-         // Handle Tutor clicking a button related to STUDENT ALTERNATIVES
-         $('#tutor-student-alternatives-container').on('click', '.respond-to-student-alternative-btn', function() {
-             var altRequestId = $(this).data('alt-request-id'); // The ID of the 'tutor_unavailable' post
-             var actionType = $(this).data('action'); // e.g., 'accept', 'decline_all'
-             var respondNonce = $('#tutor_respond_alternatives_nonce_field').val();
-             var modal = $('#tutorRespondToAlternativesModal');
-             var modalBody = $('#tutorRespondToAlternativesModalBody');
-             var modalTitle = $('#tutorRespondToAlternativesModalLabel');
+         // Handle form submissions INSIDE the 'Handle Student Request' modal
+         $(document).on('submit', '#tutorHandleStudentRequestModal form.ajax-modal-form', function(e) {
+             e.preventDefault();
+             var form = $(this);
+             var submitButton = form.find('button[type="submit"]');
+             var responseDiv = form.find('.ajax-modal-response');
+             var modal = form.closest('.modal');
+             var ajaxAction = form.data('action'); // e.g., 'tutor_accept_student_request'
 
-             if (!altRequestId || !actionType || !respondNonce) {
-                  alert('Error: Missing data to handle alternatives.');
-                  return;
+             if (!ajaxAction) {
+                 console.error("Modal form submit error: Missing data-action attribute on form.");
+                 responseDiv.html('<div class="alert alert-danger">Configuration error.</div>').show();
+                 return;
              }
 
-             modalTitle.text('Respond to Alternatives: ' + actionType.charAt(0).toUpperCase() + actionType.slice(1));
-              modalBody.html('<div class="text-center p-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading details...</div>');
-             modal.modal('show');
+             // Store original button text/html
+             var originalButtonContent = submitButton.html();
+             submitButton.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...');
+             responseDiv.hide().html('');
 
-              // AJAX call to get the modal content / form
+             var formData = form.serialize() + '&action=' + ajaxAction; // Add the WP AJAX action
+
              $.ajax({
                  url: ajaxurl,
                  type: 'POST',
-                 data: {
-                     action: 'get_tutor_respond_alternatives_modal_content',
-                     alt_request_id: altRequestId,
-                     action_type: actionType,
-                     nonce: respondNonce
-                 },
+                 data: formData,
                  success: function(response) {
                      if (response.success) {
-                         modalBody.html(response.data.html);
+                         responseDiv.html('<div class="alert alert-success">' + (response.data?.message || 'Action successful!') + '</div>').show();
+                         // Refresh the main lists
+                         var loadNonce = $('#tutor_load_requests_nonce_field').val();
+                         if (loadNonce) {
+                              loadTutorRequestSection('load_tutor_incoming_requests', loadNonce, '#tutor-incoming-requests-container');
+                              loadTutorRequestSection('load_tutor_outgoing_requests', loadNonce, '#tutor-outgoing-requests-container'); // Refresh outgoing if action affects it
+                              loadTutorRequestSection('load_tutor_student_alternatives', loadNonce, '#tutor-student-alternatives-container');
+                         }
+                          var notificationNonce = $('#check_tutor_notifications_nonce_field').val();
+                          if(notificationNonce) loadTutorRequestSection('load_tutor_notifications', notificationNonce, '#tutor-notifications-container');
+                          
+                         // Close modal after delay
+                         setTimeout(function() {
+                             var modalInstance = bootstrap.Modal.getInstance(modal[0]);
+                             if(modalInstance) modalInstance.hide();
+                         }, 2000);
                      } else {
-                          modalBody.html('<div class="alert alert-danger">' + (response.data.message || 'Error loading details.') + '</div>');
+                         responseDiv.html('<div class="alert alert-danger">Error: ' + (response.data?.message || 'Could not complete action.') + '</div>').show();
+                         submitButton.prop('disabled', false).html(originalButtonContent); // Restore button
                      }
                  },
                  error: function() {
-                      modalBody.html('<div class="alert alert-danger">Failed to load alternative details. Please close and try again.</div>');
+                     responseDiv.html('<div class="alert alert-danger">AJAX error processing action.</div>').show();
+                     submitButton.prop('disabled', false).html(originalButtonContent); // Restore button
                  }
              });
          });
 
 
-         // Add logic for tutor reschedule form lesson selection if needed
+         // Handle Tutor clicking a button related to STUDENT ALTERNATIVES (within accordion)
+         // These buttons might now trigger AJAX directly OR open the modal
+         // Based on the load_tutor_student_alternatives_ajax, buttons are inside an accordion.
+         // Let's make them trigger AJAX actions directly for accept/decline_all/cancel_original
+
+         $(document).on('click', '#tutor-student-alternatives-container .respond-to-student-alternative-btn', function() {
+             var button = $(this);
+             var altRequestId = button.data('alt-request-id');
+             var actionType = button.data('action'); // 'accept', 'decline_all', 'cancel_original'
+             var form = button.closest('form'); // Find the wrapping form
+             var nonce = form.find('input[name="tutor_respond_alt_nonce"]').val(); // Get nonce from hidden field in the form
+             var responseDiv = form.find('.ajax-modal-response'); // Find response div within the same form
+             var selectedIndex = null;
+             var ajaxAction = '';
+             var confirmMsg = '';
+
+             if (!altRequestId || !actionType || !nonce) {
+                 alert('Error: Missing data for handling alternatives.');
+                 console.error("Respond alternative error: Missing data", {altRequestId, actionType, nonce});
+                 return;
+             }
+
+             if (actionType === 'accept') {
+                 var selectedRadio = form.find('input.tutor-accept-alternative-radio:checked');
+                 if (!selectedRadio.length) {
+                     alert('Please select an alternative time to accept.');
+                     return;
+                 }
+                 selectedIndex = selectedRadio.data('selected-index');
+                 ajaxAction = 'tutor_accept_student_alternative';
+                 confirmMsg = 'Are you sure you want to accept this alternative time?';
+             } else if (actionType === 'decline_all') {
+                 ajaxAction = 'tutor_decline_student_alternatives';
+                 confirmMsg = 'Are you sure you want to decline all alternatives and cancel the original request?';
+             } else if (actionType === 'cancel_original') {
+                  ajaxAction = 'tutor_cancel_original_from_unavailable';
+                  confirmMsg = 'Are you sure you want to acknowledge this and cancel the original request?';
+             } else {
+                 console.error("Unknown alternative action type:", actionType);
+                 return;
+             }
+
+             if (!confirm(confirmMsg)) {
+                 return;
+             }
+             
+             // Store original button text/html
+             var originalButtonContent = button.html();
+             button.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
+             responseDiv.hide().html('');
+
+             var data = {
+                 action: ajaxAction,
+                 alt_request_id: altRequestId,
+                 nonce: nonce,
+                 action_type: actionType // May not be strictly needed by handler, but good for context
+             };
+             if (selectedIndex !== null) {
+                 data.selected_index = selectedIndex;
+             }
+             // TODO: Add reason field for decline_all if needed
+
+             $.ajax({
+                 url: ajaxurl,
+                 type: 'POST',
+                 data: data,
+                 success: function(response) {
+                      if (response.success) {
+                         responseDiv.html('<div class="alert alert-success">' + (response.data?.message || 'Action successful!') + '</div>').show();
+                         // Refresh relevant sections
+                         var loadNonce = $('#tutor_load_requests_nonce_field').val();
+                         if (loadNonce) {
+                             // Delay slightly to allow changes to propagate before reload
+                              setTimeout(function() {
+                                 loadTutorRequestSection('load_tutor_outgoing_requests', loadNonce, '#tutor-outgoing-requests-container');
+                                 loadTutorRequestSection('load_tutor_student_alternatives', loadNonce, '#tutor-student-alternatives-container');
+                                  var notificationNonce = $('#check_tutor_notifications_nonce_field').val();
+                                  if(notificationNonce) loadTutorRequestSection('load_tutor_notifications', notificationNonce, '#tutor-notifications-container');
+                             }, 500); 
+                         }
+                     } else {
+                         responseDiv.html('<div class="alert alert-danger">Error: ' + (response.data?.message || 'Could not complete action.') + '</div>').show();
+                         button.prop('disabled', false).html(originalButtonContent); // Restore button
+                     }
+                 },
+                 error: function() {
+                     responseDiv.html('<div class="alert alert-danger">AJAX error processing action.</div>').show();
+                     button.prop('disabled', false).html(originalButtonContent); // Restore button
+                 }
+                 // No 'complete' needed as success handles refresh
+             });
+         });
+
+         // --- Tutor Initiate Reschedule Modal Form --- 
+         // Add logic for tutor reschedule form lesson selection 
          $('#tutor_reschedule_lesson_select').on('change', function() {
              var selectedOption = $(this).find('option:selected');
-             var valueParts = selectedOption.val().split('|'); // date|time|student_id
-             if (valueParts.length === 3) {
-                 $('#tutor_reschedule_original_date').val(valueParts[0]);
-                 $('#tutor_reschedule_original_time').val(valueParts[1]);
-                 // Update the hidden student ID field based on the selected lesson
-                 $('#tutor_reschedule_selected_student_id').val(valueParts[2]);
-                 // Also update the main student select dropdown if desired, though hidden field is safer for submission
-                 // $('#tutor_reschedule_student_select').val(valueParts[2]);
-             } else {
+             var value = selectedOption.val();
+             if (value) {
+                 var valueParts = value.split('|'); // date|time|student_id
+                 if (valueParts.length === 3) {
+                     $('#tutor_reschedule_original_date').val(valueParts[0]);
+                     $('#tutor_reschedule_original_time').val(valueParts[1]);
+                     // Update the hidden student ID field *AND* the visible select (for clarity, though hidden is used for submit)
+                     var studentIdFromLesson = valueParts[2];
+                     $('#tutor_reschedule_selected_student_id').val(studentIdFromLesson);
+                     $('#tutor_reschedule_student_select').val(studentIdFromLesson); 
+                 } else {
+                     console.warn("Lesson option value format unexpected:", value);
+                     $('#tutor_reschedule_original_date').val('');
+                     $('#tutor_reschedule_original_time').val('');
+                     $('#tutor_reschedule_selected_student_id').val('');
+                 }
+            } else {
                  $('#tutor_reschedule_original_date').val('');
                  $('#tutor_reschedule_original_time').val('');
                  $('#tutor_reschedule_selected_student_id').val('');
-             }
+            }
          });
+          // Ensure student select also updates hidden field if changed manually (edge case)
+          $('#tutor_reschedule_student_select').on('change', function() {
+               var selectedStudentId = $(this).val();
+               // Only update the hidden field if the lesson select is NOT set (otherwise lesson dictates)
+               if (!$('#tutor_reschedule_lesson_select').val()) {
+                    $('#tutor_reschedule_selected_student_id').val(selectedStudentId);
+               }
+               // TODO: Optionally filter the lesson dropdown based on the selected student here?
+          });
 
-         // Handle Tutor Initiate Reschedule Form Submission (using AJAX is better than POST for modals)
+         // Handle Tutor Initiate Reschedule Form Submission via AJAX
          $('#tutorRescheduleForm').on('submit', function(e) {
-             e.preventDefault(); // Prevent default form submission
+             e.preventDefault(); 
 
              var form = $(this);
              var submitButton = $('#submitTutorReschedule');
              var successMsg = $('#tutorRescheduleSuccessMessage');
              var errorMsg = $('#tutorRescheduleErrorMessage');
 
+             // --- Basic Frontend Validation --- 
+             let isValid = true;
+             const requiredFields = form.find('[required]');
+             requiredFields.each(function() {
+                 if (!$(this).val()) {
+                      isValid = false;
+                      $(this).addClass('is-invalid'); // Highlight invalid fields
+                 } else {
+                      $(this).removeClass('is-invalid');
+                 }
+             });
+             // Ensure hidden student ID is set (should be by lesson select)
+             var studentIdSelected = $('#tutor_reschedule_selected_student_id').val();
+             if (!studentIdSelected) {
+                  isValid = false;
+                  $('#tutor_reschedule_student_select').addClass('is-invalid'); // Highlight student select
+                  console.warn("Tutor Reschedule: No student ID selected/derived from lesson.")
+             } else {
+                  $('#tutor_reschedule_student_select').removeClass('is-invalid');
+             }
+
+             if (!isValid) {
+                  errorMsg.html('<p><i class="fas fa-exclamation-triangle"></i> Please fill in all required fields (marked with *).</p>').show();
+                  successMsg.hide();
+                  return; // Stop submission
+             }
+             // --- End Validation --- 
+
+             var originalButtonContent = submitButton.html();
              submitButton.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...');
              successMsg.hide();
              errorMsg.hide();
+             form.find('.is-invalid').removeClass('is-invalid'); // Clear validation classes
 
-             // Ensure the correct student ID is included (from the hidden field updated by lesson selection)
+             // Prepare form data, ensuring the correct student ID is used
              var formData = form.serializeArray();
-             var studentIdFromLesson = $('#tutor_reschedule_selected_student_id').val();
-             if(studentIdFromLesson) {
-                 // Remove the possibly incorrect student_id from the select dropdown if it exists
-                 formData = formData.filter(item => item.name !== 'student_id');
-                 // Add the correct one from the hidden field
-                 formData.push({ name: 'student_id', value: studentIdFromLesson });
-             } else {
-                 // If no lesson selected, rely on the main student dropdown (though lesson should be required)
-                 console.warn("Submitting tutor reschedule without a specific lesson selected.");
-             }
-
+              // Remove student_id from the select if it exists, use the hidden one
+             formData = formData.filter(item => item.name !== 'student_id'); 
+             formData.push({ name: 'student_id', value: studentIdSelected }); 
+             // Add the AJAX action
+             formData.push({ name: 'action', value: 'tutor_initiate_reschedule_ajax' });
 
              $.ajax({
-                 url: ajaxurl, // Use admin-ajax.php
+                 url: ajaxurl, 
                  type: 'POST',
-                 data: $.param(formData) + '&action=tutor_initiate_reschedule_ajax', // Add AJAX action
+                 data: $.param(formData), // Serialize the array correctly for POST
                  success: function(response) {
                      if (response.success) {
-                         successMsg.show();
-                         form[0].reset(); // Clear the form
-                         $('#tutor_reschedule_original_date').val(''); // Clear hidden fields too
+                         successMsg.html('<p><i class="fas fa-check-circle"></i> ' + (response.data?.message || 'Request submitted successfully.') + '</p>').show();
+                         form[0].reset(); 
+                         $('#tutor_reschedule_original_date').val(''); 
                          $('#tutor_reschedule_original_time').val('');
                          $('#tutor_reschedule_selected_student_id').val('');
-                         // Optionally close modal after delay
+                         
                          setTimeout(function() {
-                             $('#tutorRescheduleModal').modal('hide');
+                             var modalInstance = bootstrap.Modal.getInstance($('#tutorRescheduleModal')[0]);
+                             if (modalInstance) modalInstance.hide();
                              successMsg.hide(); // Hide message on close
                          }, 2500);
-                         // Reload outgoing requests list
-                         loadTutorRequestSection('load_tutor_outgoing_requests', loadNonce, '#tutor-outgoing-requests-container');
+                         // Refresh relevant lists
+                         var loadNonce = $('#tutor_load_requests_nonce_field').val();
+                         if (loadNonce) loadTutorRequestSection('load_tutor_outgoing_requests', loadNonce, '#tutor-outgoing-requests-container');
+                         var notificationNonce = $('#check_tutor_notifications_nonce_field').val();
+                         if(notificationNonce) loadTutorRequestSection('load_tutor_notifications', notificationNonce, '#tutor-notifications-container');
+
                      } else {
-                         errorMsg.html('<p><i class="fas fa-exclamation-triangle"></i> ' + (response.data.message || 'Error submitting request.') + '</p>').show();
+                         errorMsg.html('<p><i class="fas fa-exclamation-triangle"></i> ' + (response.data?.message || 'Error submitting request.') + '</p>').show();
                      }
                  },
                  error: function() {
-                      errorMsg.html('<p><i class="fas fa-exclamation-triangle"></i> An unexpected error occurred. Please try again.</p>').show();
+                      errorMsg.html('<p><i class="fas fa-exclamation-triangle"></i> An unexpected network or server error occurred. Please try again.</p>').show();
                  },
                  complete: function() {
-                      submitButton.prop('disabled', false).text('Submit Request');
+                      // Only restore button if error occurred
+                      if (errorMsg.is(':visible')) {
+                          submitButton.prop('disabled', false).html(originalButtonContent);
+                      } else {
+                           // Keep it disabled on success until modal closes
+                           submitButton.html(originalButtonContent); // Restore content but keep disabled
+                      }
                  }
              });
          });
 
 
-         // Add more handlers for other forms/buttons inside modals if they also need AJAX submission
+         // Add smooth scroll for notification links
+         $(document).on('click', 'a.scroll-to', function(e) {
+             e.preventDefault();
+             var targetId = $(this).attr('href'); // Get the target ID like #some-element
+             var targetElement = $(targetId);
+             if (targetElement.length) {
+                 $('html, body').animate({
+                     scrollTop: targetElement.offset().top - 100 // Adjust offset as needed (e.g., for fixed headers)
+                 }, 500);
+             }
+         });
 
     }); // end document ready
 </script>
@@ -517,9 +735,19 @@ $tutor_id     = $current_user->ID;
         height: 1rem;
         border-width: .2em;
     }
-    /* Style for notification badge */
+    /* Style for notification badge (match student) */
     .notification-badge {
         font-size: 0.75rem;
-        vertical-align: super;
+        vertical-align: super; /* or adjust as needed */
+        /* padding: 0.2em 0.4em; */
+    }
+    .request-actions .btn-group-sm .btn {
+        /* Ensure buttons in groups don't wrap unnecessarily on small screens */
+        white-space: nowrap;
+    }
+     .accordion-button:not(.collapsed) {
+        /* Match student style? */
+        /* color: #0c63e4; */
+        /* background-color: #e7f1ff; */
     }
 </style>
