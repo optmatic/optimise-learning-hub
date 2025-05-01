@@ -1,4 +1,4 @@
-<?php
+        <?php
 // Ensure this file is loaded within WordPress context
 if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly.
@@ -26,14 +26,14 @@ $current_student = wp_get_current_user();
         $unread_confirmed_count = get_unread_confirmed_count($current_student_id, 'student');
         
         if ($pending_tutor_request_count > 0 || $pending_alternatives_count > 0 || $unread_confirmed_count > 0): ?>
-             <div class="alert alert-info">
-                 <h5><i class="fas fa-bell me-2"></i>Notifications</h5>
+            <div class="alert alert-info">
+                <h5><i class="fas fa-bell me-2"></i>Notifications</h5>
                  <ul class="mb-0" style="list-style: none; padding-left: 0;">
                     <?php if ($unread_confirmed_count > 0): ?>
-                        <li>
+                    <li>
                              <i class="fas fa-check-circle me-1 text-success"></i> You have <strong><?php echo $unread_confirmed_count; ?></strong> accepted reschedule request<?php echo ($unread_confirmed_count > 1 ? 's' : ''); ?>.
                              <a href="#schedule" class="btn btn-sm btn-primary ms-2">View Schedule</a>
-                         </li>
+                    </li>
                     <?php endif; ?>
                     <?php if ($pending_tutor_request_count > 0): ?>
                         <li class="mt-2">
@@ -45,10 +45,10 @@ $current_student = wp_get_current_user();
                          <li class="mt-2">
                              <i class="fas fa-exchange-alt me-1 text-primary"></i> Your tutor proposed <strong><?php echo $pending_alternatives_count; ?></strong> alternative time<?php echo ($pending_alternatives_count > 1 ? 's' : ''); ?>.
                              <a href="#alternativeTimesSection" class="btn btn-sm btn-primary ms-2">View Alternatives</a>
-                         </li>
-                     <?php endif; ?>
-                 </ul>
-             </div>
+                    </li>
+                    <?php endif; ?>
+                </ul>
+            </div>
         <?php endif; 
         */
         ?>
@@ -64,7 +64,7 @@ $current_student = wp_get_current_user();
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newStudentRescheduleRequestModal">
                 Request Lesson Reschedule
             </button>
-        </div>
+                        </div>
     </div>
     
     <!-- Outgoing Reschedule Requests (Student-initiated) -->
@@ -106,25 +106,25 @@ $current_student = wp_get_current_user();
                     } elseif ($status === 'unavailable') { // Tutor marked unavailable, check for alternatives
                          $alternative_requests = get_posts([
                              'post_type' => 'progress_report',
-                             'posts_per_page' => 1,
+                            'posts_per_page' => 1,
                              'meta_query' => [
-                                 'relation' => 'AND',
+                                'relation' => 'AND',
                                  ['key' => 'original_request_id', 'value' => $request_id, 'compare' => '='],
                                  ['key' => 'request_type', 'value' => 'tutor_unavailable', 'compare' => '='],
                                  ['key' => 'status', 'value' => 'pending', 'compare' => '='] // Only show link if pending
                              ],
                              'fields' => 'ids'
                          ]);
-                         if (!empty($alternative_requests)) {
+                        if (!empty($alternative_requests)) {
                             $status_badge = get_status_badge('tutor_unavailable'); // More specific badge
                              $notification = '<div class="mt-1"><small class="text-info"><i class="fas fa-info-circle"></i> Tutor proposed alternative times.</small></div>';
                              $notification .= '<a href="#alternativeTimesSection" class="btn btn-sm btn-outline-primary mt-1">View Alternatives</a>';
-                         } else {
+                        } else {
                              // Maybe the alternative request was already handled (confirmed/unavailable)
                              $notification = '<div class="mt-1"><small class="text-warning"><i class="fas fa-info-circle"></i> Tutor was unavailable for these times.</small></div>';
-                         }
-                     } 
-
+                        }
+                    }
+                    
                     echo '<tr data-request-id="' . $request_id . '">'; // Add ID to row
                     echo '<td>' . esc_html($request_date) . '</td>';
                     echo '<td>' . esc_html($formatted_original) . '</td>';
@@ -157,18 +157,18 @@ $current_student = wp_get_current_user();
                     // Show edit/delete only for pending requests
                     if ($status === 'pending') {
                          echo '<button type="button" class="btn btn-sm btn-primary me-1 edit-student-request-btn" 
-                             data-bs-toggle="modal" 
+                            data-bs-toggle="modal" 
                              data-bs-target="#editStudentRescheduleRequestModal" 
-                             data-request-id="' . $request_id . '"
-                             data-tutor-name="' . esc_attr($tutor_name) . '" 
-                             data-original-date="' . esc_attr($original_date) . '"
-                             data-original-time="' . esc_attr($original_time) . '"
+                            data-request-id="' . $request_id . '"
+                            data-tutor-name="' . esc_attr($tutor_name) . '"
+                            data-original-date="' . esc_attr($original_date) . '"
+                            data-original-time="' . esc_attr($original_time) . '"
                              data-reason="' . esc_attr($reason) . '"
                              data-preferred-times=\''. esc_attr(json_encode($preferred_times)) .'\'
                              aria-label="Edit Request">
                              <i class="fas fa-edit"></i> <span class="d-none d-md-inline">Edit</span>
-                         </button>';
-                         
+                        </button>';
+                        
                          echo '<button type="button" class="btn btn-sm btn-danger delete-student-request-btn" 
                                  data-request-id="' . $request_id . '" 
                                  data-nonce="' . wp_create_nonce('delete_student_request_' . $request_id) . '" 
@@ -194,11 +194,11 @@ $current_student = wp_get_current_user();
                                      aria-label="Archive Request">
                                      <i class="fas fa-archive"></i> <span class="d-none d-md-inline">Archive</span>
                              </button>';
-                         } else {
+                            } else {
                              echo '-';
-                         }
+                            }
                          */
-                    }
+                        }
                     echo '</td>';
                     echo '</tr>';
                 }
@@ -217,7 +217,7 @@ $current_student = wp_get_current_user();
             <div class="d-flex justify-content-between align-items-center">
                 <span><i class="fas fa-arrow-right me-2"></i> Incoming Reschedule Requests</span>
                 <span class="badge bg-danger incoming-tutor-request-count" style="display: none;"></span> <!-- Badge updated by AJAX -->
-            </div>
+                </div>
         </div>
         <div class="card-body">
              <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
@@ -234,7 +234,7 @@ $current_student = wp_get_current_user();
     
     <!-- Tutor Alternative Times -->
     <div id="alternativeTimesSectionWrapper">
-        <?php
+                <?php 
         // Get pending alternative time suggestions from tutors (request_type = tutor_unavailable)
         $alternative_requests = get_reschedule_requests('tutor_unavailable', $current_student_id, 'student', 'pending');
         
@@ -247,10 +247,10 @@ $current_student = wp_get_current_user();
                          <span><i class="fas fa-calendar-alt me-2"></i> Tutor Alternative Time Suggestions</span>
                          <?php if ($pending_alternatives > 0): ?>
                             <span class="badge bg-danger tutor-alternatives-count"><?php echo $pending_alternatives; ?></span>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                <div class="card-body">
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="card-body">
                     <?php if ($pending_alternatives > 0) : ?>
                         <div class="alert alert-warning mb-3">
                              <i class="fas fa-exclamation-circle me-2"></i> Your tutor was unavailable for a requested time but proposed alternatives below. Please review and respond.
@@ -261,10 +261,10 @@ $current_student = wp_get_current_user();
                         <?php 
                         $counter = 1;
                         foreach ($alternative_requests as $request) {
-                            $request_id = $request->ID;
+                    $request_id = $request->ID;
                             $original_request_id = get_post_meta($request_id, 'original_request_id', true);
-                            $tutor_name = get_post_meta($request_id, 'tutor_name', true);
-                            $alternatives = get_post_meta($request_id, 'alternatives', true);
+                    $tutor_name = get_post_meta($request_id, 'tutor_name', true);
+                        $alternatives = get_post_meta($request_id, 'alternatives', true);
                             $status = get_post_meta($request_id, 'status', true);
                             $request_date = get_the_date('F j, Y', $request_id);
                             $tutor_display_name = get_tutor_display_name($tutor_name);
@@ -321,7 +321,7 @@ $current_student = wp_get_current_user();
                                                          data-request-id="<?php echo $request_id; ?>" 
                                                          data-nonce="<?php echo wp_create_nonce('unavailable_all_' . $request_id); ?>">
                                                          Unavailable for All Options
-                                                 </button>
+                        </button>
                                              </form>
                                         <?php elseif (!$is_pending): // Show confirmed or unavailable status ?>
                                              <?php 
@@ -340,8 +340,8 @@ $current_student = wp_get_current_user();
                                         <?php elseif (empty($alternatives)): ?>
                                              <p class="text-muted">No alternative times were provided for this request.</p>
                                         <?php endif; ?>
-                                    </div>
-                                </div>
+        </div>
+    </div>
                             </div>
                         <?php $counter++; } ?>
                     </div> <!-- End accordion -->
@@ -406,7 +406,7 @@ $current_student = wp_get_current_user();
                                      echo '<option value="' . esc_attr($tutor->user_login) . '" data-tutor-id="' . esc_attr($tutor->ID) . '">' . $display_name . '</option>';
                                  }
                                  echo '</select>';
-                             } else {
+            } else {
                                  echo '<div class="alert alert-warning">No tutors assigned. Please contact support.</div>';
                              }
                              ?>
@@ -423,7 +423,7 @@ $current_student = wp_get_current_user();
                                          echo '<option value="' . esc_attr($lesson['date_value']) . '|' . esc_attr($lesson['time_value']) . '">' 
                                               . esc_html($lesson['subject']) . ' - ' . esc_html($lesson['formatted']) . '</option>';
                                      }
-                                 } else {
+            } else {
                                      echo '<option value="" disabled>No upcoming lessons found in your schedule.</option>';
                                  }
                                  ?>
@@ -464,43 +464,43 @@ $current_student = wp_get_current_user();
             </div>
             <div class="modal-body">
                 <div id="editStudentRescheduleFormContainer">
-                    <div id="editRescheduleSuccessMessage" class="alert alert-success" style="display: none;">
+                <div id="editRescheduleSuccessMessage" class="alert alert-success" style="display: none;">
                          <p><i class="fas fa-check-circle"></i> Your reschedule request has been successfully updated.</p>
-                    </div>
+                </div>
                      <div id="editRescheduleErrorMessage" class="alert alert-danger" style="display: none;">
                          <p><i class="fas fa-exclamation-triangle"></i> Please fill in all required fields.</p>
                      </div>
                     <form id="editStudentRescheduleRequestForm" method="post">
                          <?php wp_nonce_field('update_student_reschedule_request_nonce', 'update_student_reschedule_request_nonce'); ?>
-                        <input type="hidden" name="update_student_reschedule_request" value="1">
-                        <input type="hidden" name="request_id" id="edit_request_id" value="">
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Tutor</label>
+                    <input type="hidden" name="update_student_reschedule_request" value="1">
+                    <input type="hidden" name="request_id" id="edit_request_id" value="">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Tutor</label>
                             <input type="text" class="form-control" id="edit_tutor_name_display" disabled>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Original Lesson Date/Time</label>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Original Lesson Date/Time</label>
                             <input type="text" class="form-control" id="edit_original_datetime_display" disabled>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="edit_reason" class="form-label">Reason for Reschedule <span class="text-danger">*</span></label>
-                            <textarea class="form-control" id="edit_reason" name="reason" rows="3" required></textarea>
-                        </div>
-                        
-                        <div class="mb-3">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit_reason" class="form-label">Reason for Reschedule <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="edit_reason" name="reason" rows="3" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
                             <label class="form-label">Preferred Alternative Times <span class="text-danger">*</span></label>
                             <p class="text-muted small mb-1">Please provide at least one preferred alternative date and time.</p>
                             <?php render_preferred_time_inputs('edit_', true); // Render the inputs, using 'edit_' prefix ?>
-                        </div>
-                        
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary" id="updateStudentReschedule">Update Request</button>
-                        </div>
-                    </form>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="updateStudentReschedule">Update Request</button>
+                    </div>
+                </form>
                 </div>
             </div>
         </div>
@@ -517,8 +517,8 @@ $current_student = wp_get_current_user();
             </div>
             <div class="modal-body">
                 <p id="fullReasonText"></p>
-            </div>
-            <div class="modal-footer">
+                </div>
+                    <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>

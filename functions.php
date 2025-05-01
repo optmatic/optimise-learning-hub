@@ -1802,3 +1802,55 @@ function understrap_child_remove_integrations() {
 add_action('after_setup_theme', 'understrap_child_remove_integrations', 20);
 
 add_action('admin_init', 'restrict_admin_with_redirect'); // Re-enable V4
+
+// Enqueue custom dashboard scripts
+function ol_hub_enqueue_dashboard_scripts() {
+    // Enqueue scripts only on the specific dashboard pages
+    // IMPORTANT: Replace 'student-dashboard' and 'tutor-dashboard' with the correct page slugs or IDs if different.
+    if ( is_page('student-dashboard') ) {
+        wp_enqueue_script(
+            'student-requests-js',
+            get_stylesheet_directory_uri() . '/requests/student-requests.js',
+            array('jquery', 'understrap-bootstrap-scripts'), // Corrected dependency handle
+            filemtime(get_stylesheet_directory() . '/requests/student-requests.js'), // Versioning based on file modification time
+            true // Load in footer
+        );
+
+        // Localize data for the student script
+        wp_localize_script('student-requests-js', 'olHubStudentData', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'student_id' => get_current_user_id(), // Assuming student is logged-in user
+            'nonces' => array(
+                'checkStudentIncoming' => wp_create_nonce('ol_hub_check_student_incoming_action'), // Use prefixed action name
+                'loadStudentNotifications' => wp_create_nonce('ol_hub_load_student_notifications_action'), // Prefix others for consistency
+                'markStudentItemViewed' => wp_create_nonce('ol_hub_mark_student_item_viewed_action'),
+                'deleteStudentRequest' => wp_create_nonce('ol_hub_delete_student_request_action'), 
+                // Add any other nonces needed by student-requests.js
+            )
+        ));
+    } elseif ( is_page('tutor-dashboard') ) {
+        wp_enqueue_script(
+            'tutor-requests-js',
+            get_stylesheet_directory_uri() . '/requests/tutor-requests.js',
+            array('jquery', 'understrap-bootstrap-scripts'), // Corrected dependency handle
+            filemtime(get_stylesheet_directory() . '/requests/tutor-requests.js'), // Versioning based on file modification time
+            true // Load in footer
+        );
+
+        // Localize data for the tutor script
+        wp_localize_script('tutor-requests-js', 'olHubTutorData', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'tutor_id' => get_current_user_id(), // Assuming tutor is logged-in user
+            'nonces' => array(
+                'checkTutorIncoming' => wp_create_nonce('check_tutor_incoming_action'),
+                'loadNotifications' => wp_create_nonce('load_tutor_notifications_action'),
+                'loadTutorOutgoing' => wp_create_nonce('load_tutor_outgoing_action'),
+                'loadStudentAlternatives' => wp_create_nonce('load_tutor_student_alternatives_action'),
+                'markTutorItemViewed' => wp_create_nonce('mark_tutor_item_viewed_action'),
+                'deleteTutorRequest' => wp_create_nonce('delete_tutor_request_action'),
+                // Add any other nonces needed by tutor-requests.js
+            )
+        ));
+    }
+}
+add_action('wp_enqueue_scripts', 'ol_hub_enqueue_dashboard_scripts');

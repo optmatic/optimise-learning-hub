@@ -11,7 +11,7 @@ get_header(); ?>
 // Keep this log to see if the template runs at all
 if ( current_user_can('tutor') ) {
     error_log('[Tutor Dashboard Restore Check] User CAN access. User ID: ' . get_current_user_id());
-} else {
+    } else {
     error_log('[Tutor Dashboard Restore Check] User CANNOT access or template not running correctly. User ID: ' . get_current_user_id());
 }
 // === DEBUGGING END ===
@@ -30,7 +30,7 @@ if ( current_user_can('tutor') ) {
      NAVIGATION TABS
      =========================== -->
         <div class="col-12">
-            <?php
+        <?php
              // Calculate notification counts using centralized functions
              $pending_student_request_count = get_pending_request_count($tutor_id, 'tutor', 'student_reschedule');
              $pending_alternatives_count = get_pending_alternatives_count($tutor_id, 'tutor'); // Student alternative suggestions
@@ -40,8 +40,8 @@ if ( current_user_can('tutor') ) {
              $requests_notification_count = $pending_student_request_count + $pending_alternatives_count;
              $requests_notification = $requests_notification_count > 0 ? 
                  '<span class="badge rounded-pill bg-danger notification-badge">' . $requests_notification_count . '</span>' : '';
-             ?>
-            <ul class="nav nav-tabs" id="myTab" role="tablist" style="padding-left: 0px !important;">
+        ?>
+        <ul class="nav nav-tabs" id="myTab" role="tablist" style="padding-left: 0px !important;">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="progress-report-tab-button" data-bs-toggle="tab" data-bs-target="#progress-report-tab-pane" type="button" role="tab" aria-controls="progress-report-tab-pane" aria-selected="true">Home</button>
                 </li>
@@ -73,7 +73,7 @@ if ( current_user_can('tutor') ) {
         <!-- ===========================
              MAIN CONTENT
              =========================== -->
-         <div class="tab-content" id="myTabContent" style="padding-top: 20px;">
+        <div class="tab-content" id="myTabContent" style="padding-top: 20px;">
              <?php 
              // Define paths to includes
              $tutor_base_path = get_stylesheet_directory() . '/tutors/';

@@ -58,8 +58,8 @@ if (current_user_can('student')) {
         </div>
 
         <!-- Main Content -->
-         <div class="tab-content" id="myTabContent" style="padding-top: 20px;">
-             <?php 
+            <div class="tab-content" id="myTabContent" style="padding-top: 20px;">
+                <?php 
              // Define paths to includes
              $base_path = get_stylesheet_directory() . '/students/';
              $requests_include_path = get_stylesheet_directory() . '/requests/student-requests.php';
