@@ -478,4 +478,817 @@ function delete_student_request_ajax() {
 }
 add_action('wp_ajax_delete_student_request', 'delete_student_request_ajax');
 
+// --- NEW Tutor AJAX Load Handlers ---
+
+/**
+ * AJAX handler for Tutors to load notifications.
+ * Action: load_tutor_notifications
+ * Nonce: check_tutor_notifications_nonce
+ */
+function load_tutor_notifications_ajax() {
+    check_ajax_referer('check_tutor_notifications_nonce', 'nonce');
+
+    $tutor_id = get_current_user_id();
+    if (!$tutor_id || !current_user_can('tutor')) {
+        wp_send_json_error(['message' => 'Invalid permissions.']);
+        return;
+    }
+
+    // 1. Pending incoming requests from students (student_reschedule, status: pending)
+    $pending_student_requests = get_reschedule_requests('student_reschedule', $tutor_id, 'tutor', 'pending');
+    $pending_student_count = count($pending_student_requests);
+
+    // 2. Pending alternative suggestions from students (student_unavailable, status: pending)
+    // This means the student responded to a tutor's proposal indicating unavailability and proposed alternatives
+    $pending_alternatives = get_reschedule_requests('student_unavailable', $tutor_id, 'tutor', 'pending'); 
+    $pending_alternatives_count = count($pending_alternatives);
+
+    $has_notifications = $pending_student_count > 0 || $pending_alternatives_count > 0;
+
+    ob_start();
+    if ($has_notifications) {
+        ?>
+        <div class="alert alert-info mb-4">
+            <h5><i class="fas fa-bell me-2"></i>Notifications</h5>
+            <ul class="mb-0 list-unstyled">
+                <?php if ($pending_student_count > 0): ?>
+                    <li class="mb-2">
+                        <i class="fas fa-arrow-right me-1 text-warning"></i> You have <strong><?php echo $pending_student_count; ?></strong> pending request<?php echo ($pending_student_count > 1 ? 's' : ''); ?> from students.
+                        <a href="#tutor-incoming-requests-container" class="btn btn-sm btn-outline-primary ms-2 scroll-to">View Incoming</a>
+                    </li>
+                <?php endif; ?>
+                <?php if ($pending_alternatives_count > 0): ?>
+                    <li>
+                        <i class="fas fa-exchange-alt me-1 text-primary"></i> You have <strong><?php echo $pending_alternatives_count; ?></strong> alternative suggestion<?php echo ($pending_alternatives_count > 1 ? 's' : ''); ?> from students to review.
+                        <a href="#tutor-student-alternatives-container" class="btn btn-sm btn-outline-primary ms-2 scroll-to">View Alternatives</a>
+                    </li>
+                <?php endif; ?>
+            </ul>
+        </div>
+        <?php
+    } else {
+        // Provide feedback even if there are no notifications
+        echo '<div class="alert alert-light text-center"><i class="fas fa-check-circle text-success"></i> No pending notifications.</div>';
+    }
+    $html = ob_get_clean();
+
+    wp_send_json_success(['html' => $html]);
+}
+add_action('wp_ajax_load_tutor_notifications', 'load_tutor_notifications_ajax');
+
+/**
+ * AJAX handler for Tutors to load their outgoing requests.
+ * Action: load_tutor_outgoing_requests
+ * Nonce: tutor_load_requests_nonce
+ */
+function load_tutor_outgoing_requests_ajax() {
+    check_ajax_referer('tutor_load_requests_nonce', 'nonce');
+
+    $tutor_id = isset($_POST['tutor_id']) ? intval($_POST['tutor_id']) : get_current_user_id();
+    if (!$tutor_id || !current_user_can('tutor')) {
+         wp_send_json_error(['message' => 'Invalid permissions.']);
+         return;
+    }
+
+    // Fetch tutor-initiated requests (type: tutor_reschedule)
+    $outgoing_requests = get_reschedule_requests('tutor_reschedule', $tutor_id, 'tutor'); // Fetch all relevant statuses
+
+    ob_start();
+    if (!empty($outgoing_requests)) {
+        ?>
+        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <table class="table table-striped table-hover request-table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Student</th>
+                        <th>Original Lesson</th>
+                        <th>Proposed Time</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($outgoing_requests as $request): ?>
+                        <?php
+                        $request_id = $request->ID;
+                        $student_id = get_post_meta($request_id, 'student_id', true);
+                        $student_name = get_student_display_name($student_id);
+                        $original_date = get_post_meta($request_id, 'original_date', true);
+                        $original_time = get_post_meta($request_id, 'original_time', true);
+                        $proposed_date = get_post_meta($request_id, 'proposed_date', true);
+                        $proposed_time = get_post_meta($request_id, 'proposed_time', true);
+                        $reason = get_post_meta($request_id, 'reason', true);
+                        $status = get_post_meta($request_id, 'status', true);
+                        $status_badge = get_status_badge($status);
+                        $formatted_original = format_datetime($original_date, $original_time);
+                        $formatted_proposed = format_datetime($proposed_date, $proposed_time);
+                        
+                        // Check if student responded with 'unavailable' (indicating a related 'student_unavailable' post might exist)
+                        $student_response_info = ''; 
+                        if ($status === 'student_responded') {
+                           // Query for the related student_unavailable post
+                           $alternative_request_query = new WP_Query([
+                                'post_type' => 'progress_report',
+                                'posts_per_page' => 1,
+                                'post_status' => 'publish', // Or 'private' depending on setup
+                                'meta_query' => [
+                                    'relation' => 'AND',
+                                    ['key' => 'original_request_id', 'value' => $request_id, 'compare' => '='],
+                                    ['key' => 'request_type', 'value' => 'student_unavailable', 'compare' => '='],
+                                ],
+                                'fields' => 'ids'
+                            ]);
+                           if ($alternative_request_query->have_posts()) {
+                               $alt_request_id = $alternative_request_query->posts[0];
+                               $alt_status = get_post_meta($alt_request_id, 'status', true);
+                               if ($alt_status === 'pending') {
+                                   // Student proposed alternatives, awaiting tutor action
+                                   $student_response_info = '<div class="mt-1"><small class="text-info"><i class="fas fa-info-circle"></i> Student proposed alternatives.</small> <a href="#tutor-student-alternatives-container" class="btn btn-xs btn-outline-info ms-1 scroll-to">Review</a></div>';
+                               } elseif ($alt_status === 'declined_by_student') {
+                                    // Student was unavailable and declined to offer alternatives
+                                   $student_response_info = '<div class="mt-1"><small class="text-warning"><i class="fas fa-info-circle"></i> Student declined alternatives.</small></div>';
+                               }
+                           }
+                        }
+                        // Display reason if student declined the initial proposal
+                        elseif ($status === 'declined'){ 
+                             $response_reason = get_post_meta($request_id, 'response_reason', true);
+                             if ($response_reason) {
+                                 $student_response_info = '<div class="mt-1"><small class="text-danger" data-bs-toggle="tooltip" title="' . esc_attr($response_reason) . '"><i class="fas fa-info-circle"></i> Student Reason: ' . esc_html(wp_trim_words($response_reason, 5, '...')) . '</small></div>';
+                             }
+                        }
+                        ?>
+                        <tr data-request-id="<?php echo esc_attr($request_id); ?>">
+                            <td><?php echo esc_html($student_name); ?></td>
+                            <td><?php echo esc_html($formatted_original); ?></td>
+                             <td><?php echo esc_html($formatted_proposed); ?></td>
+                             <td>
+                                <?php if (!empty($reason)):
+                                    // Basic tooltip for full reason
+                                ?>
+                                    <span data-bs-toggle="tooltip" title="<?php echo esc_attr($reason); ?>">
+                                        <?php echo esc_html(wp_trim_words($reason, 5, '...')); ?>
+                                    </span>
+                                <?php else: ?>
+                                    <em>-</em>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php echo $status_badge; ?>
+                                <?php echo $student_response_info; // Display info about student response/alternatives ?>
+                             </td>
+                             <td class="request-actions text-center">
+                                <?php if ($status === 'pending'): ?>
+                                    <button class="btn btn-sm btn-danger delete-tutor-request-btn" 
+                                            data-request-id="<?php echo esc_attr($request_id); ?>" 
+                                            data-nonce="<?php echo wp_create_nonce('tutor_delete_request_' . $request_id); // Specific nonce is better ?>" 
+                                            data-bs-toggle="tooltip" title="Cancel Request">
+                                        <i class="fa-solid fa-trash-can"></i> <span class="d-none d-md-inline">Cancel</span>
+                                    </button>
+                                <?php elseif ($status === 'student_responded' && strpos($student_response_info, 'Review') !== false ): ?>
+                                    <a href="#tutor-student-alternatives-container" class="btn btn-sm btn-primary scroll-to" data-bs-toggle="tooltip" title="Review Student Alternatives">
+                                        <i class="fas fa-eye"></i> <span class="d-none d-md-inline">Review</span>
+                                    </a>
+                                <?php else: ?>
+                                    <span class="text-muted">-</span> <?php // No actions for confirmed, declined, etc. ?>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
+    } else {
+        echo '<p class="text-center text-muted">You have not initiated any reschedule requests.</p>';
+    }
+    $html = ob_get_clean();
+    wp_send_json_success(['html' => $html]);
+}
+add_action('wp_ajax_load_tutor_outgoing_requests', 'load_tutor_outgoing_requests_ajax');
+
+
+/**
+ * AJAX handler for Tutors to load incoming requests from students.
+ * Action: load_tutor_incoming_requests
+ * Nonce: tutor_load_requests_nonce
+ */
+function load_tutor_incoming_requests_ajax() {
+    check_ajax_referer('tutor_load_requests_nonce', 'nonce');
+
+     $tutor_id = isset($_POST['tutor_id']) ? intval($_POST['tutor_id']) : get_current_user_id();
+    if (!$tutor_id || !current_user_can('tutor')) {
+         wp_send_json_error(['message' => 'Invalid permissions.']);
+         return;
+    }
+
+    // Get student-initiated requests for this tutor (type: student_reschedule)
+    // Fetch all relevant ones, but identify pending for actions and count
+    $student_requests = get_reschedule_requests('student_reschedule', $tutor_id, 'tutor'); 
+    $pending_student_requests = array_filter($student_requests, function($req) {
+        return get_post_meta($req->ID, 'status', true) === 'pending';
+    });
+    $pending_count = count($pending_student_requests);
+
+    ob_start();
+    if (!empty($student_requests)) {
+         ?>
+         <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+             <table class="table table-striped table-hover request-table">
+                 <thead class="table-light">
+                     <tr>
+                         <th>Date</th>
+                         <th>Student</th>
+                         <th>Original Lesson</th>
+                         <th>Preferred Times</th>
+                         <th>Reason</th>
+                         <th>Status</th>
+                         <th class="text-center">Action</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                     <?php foreach ($student_requests as $request): ?>
+                         <?php
+                         $request_id = $request->ID;
+                         $student_id = get_post_meta($request_id, 'student_id', true);
+                         $student_name = get_student_display_name($student_id);
+                         $original_date = get_post_meta($request_id, 'original_date', true);
+                         $original_time = get_post_meta($request_id, 'original_time', true);
+                         $request_date = get_the_date('M j, Y', $request_id);
+                         $reason = get_post_meta($request_id, 'reason', true);
+                         $preferred_times = get_post_meta($request_id, 'preferred_times', true);
+                         $status = get_post_meta($request_id, 'status', true);
+                         $status_badge = get_status_badge($status);
+                         $formatted_original = format_datetime($original_date, $original_time);
+                         
+                         $tutor_response = get_post_meta($request_id, 'tutor_response', true);
+                         $alternatives = [];
+                         if ($status === 'tutor_unavailable') { // Check if alternatives were proposed by tutor
+                             $alt_req_query = new WP_Query([
+                                'post_type' => 'progress_report',
+                                'posts_per_page' => 1,
+                                'meta_query' => [
+                                    'relation' => 'AND',
+                                    ['key' => 'original_request_id', 'value' => $request_id, 'compare' => '='],
+                                    ['key' => 'request_type', 'value' => 'tutor_unavailable', 'compare' => '='],
+                                ],
+                                'fields' => 'ids'
+                             ]);
+                             if ($alt_req_query->have_posts()) {
+                                 $alternatives = get_post_meta($alt_req_query->posts[0], 'alternatives', true);
+                             }
+                         }
+                         ?>
+                         <tr data-request-id="<?php echo esc_attr($request_id); ?>">
+                             <td><?php echo esc_html($request_date); ?></td>
+                             <td><?php echo esc_html($student_name); ?></td>
+                             <td><?php echo esc_html($formatted_original); ?></td>
+                             <td>
+                                 <?php
+                                 if (!empty($preferred_times) && is_array($preferred_times)) {
+                                     echo '<ul class="list-unstyled mb-0 small">';
+                                     foreach ($preferred_times as $index => $time) {
+                                         if (!empty($time['date']) && !empty($time['time'])) {
+                                             echo '<li><i class="far fa-clock me-1"></i>' . esc_html(format_datetime($time['date'], $time['time'])) . '</li>';
+                                         }
+                                     }
+                                     echo '</ul>';
+                                 } else {
+                                     echo '<em>-</em>';
+                                 }
+                                 ?>
+                             </td>
+                             <td>
+                                 <?php if (!empty($reason)): ?>
+                                     <span data-bs-toggle="tooltip" title="<?php echo esc_attr($reason); ?>">
+                                         <?php echo esc_html(wp_trim_words($reason, 5, '...')); ?>
+                                     </span>
+                                 <?php else: ?>
+                                     <em>-</em>
+                                 <?php endif; ?>
+                             </td>
+                             <td>
+                                <?php echo $status_badge; ?>
+                                <?php if ($status === 'declined' && $tutor_response): ?>
+                                    <div class="mt-1"><small class="text-danger" data-bs-toggle="tooltip" title="<?php echo esc_attr($tutor_response); ?>"><i class="fas fa-info-circle"></i> Your Reason: <?php echo esc_html(wp_trim_words($tutor_response, 4, '...')); ?></small></div>
+                                <?php elseif ($status === 'tutor_unavailable' && $tutor_response): ?>
+                                      <div class="mt-1"><small class="text-warning" data-bs-toggle="tooltip" title="<?php echo esc_attr($tutor_response); ?>"><i class="fas fa-info-circle"></i> Your Reason: <?php echo esc_html(wp_trim_words($tutor_response, 4, '...')); ?></small></div>
+                                <?php endif; ?>
+                                <?php if ($status === 'tutor_unavailable' && !empty($alternatives) && is_array($alternatives)): ?>
+                                      <div class="mt-1"><small class="text-warning"><i class="fas fa-calendar-alt"></i> Alternatives proposed</small></div>
+                                <?php endif; ?>
+                             </td>
+                             <td class="request-actions text-center">
+                                 <?php if ($status === 'pending'): ?>
+                                     <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-success handle-student-request-btn" 
+                                                data-action="accept" data-request-id="<?php echo $request_id; ?>" 
+                                                data-bs-toggle="tooltip" title="Accept Request">
+                                            <i class="fas fa-check"></i> <span class="d-none d-lg-inline">Accept</span>
+                                        </button>
+                                         <button type="button" class="btn btn-danger handle-student-request-btn" 
+                                                 data-action="decline" data-request-id="<?php echo $request_id; ?>" 
+                                                 data-bs-toggle="tooltip" title="Decline Request">
+                                             <i class="fas fa-times"></i> <span class="d-none d-lg-inline">Decline</span>
+                                         </button>
+                                         <button type="button" class="btn btn-warning handle-student-request-btn" 
+                                                 data-action="unavailable" data-request-id="<?php echo $request_id; ?>" 
+                                                 data-bs-toggle="tooltip" title="Unavailable for Preferred Times (Propose Alternatives)">
+                                            <i class="fas fa-calendar-alt"></i> <span class="d-none d-lg-inline">Propose</span>
+                                         </button>
+                                     </div>
+                                 <?php else: ?>
+                                     <span class="text-muted">-</span>
+                                 <?php endif; ?>
+                             </td>
+                         </tr>
+                     <?php endforeach; ?>
+                 </tbody>
+             </table>
+         </div>
+         <?php
+    } else {
+        echo '<p class="text-center text-muted">No incoming reschedule requests from students.</p>';
+    }
+    $html = ob_get_clean();
+
+    // Send count separately for badge update
+    wp_send_json_success(['html' => $html, 'pending_count' => $pending_count]); 
+}
+add_action('wp_ajax_load_tutor_incoming_requests', 'load_tutor_incoming_requests_ajax');
+
+/**
+ * AJAX handler for Tutors to load pending student alternative suggestions.
+ * Action: load_tutor_student_alternatives
+ * Nonce: tutor_load_requests_nonce 
+ */
+function load_tutor_student_alternatives_ajax() {
+     check_ajax_referer('tutor_load_requests_nonce', 'nonce');
+
+     $tutor_id = isset($_POST['tutor_id']) ? intval($_POST['tutor_id']) : get_current_user_id();
+     if (!$tutor_id || !current_user_can('tutor')) {
+          wp_send_json_error(['message' => 'Invalid permissions.']);
+          return;
+     }
+
+    // Get pending alternative suggestions initiated by students (type 'student_unavailable', status 'pending')
+    // These are responses to a tutor's initial proposal
+     $alternative_requests = get_reschedule_requests('student_unavailable', $tutor_id, 'tutor', 'pending');
+     $pending_count = count($alternative_requests);
+
+     ob_start();
+     if (!empty($alternative_requests)) {
+         ?>
+         <div class="accordion" id="studentAlternativesAccordion">
+             <?php foreach ($alternative_requests as $index => $alt_request): ?>
+                 <?php
+                 $alt_request_id = $alt_request->ID; // This is the ID of the 'student_unavailable' post
+                 $original_tutor_request_id = get_post_meta($alt_request_id, 'original_request_id', true); // ID of the originating 'tutor_reschedule' post
+                 $student_id = $alt_request->post_author;
+                 $student_name = get_student_display_name($student_id);
+
+                 // Get details from the original tutor request for context
+                 $original_lesson_date = get_post_meta($original_tutor_request_id, 'original_date', true);
+                 $original_lesson_time = get_post_meta($original_tutor_request_id, 'original_time', true);
+                 $tutor_proposed_date = get_post_meta($original_tutor_request_id, 'proposed_date', true);
+                 $tutor_proposed_time = get_post_meta($original_tutor_request_id, 'proposed_time', true);
+
+                 $student_reason = get_post_meta($alt_request_id, 'reason', true); // Reason student couldn't make tutor's proposed time
+                 $student_alternatives = get_post_meta($alt_request_id, 'preferred_times', true); // Alternatives proposed by the student
+                 $status = get_post_meta($alt_request_id, 'status', true); // Should be 'pending'
+                 $status_badge = get_status_badge($status);
+                 $formatted_original = format_datetime($original_lesson_date, $original_lesson_time);
+                 $formatted_tutor_proposed = format_datetime($tutor_proposed_date, $tutor_proposed_time);
+                 ?>
+                 <div class="accordion-item">
+                     <h2 class="accordion-header" id="headingStudentAlternative<?php echo esc_attr($alt_request_id); // Use ID for uniqueness ?>">
+                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                 data-bs-target="#collapseStudentAlternative<?php echo esc_attr($alt_request_id); ?>" aria-expanded="false" 
+                                 aria-controls="collapseStudentAlternative<?php echo esc_attr($alt_request_id); ?>">
+                             Alternatives from <?php echo esc_html($student_name); ?> (Regarding Lesson: <?php echo esc_html($formatted_original); ?>)
+                             <span class="ms-auto me-3"><?php echo $status_badge; ?></span>
+                         </button>
+                     </h2>
+                     <div id="collapseStudentAlternative<?php echo esc_attr($alt_request_id); ?>" class="accordion-collapse collapse" 
+                          aria-labelledby="headingStudentAlternative<?php echo esc_attr($alt_request_id); ?>" data-bs-parent="#studentAlternativesAccordion">
+                         <div class="accordion-body">
+                             <div class="alert alert-light small p-2 mb-3 border">
+                                 <p class="mb-1"><strong>Original Lesson:</strong> <?php echo esc_html($formatted_original); ?></p>
+                                 <p class="mb-0"><strong>Your Proposed Time:</strong> <?php echo esc_html($formatted_tutor_proposed); ?></p>
+                             </div>
+                             <?php if (!empty($student_reason)): ?>
+                                 <p><strong>Student Reason for Unavailability:</strong> <?php echo nl2br(esc_html($student_reason)); ?></p>
+                             <?php endif; ?>
+
+                             <?php if (!empty($student_alternatives) && is_array($student_alternatives)): ?>
+                                 <p><strong>Student's Suggested Alternative Times:</strong></p>
+                                 <form method="post" class="ajax-modal-form handle-student-alternatives-form" data-alt-request-id="<?php echo esc_attr($alt_request_id); ?>">
+                                     <?php wp_nonce_field('tutor_respond_student_alternative_' . $alt_request_id, 'tutor_respond_alt_nonce'); ?>
+                                     <input type="hidden" name="alt_request_id" value="<?php echo esc_attr($alt_request_id); ?>">
+                                     <div class="list-group list-group-flush mb-3 border-top border-bottom">
+                                         <?php foreach ($student_alternatives as $idx => $time):
+                                              if (!empty($time['date']) && !empty($time['time'])):
+                                                  $value = $time['date'] . '|' . $time['time']; 
+                                              ?>
+                                             <label class="list-group-item list-group-item-action" for="student_alt_<?php echo esc_attr($alt_request_id . '_' . $idx); ?>">
+                                                  <input class="form-check-input me-2 tutor-accept-alternative-radio" type="radio" name="selected_alternative" 
+                                                         value="<?php echo esc_attr($value); ?>" 
+                                                         data-alt-request-id="<?php echo esc_attr($alt_request_id); ?>"
+                                                          data-selected-index="<?php echo esc_attr($idx); ?>"
+                                                         id="student_alt_<?php echo esc_attr($alt_request_id . '_' . $idx); ?>" required>
+                                                 Option <?php echo ($idx + 1); ?>: <?php echo esc_html(format_datetime($time['date'], $time['time'], 'l, M j, Y @ g:i A')); ?>
+                                             </label>
+                                             <?php endif; ?>
+                                         <?php endforeach; ?>
+                                     </div>
+                                     <button type="button" class="btn btn-success me-2 respond-to-student-alternative-btn" 
+                                             data-action="accept" 
+                                             data-alt-request-id="<?php echo esc_attr($alt_request_id); ?>" 
+                                             disabled> <!-- Disabled until an option is selected -->
+                                         <i class="fas fa-check"></i> Accept Selected Time
+                                     </button>
+                                     <button type="button" class="btn btn-danger respond-to-student-alternative-btn"
+                                             data-action="decline_all"
+                                             data-alt-request-id="<?php echo esc_attr($alt_request_id); ?>">
+                                         <i class="fas fa-times"></i> Decline All Alternatives
+                                     </button>
+                                     <div class="ajax-modal-response mt-2"></div>
+                                 </form>
+                             <?php else: ?>
+                                 <p class="text-muted"><em>Student indicated unavailability but did not provide specific alternative times.</em></p>
+                                 <button class="btn btn-sm btn-secondary respond-to-student-alternative-btn"
+                                         data-action="cancel_original"
+                                          data-alt-request-id="<?php echo esc_attr($alt_request_id); ?>">
+                                     <i class="fas fa-ban"></i> Acknowledge & Cancel Original Request
+                                 </button>
+                                 <div class="ajax-modal-response mt-2"></div>
+                             <?php endif; ?>
+                         </div> <!-- /.accordion-body -->
+                     </div> <!-- /.accordion-collapse -->
+                 </div> <!-- /.accordion-item -->
+             <?php endforeach; ?>
+         </div> <!-- /#studentAlternativesAccordion -->
+         <script type="text/javascript">
+            // Add JS specific to this loaded content, e.g., enabling accept button
+            jQuery(document).ready(function($) {
+                // Re-initialize tooltips within this loaded section
+                 var tooltipTriggerList = [].slice.call(document.querySelectorAll('#studentAlternativesAccordion [data-bs-toggle="tooltip"]'));
+                 var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                     return new bootstrap.Tooltip(tooltipTriggerEl);
+                 });
+                 
+                 // Enable accept button only when a radio button is selected
+                 $('.tutor-accept-alternative-radio').on('change', function() {
+                     var form = $(this).closest('form');
+                     var acceptButton = form.find('.respond-to-student-alternative-btn[data-action="accept"]');
+                     if ($(this).is(':checked')) {
+                         acceptButton.prop('disabled', false);
+                     } else {
+                         // This case might not happen with radios, but good practice
+                         acceptButton.prop('disabled', true);
+                     }
+                 });
+            });
+         </script>
+         <?php
+     } else {
+         echo '<p class="text-center text-muted">No pending alternative time suggestions from students require your review.</p>';
+     }
+     $html = ob_get_clean();
+     // Send count for badge update
+     wp_send_json_success(['html' => $html, 'pending_count' => $pending_count]); 
+}
+add_action('wp_ajax_load_tutor_student_alternatives', 'load_tutor_student_alternatives_ajax');
+
+
+/**
+ * AJAX handler for tutor submitting the "initiate reschedule" form.
+ * Mirrors the logic in post-handlers.php but uses AJAX response.
+ * Action: tutor_initiate_reschedule_ajax
+ * Nonce: submit_tutor_reschedule_request_nonce
+ */
+function tutor_initiate_reschedule_ajax() {
+     check_ajax_referer('submit_tutor_reschedule_request_nonce', 'submit_tutor_reschedule_request_nonce');
+
+    // Retrieve and sanitize all expected fields
+    $tutor_id = isset($_POST['tutor_id']) ? intval($_POST['tutor_id']) : 0;
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0; // Correct student ID from hidden field
+    $original_date = isset($_POST['original_date']) ? sanitize_text_field($_POST['original_date']) : '';
+    $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
+    $proposed_date = isset($_POST['proposed_date']) ? sanitize_text_field($_POST['proposed_date']) : '';
+    $proposed_time = isset($_POST['proposed_time']) ? sanitize_text_field($_POST['proposed_time']) : '';
+    $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
+
+    // Basic validation
+    if (empty($tutor_id) || empty($student_id) || empty($original_date) || empty($original_time) || empty($proposed_date) || empty($proposed_time) || empty($reason)) {
+         wp_send_json_error(['message' => 'Please fill in all required fields.']);
+         return;
+    }
+
+    // Security check: Ensure the logged-in user is the tutor submitting the request
+    if (get_current_user_id() != $tutor_id || !current_user_can('tutor')) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+        return;
+    }
+
+    // Security check: Ensure the tutor is assigned to the student
+    // Re-fetch assigned students for the current tutor for validation
+     $assigned_students_meta = get_user_meta($tutor_id, 'assigned_students', true);
+     $assigned_students_array = is_array($assigned_students_meta) ? $assigned_students_meta : array_map('trim', explode(',', $assigned_students_meta));
+    // Ensure IDs are integers for comparison
+     $assigned_students_array = array_map('intval', $assigned_students_array);
+
+    if (!in_array($student_id, $assigned_students_array, true)) {
+       wp_send_json_error(['message' => 'Error: You are not assigned to this student.']);
+       return;
+    }
+    
+    $student_user = get_user_by('id', $student_id);
+    if (!$student_user) {
+        wp_send_json_error(['message' => 'Error: Invalid student selected.']);
+       return;
+    }
+
+    // Create the reschedule request post (tutor_reschedule)
+    $post_data = array(
+        'post_title' => 'Reschedule Request: Tutor (' . wp_get_current_user()->user_login . ') -> Student (' . $student_user->user_login . ') - ' . date('Y-m-d'),
+        'post_content' => $reason,
+        'post_status' => 'publish', // Or 'private'?
+        'post_type' => 'progress_report', 
+        'post_author' => $tutor_id,
+        'meta_input' => array(
+            'request_type' => 'tutor_reschedule',
+            'status' => 'pending', // Initial status
+            'tutor_id' => $tutor_id,
+            'tutor_name' => wp_get_current_user()->user_login, 
+            'student_id' => $student_id,
+            'student_name' => $student_user->user_login,
+            'original_date' => $original_date,
+            'original_time' => $original_time,
+            'proposed_date' => $proposed_date,
+            'proposed_time' => $proposed_time,
+            'reason' => $reason,
+            'viewed_by_student' => '0', // Mark as unread for student
+             'viewed_by_tutor' => '1', // Tutor has implicitly viewed it
+        ),
+    );
+
+    $post_id = wp_insert_post($post_data);
+
+    if (is_wp_error($post_id)) {
+        wp_send_json_error(['message' => 'Failed to create request: ' . $post_id->get_error_message()]);
+    } elseif ($post_id) {
+        // Trigger notification
+        if (function_exists('send_reschedule_notification')) {
+             send_reschedule_notification($post_id, 'student'); 
+        }
+        wp_send_json_success(['message' => 'Request submitted successfully and student notified.', 'request_id' => $post_id]);
+    } else {
+        wp_send_json_error(['message' => 'Failed to create request. Unknown error.']);
+    }
+}
+add_action('wp_ajax_tutor_initiate_reschedule_ajax', 'tutor_initiate_reschedule_ajax');
+
+/**
+ * AJAX handler for tutor accepting a student's request (from modal form).
+ * Action: tutor_accept_student_request
+ * Nonce: tutor_accept_student_request_{request_id}
+ */
+function tutor_accept_student_request_ajax() {
+    $request_id = isset($_POST['request_id']) ? intval($_POST['request_id']) : 0;
+    $nonce = $_POST['tutor_accept_nonce'] ?? '';
+    
+    if (!$request_id || !wp_verify_nonce($nonce, 'tutor_accept_student_request_' . $request_id)) {
+        wp_send_json_error(['message' => 'Nonce verification failed or invalid request ID.']);
+    }
+    
+    if (empty($_POST['selected_time'])) {
+        wp_send_json_error(['message' => 'Please select one of the preferred times.']);
+    }
+
+    $selected_time_parts = explode('|', sanitize_text_field($_POST['selected_time']));
+    if (count($selected_time_parts) !== 2) {
+        wp_send_json_error(['message' => 'Invalid selected time format.']);
+    }
+    $new_date = $selected_time_parts[0];
+    $new_time = $selected_time_parts[1];
+
+    // Delegate to the common confirmation function from post-handlers.php (or replicate logic here)
+    // Ensure handle_reschedule_confirmation does permission checks
+    $result = handle_reschedule_confirmation($request_id, $new_date, $new_time); // Assumes this function exists and handles everything
+
+     if ($result['success']) {
+        // Optionally trigger notification back to student
+        if (function_exists('send_reschedule_notification')) {
+             send_reschedule_notification($request_id, 'student', 'confirmed'); 
+        }
+        wp_send_json_success(['message' => $result['message']]);
+    } else {
+        wp_send_json_error(['message' => $result['message']]);
+    }
+}
+add_action('wp_ajax_tutor_accept_student_request', 'tutor_accept_student_request_ajax');
+
+
+/**
+ * AJAX handler for tutor declining a student's request (from modal form).
+ * Action: tutor_decline_student_request
+ * Nonce: tutor_decline_student_request_{request_id}
+ */
+function tutor_decline_student_request_ajax() {
+     $request_id = isset($_POST['request_id']) ? intval($_POST['request_id']) : 0;
+     $nonce = $_POST['tutor_decline_nonce'] ?? '';
+    
+    if (!$request_id || !wp_verify_nonce($nonce, 'tutor_decline_student_request_' . $request_id)) {
+        wp_send_json_error(['message' => 'Nonce verification failed or invalid request ID.']);
+    }
+
+    $response_reason = isset($_POST['response_reason']) ? sanitize_textarea_field($_POST['response_reason']) : '';
+
+    // Delegate to the common decline function
+    $result = handle_reschedule_decline($request_id, 'tutor', $response_reason);
+
+    if ($result['success']) {
+         // Optionally trigger notification back to student
+        if (function_exists('send_reschedule_notification')) {
+             send_reschedule_notification($request_id, 'student', 'declined'); 
+        }
+        wp_send_json_success(['message' => $result['message']]);
+    } else {
+        wp_send_json_error(['message' => $result['message']]);
+    }
+}
+add_action('wp_ajax_tutor_decline_student_request', 'tutor_decline_student_request_ajax');
+
+/**
+ * AJAX handler for tutor proposing alternatives for a student request (from modal form).
+ * Action: tutor_propose_alternatives_for_student
+ * Nonce: tutor_propose_alternatives_{request_id}
+ */
+function tutor_propose_alternatives_for_student_ajax() {
+    $request_id = isset($_POST['request_id']) ? intval($_POST['request_id']) : 0; // Original student request ID
+    $nonce = $_POST['tutor_propose_nonce'] ?? '';
+    
+    if (!$request_id || !wp_verify_nonce($nonce, 'tutor_propose_alternatives_' . $request_id)) {
+        wp_send_json_error(['message' => 'Nonce verification failed or invalid request ID.']);
+    }
+
+    // Extract proposed alternatives using the helper function (prefix 'tutor_alt_')
+    $proposed_alternatives = extract_preferred_times_from_post('tutor_alt_');
+    if (empty($proposed_alternatives)) {
+         wp_send_json_error(['message' => 'Please provide at least one alternative time option.']);
+    }
+    
+    $response_reason = isset($_POST['response_reason']) ? sanitize_textarea_field($_POST['response_reason']) : '';
+    // Student ID, original date/time should be passed from the modal form
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+    $original_date = isset($_POST['original_date']) ? sanitize_text_field($_POST['original_date']) : '';
+    $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
+
+    if (empty($student_id) || empty($original_date) || empty($original_time)) {
+         wp_send_json_error(['message' => 'Missing student or original lesson details.']);
+    }
+
+    // Delegate to the common "unavailable" handler from post-handlers.php
+    $result = handle_reschedule_unavailable($request_id, 'tutor', $response_reason, $proposed_alternatives, $student_id, $original_date, $original_time);
+
+     if ($result['success']) {
+         // Optionally trigger notification to student about proposed alternatives
+        if (function_exists('send_reschedule_notification')) {
+            // Need the ID of the newly created 'tutor_unavailable' post if the handler returns it
+            $new_request_id = $result['new_request_id'] ?? 0;
+            if ($new_request_id) {
+                send_reschedule_notification($new_request_id, 'student', 'alternatives_proposed'); 
+            }
+        }
+        wp_send_json_success(['message' => $result['message']]);
+    } else {
+        wp_send_json_error(['message' => $result['message']]);
+    }
+}
+add_action('wp_ajax_tutor_propose_alternatives_for_student', 'tutor_propose_alternatives_for_student_ajax');
+
+
+/**
+ * AJAX handler for tutor accepting a specific alternative from a student.
+ * Action: tutor_accept_student_alternative
+ * Nonce: tutor_respond_student_alternative_{alt_request_id} (or the modal nonce)
+ */
+function tutor_accept_student_alternative_ajax() {
+     $alt_request_id = isset($_POST['alt_request_id']) ? intval($_POST['alt_request_id']) : 0; // student_unavailable post ID
+     $nonce = $_POST['nonce'] ?? ''; // Use nonce sent from JS (which got it from the modal/accordion)
+    
+    // Verify nonce - choose one method. Using the specific request ID is better.
+    // if (!wp_verify_nonce($nonce, 'tutor_respond_alt_nonce_modal')) { // If using modal nonce
+    if (!wp_verify_nonce($nonce, 'tutor_respond_student_alternative_' . $alt_request_id)) { // If using nonce from accordion item
+        wp_send_json_error(['message' => 'Nonce verification failed.']);
+    }
+
+    $selected_index = isset($_POST['selected_index']) ? intval($_POST['selected_index']) : null;
+    if ($selected_index === null) {
+        wp_send_json_error(['message' => 'No alternative index selected.']);
+    }
+
+    // Delegate to the common handler function from post-handlers.php
+    $result = handle_accept_student_alternative($alt_request_id, $selected_index);
+
+     if ($result['success']) {
+         // Notify student of confirmation
+         if (function_exists('send_reschedule_notification')) {
+            // Need original student request ID if possible, or the alt request ID
+            $original_student_request_id = get_post_meta($alt_request_id, 'original_request_id', true); 
+             send_reschedule_notification($original_student_request_id ?: $alt_request_id, 'student', 'confirmed_by_tutor'); 
+        }
+        wp_send_json_success(['message' => $result['message']]);
+    } else {
+        wp_send_json_error(['message' => $result['message']]);
+    }
+}
+add_action('wp_ajax_tutor_accept_student_alternative', 'tutor_accept_student_alternative_ajax');
+
+
+/**
+ * AJAX handler for tutor declining all alternatives suggested by a student.
+ * Action: tutor_decline_student_alternatives
+ * Nonce: tutor_respond_student_alternative_{alt_request_id} (or the modal nonce)
+ */
+function tutor_decline_student_alternatives_ajax() {
+     $alt_request_id = isset($_POST['alt_request_id']) ? intval($_POST['alt_request_id']) : 0; // student_unavailable post ID
+     $nonce = $_POST['nonce'] ?? ''; // Use nonce sent from JS
+    
+     if (!wp_verify_nonce($nonce, 'tutor_respond_student_alternative_' . $alt_request_id)) { 
+        wp_send_json_error(['message' => 'Nonce verification failed.']);
+    }
+
+    $response_reason = isset($_POST['response_reason']) ? sanitize_textarea_field($_POST['response_reason']) : '';
+
+    // Delegate to the common handler function from post-handlers.php
+    $result = handle_decline_student_alternatives($alt_request_id, $response_reason);
+
+    if ($result['success']) {
+        // Notify student of decline
+         if (function_exists('send_reschedule_notification')) {
+             $original_student_request_id = get_post_meta($alt_request_id, 'original_request_id', true); 
+             send_reschedule_notification($original_student_request_id ?: $alt_request_id, 'student', 'alternatives_declined_by_tutor'); 
+        }
+        wp_send_json_success(['message' => $result['message']]);
+    } else {
+        wp_send_json_error(['message' => $result['message']]);
+    }
+}
+add_action('wp_ajax_tutor_decline_student_alternatives', 'tutor_decline_student_alternatives_ajax');
+
+
+/**
+ * AJAX handler for tutor cancelling original request when student was unavailable but offered no alternatives.
+ * Action: tutor_cancel_original_from_unavailable
+ * Nonce: tutor_respond_student_alternative_{alt_request_id} (or the modal nonce)
+ */
+function tutor_cancel_original_from_unavailable_ajax() {
+     $alt_request_id = isset($_POST['alt_request_id']) ? intval($_POST['alt_request_id']) : 0; // student_unavailable post ID
+     $nonce = $_POST['nonce'] ?? ''; // Use nonce sent from JS
+    
+     if (!wp_verify_nonce($nonce, 'tutor_respond_student_alternative_' . $alt_request_id)) { 
+        wp_send_json_error(['message' => 'Nonce verification failed.']);
+    }
+
+     // Delegate to a handler function (might be similar to decline_student_alternatives)
+     // Assumes handle_cancel_original_request_from_unavailable exists in post-handlers.php
+     $result = handle_cancel_original_request_from_unavailable($alt_request_id);
+
+     if ($result['success']) {
+         // Notify student? Maybe not necessary if just acknowledging.
+        wp_send_json_success(['message' => $result['message']]);
+    } else {
+        wp_send_json_error(['message' => $result['message']]);
+    }
+}
+add_action('wp_ajax_tutor_cancel_original_from_unavailable', 'tutor_cancel_original_from_unavailable_ajax');
+
+
+// --- Student Specific AJAX Handlers ---
+
+/**
+ * AJAX handler for students to check for incoming tutor reschedule requests
+ * or alternative time proposals from tutors.
+ * Action: check_student_incoming_requests
+ * Nonce: check_student_requests_nonce
+ */
+// ... existing check_student_incoming_requests_ajax ...
+
+/**
+ * AJAX handler for students to mark tutor alternative suggestions as viewed.
+ * Action: mark_tutor_alternatives_viewed
+ * Nonce: mark_tutor_alternatives_viewed_nonce
+ */
+// ... existing mark_tutor_alternatives_viewed_ajax ...
+
+/**
+ * AJAX handler for Students to delete their own reschedule requests.
+ * Action: delete_student_request
+ * Nonce: delete_student_request_{request_id}
+ */
+// ... existing delete_student_request_ajax ...
+
 ?> 
