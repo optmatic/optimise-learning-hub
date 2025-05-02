@@ -261,6 +261,77 @@ function get_students_for_tutor($tutor_id) {
     return $students;
 }
 
+/**
+ * Retrieves a list of tutors assigned to a specific student ID.
+ * Checks both student's 'assigned_tutors' meta and tutor's 'assigned_students' meta.
+ *
+ * @param int $student_id The ID of the student.
+ * @return array Array of tutor data ['id' => ID, 'user_login' => user_login, 'display_name' => display_name].
+ */
+function get_tutors_for_student($student_id) {
+    if (empty($student_id) || !is_numeric($student_id)) {
+        return [];
+    }
+
+    $tutor_ids_found = [];
+
+    // 1. Check the student's 'assigned_tutors' meta
+    $assigned_tutors_meta = get_user_meta($student_id, 'assigned_tutors', true);
+    if (!empty($assigned_tutors_meta)) {
+        $tutor_ids_from_student = is_array($assigned_tutors_meta) ? $assigned_tutors_meta : array_map('trim', explode(',', $assigned_tutors_meta));
+        foreach ($tutor_ids_from_student as $tutor_id) {
+            if (is_numeric($tutor_id) && !in_array($tutor_id, $tutor_ids_found)) {
+                $tutor_ids_found[] = intval($tutor_id);
+            }
+        }
+    }
+
+    // 2. Check all tutors' 'assigned_students' meta
+    $tutor_query_args = [
+        'role' => 'tutor',
+        'fields' => ['ID'] // Only need IDs for this check
+    ];
+    $all_tutor_users = get_users($tutor_query_args);
+
+    foreach ($all_tutor_users as $tutor_user) {
+        if (!in_array($tutor_user->ID, $tutor_ids_found)) { // Only check if not already found
+            $assigned_students_meta = get_user_meta($tutor_user->ID, 'assigned_students', true);
+            if (!empty($assigned_students_meta)) {
+                $student_ids_for_tutor = is_array($assigned_students_meta) ? $assigned_students_meta : array_map('trim', explode(',', $assigned_students_meta));
+                if (in_array($student_id, $student_ids_for_tutor) || in_array(strval($student_id), $student_ids_for_tutor)) {
+                    $tutor_ids_found[] = $tutor_user->ID;
+                }
+            }
+        }
+    }
+
+    // 3. Get the final tutor user data
+    $tutors_available = [];
+    if (!empty($tutor_ids_found)) {
+        $final_tutor_query = new WP_User_Query([
+            'include' => $tutor_ids_found,
+            'role' => 'tutor', // Re-affirm role just in case IDs were added incorrectly elsewhere
+            'fields' => ['ID', 'user_login', 'display_name']
+        ]);
+        $tutor_results = $final_tutor_query->get_results();
+
+        // Format the results consistently
+        foreach ($tutor_results as $tutor) {
+            $first_name = get_user_meta($tutor->ID, 'first_name', true);
+            $last_name = get_user_meta($tutor->ID, 'last_name', true);
+            $display_name = (!empty($first_name) && !empty($last_name)) ? esc_html($first_name . ' ' . $last_name) : esc_html($tutor->display_name);
+            $tutors_available[] = [
+                'id' => $tutor->ID,
+                'user_login' => $tutor->user_login,
+                'display_name' => $display_name
+            ];
+        }
+    }
+    
+    error_log('[get_tutors_for_student] Found ' . count($tutors_available) . ' tutors for student ID: ' . $student_id); // Debug log
+
+    return $tutors_available;
+}
 
 /**
  * Retrieves upcoming lessons for a given user (student or tutor).

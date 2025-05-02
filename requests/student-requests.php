@@ -378,35 +378,18 @@ $current_student = wp_get_current_user();
                          <div class="mb-3">
                              <label for="new_tutor_select" class="form-label">Select Tutor <span class="text-danger">*</span></label>
                              <?php
-                             // Get assigned tutors for the current student
-                             $assigned_tutors_ids = [];
-                             $assigned_tutors_meta = get_user_meta($current_student_id, 'assigned_tutors', true);
-                             if (!empty($assigned_tutors_meta)) {
-                                 $assigned_tutors_ids = is_array($assigned_tutors_meta) ? $assigned_tutors_meta : array_map('trim', explode(',', $assigned_tutors_meta));
-                             }
-                             
-                             $tutors_available = [];
-                             if (!empty($assigned_tutors_ids)) {
-                                 $tutor_query = new WP_User_Query([
-                                     'include' => $assigned_tutors_ids,
-                                     'role' => 'tutor', 
-                                     'fields' => ['ID', 'user_login', 'display_name']
-                                 ]);
-                                 $tutors_available = $tutor_query->get_results();
-                             }
+                             // Use the new helper function to get assigned tutors
+                             $tutors_available = get_tutors_for_student($current_student_id);
                              
                              if (!empty($tutors_available)) {
                                  echo '<select name="tutor_name" id="new_tutor_select" class="form-select" required>';
                                  echo '<option value="">-- Select Tutor --</option>';
                                  foreach ($tutors_available as $tutor) {
-                                     $first_name = get_user_meta($tutor->ID, 'first_name', true);
-                                     $last_name = get_user_meta($tutor->ID, 'last_name', true);
-                                     $display_name = (!empty($first_name) && !empty($last_name)) ? esc_html($first_name . ' ' . $last_name) : esc_html($tutor->display_name);
-                                     // Value should be the tutor's username (user_login) as expected by the handler
-                                     echo '<option value="' . esc_attr($tutor->user_login) . '" data-tutor-id="' . esc_attr($tutor->ID) . '">' . $display_name . '</option>';
+                                     // Data is already formatted by the helper function
+                                     echo '<option value="' . esc_attr($tutor['user_login']) . '" data-tutor-id="' . esc_attr($tutor['id']) . '">' . esc_html($tutor['display_name']) . '</option>';
                                  }
                                  echo '</select>';
-            } else {
+                            } else {
                                  echo '<div class="alert alert-warning">No tutors assigned. Please contact support.</div>';
                              }
                              ?>

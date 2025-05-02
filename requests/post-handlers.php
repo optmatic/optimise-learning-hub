@@ -463,12 +463,13 @@ function handle_student_submit_request() {
         'post_title'   => 'Student Reschedule Request from ' . $student_name . ' for ' . $tutor_name,
         'post_content' => $reason,
         'post_status'  => 'publish',
-        'post_type'    => 'progress_report',
+        'post_type'    => 'lesson_reschedule', // CORRECTED post type
     ];
     $request_id = wp_insert_post($request_post);
 
     if (!is_wp_error($request_id)) {
         update_post_meta($request_id, 'request_type', 'student_reschedule');
+        update_post_meta($request_id, 'initiator', 'student'); // ADDED initiator meta
         update_post_meta($request_id, 'status', 'pending');
         update_post_meta($request_id, 'student_id', $student_id);
         update_post_meta($request_id, 'student_name', $student_name);
