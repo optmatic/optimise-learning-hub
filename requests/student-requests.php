@@ -223,7 +223,7 @@ $current_student = wp_get_current_user();
              <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
                  <table class="table table-striped table-hover">
                      <thead class="table-light"><tr><th>Date Requested</th><th>Original Lesson</th><th>Proposed New Time</th><th>Tutor</th><th>Status</th><th>Action</th></tr></thead>
-                     <tbody class="incoming-tutor-requests-table-body">
+                     <tbody class="incoming-tutor-requests-table-body" id="incoming-tutor-requests-table-body">
                          <!-- Content loaded via AJAX (check_student_incoming_requests_ajax) -->
                          <tr><td colspan="6"><p>Loading incoming requests...</p></td></tr>
                      </tbody>

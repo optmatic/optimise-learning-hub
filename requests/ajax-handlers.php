@@ -580,21 +580,25 @@ error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_delete_tutor_requ
 // ======================================
 
 /**
- * AJAX handler for students to check for incoming items (notifications).
+ * AJAX handler to check for incoming requests for students
  */
 function check_student_incoming_requests_ajax() {
-    error_log('[AJAX STUDENT] check_student_incoming_requests_ajax started');
+    error_log('[AJAX STUDENT] check_student_incoming_requests_ajax started'); // Log start V6
+    error_log('[AJAX STUDENT] Raw POST data: ' . print_r($_POST, true)); // Dump POST data
 
-    check_ajax_referer('ol_hub_check_student_incoming_action', 'nonce'); 
-    error_log('[AJAX STUDENT] Nonce verified.');
-
-    if (!is_user_logged_in() || !current_user_can('student')) {
-        error_log('[AJAX STUDENT ERROR] User not logged in or not a student.');
-        wp_send_json_error(['message' => 'Access denied.'], 403);
-        wp_die();
+    // Ensure student ID is provided and valid
+    if ( ! isset( $_POST['student_id'] ) || ! is_numeric( $_POST['student_id'] ) || $_POST['student_id'] <= 0 ) {
+        error_log('[AJAX STUDENT ERROR] Invalid student ID.');
+        wp_send_json_error(['message' => 'Invalid student ID.'], 400);
+        return;
     }
-    $student_id = get_current_user_id();
-    error_log('[AJAX STUDENT] Student ID: ' . $student_id);
+
+    $student_id = intval($_POST['student_id']);
+    if (!current_user_can('student')) {
+        error_log('[AJAX STUDENT ERROR] User does not have student capabilities.');
+        wp_send_json_error(['message' => 'Access denied.'], 403);
+        return;
+    }
 
     // --- Fetch Data --- 
     // Note: Using 'lesson_reschedule' post type based on other handlers.

@@ -414,10 +414,14 @@ function theme_enqueue_styles() {
 
             // Localize the script: Pass PHP data to JavaScript
             wp_localize_script($student_script_handle, 'olHubStudentData', [
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'checkNonce' => wp_create_nonce('check_student_incoming_requests'),
-                'deleteNoncePlaceholder' => wp_create_nonce('delete_student_request_nonce_placeholder'),
-                'unavailableNoncePlaceholder' => wp_create_nonce('unavailable_all_nonce_placeholder')
+                'ajaxurl'    => admin_url('admin-ajax.php'),
+                'student_id' => get_current_user_id(), 
+                'nonces'     => [
+                    'loadStudentIncoming' => wp_create_nonce('load_student_incoming_requests_action'), // Nonce for loading the table
+                    'checkNonce'          => wp_create_nonce('check_student_incoming_requests'), // Nonce for checking count
+                    'deleteStudentRequest' => wp_create_nonce('ol_hub_delete_student_request_action'), // Nonce for deleting
+                    // Add other nonces needed by student JS here
+                ]
             ]);
         } else {
             error_log("Student requests script file not found: " . $student_script_path);
@@ -823,7 +827,7 @@ add_action( 'login_head', 'my_custom_login_logo_and_background' );
 
 
 /* Redirects based on user role */
-/*
+// Ensure this block is present and uncommented
 function my_custom_login_redirect( $redirect_to, $request, $user ) {
     // Is there a user to check?
     if ( isset( $user->roles ) && is_array( $user->roles ) ) {
@@ -836,37 +840,15 @@ function my_custom_login_redirect( $redirect_to, $request, $user ) {
         } else if ( in_array( 'tutor', $user->roles ) ) {
             return home_url( '/tutor-dashboard' );
         } else {
-            return home_url();
+            return home_url(); // Other roles go home
         }
     } else {
-        return $redirect_to;
+        return $redirect_to; // No user role? Default redirect.
     }
 }
 add_filter( 'login_redirect', 'my_custom_login_redirect', 10, 3 );
+// End of intended login redirect block
 
-*/ 
-
-
-/**
- * Restricts logged-in students/tutors to their respective dashboards.
- * Runs after the template is determined.
- * [TEMPORARILY DISABLED BY RENAMING]
- */
-function _ol_hub_redirect_dashboard_users_disabled() { // Renamed
-    // Bail if not logged in or during AJAX
-    if ( ! is_user_logged_in() || wp_doing_ajax() ) {
-        return;
-    }
-
-    // Check if the current page is a dashboard page
-    $is_dashboard_page = is_page('student-dashboard') || is_page('tutor-dashboard');
-
-    if ( ! $is_dashboard_page ) {
-        // Redirect to the default place
-        wp_redirect( home_url() );
-        exit;
-    }
-}
 
 /**
  * Restricts logged-in students/tutors to their respective dashboards.
@@ -883,24 +865,6 @@ function my_custom_login_url( $url, $path, $scheme, $blog_id ) {
     }
     return $url;
 }
-
-function my_custom_login_redirect( $redirect_to, $request, $user ) {
-    // Is there a user object? Bail if not.
-    if ( !isset( $user->roles ) || !is_array( $user->roles ) ) {
-        return $redirect_to; // Default behavior
-    }
-
-    // Check roles and redirect accordingly
-    if ( in_array( 'administrator', $user->roles ) || in_array( 'editor', $user->roles )) {
-        // Admins/Editors go to the default $redirect_to (usually wp-admin)
-        return $redirect_to;
-    } else {
-        // Send ALL other logged-in roles (student, tutor, etc.) to the homepage
-        // Let other mechanisms (like template checks) handle access control after landing.
-        return home_url(); 
-    }
-}
-add_filter( 'login_redirect', 'my_custom_login_redirect', 10, 3 );
 
 // Hide admin bar for non-admins
 function hide_admin_bar_from_non_admins(){

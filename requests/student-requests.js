@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let initializationAttempts = 0;
   const MAX_INIT_ATTEMPTS = 10;
   let ajaxIntervalId = null; // To store the interval ID
+  let initIntervalId = null; // Store interval ID for clearing
 
   // --- Modal & Form Handling ---
 
@@ -337,248 +338,290 @@ document.addEventListener("DOMContentLoaded", function () {
     // Ensure they use the correct action names and nonces defined in ajax-handlers.php
   }); // End body event listener
 
-  // --- AJAX Polling/Updating --- Function Definitions ---
+  // --- Core AJAX Functions ---
 
+  // Function to check for requests and update badge AND content
   function checkStudentIncomingRequests() {
-    // Ensure data is initialized
+    // Check if studentAjaxData and necessary properties (including nested nonce) are defined
     if (
       !studentAjaxData ||
       !studentAjaxData.ajaxurl ||
-      !studentAjaxData.nonces ||
-      !studentAjaxData.nonces.checkStudentIncoming // Use the correct nonce handle
+      !studentAjaxData.student_id ||
+      !studentAjaxData.nonces || // Check if nonces object exists
+      !studentAjaxData.nonces.checkNonce // Check for the specific nonce inside the object
     ) {
       console.warn(
         "checkStudentIncomingRequests: AJAX data or nonce not ready. Skipping check."
       );
-      // Stop interval if it keeps failing after init should be done?
-      // Consider adding logic here if needed.
-      return;
+      return; // Exit if data isn't ready
     }
 
-    const nonce = studentAjaxData.nonces.checkStudentIncoming; // Get nonce from stored data
+    // Show loading state in table? (Optional, could add spinner here if desired)
+    // const container = document.getElementById("student-incoming-requests-tbody");
+    // if (container) container.innerHTML = '<tr><td colspan="6" class="text-center"><span class="spinner-border spinner-border-sm"></span> Loading...</td></tr>';
 
-    const formData = new FormData();
-    formData.append("action", "check_student_incoming_requests");
-    formData.append("nonce", nonce); // Send the nonce value
-
-    fetch(studentAjaxData.ajaxurl, { method: "POST", body: formData })
+    fetch(studentAjaxData.ajaxurl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        action: "check_student_incoming_requests", // This action now returns HTML too
+        student_id: studentAjaxData.student_id,
+        nonce: studentAjaxData.nonces.checkNonce, // Use the correct nested nonce
+      }),
+    })
       .then((response) => {
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(
+            `Network response was not ok: ${response.statusText}`
+          );
         }
         return response.json();
       })
       .then((data) => {
-        // --- Debug: Log the entire received data object ---
-        console.log(
-          "Received AJAX data for checkStudentIncomingRequests:",
-          data
-        );
-        // --------------------------------------------------
-
         if (data.success && data.data) {
-          // Update Notifications Box
+          // Check for success and data object
+          const count = data.data?.count || 0;
+          updateMainRequestsTabBadge(count); // Update badge using helper
+
+          // Update Notifications Area
           const notificationsDiv = document.getElementById(
             "studentRequestNotifications"
-          );
-          if (notificationsDiv) {
-            // Check if specific notification HTML is provided, otherwise use counts
-            if (typeof data.data.notificationsHtml !== "undefined") {
-              notificationsDiv.innerHTML =
-                data.data.notificationsHtml ||
-                '<div class="alert alert-secondary">No current notifications.</div>';
-            } else {
-              // Fallback or alternative display using counts if HTML isn't sent
-              console.warn("Notification HTML not provided in AJAX response.");
-              // Example: Update a simple count or message
-            }
+          ); // Assuming this ID exists
+          if (
+            notificationsDiv &&
+            typeof data.data.notificationsHtml !== "undefined"
+          ) {
+            notificationsDiv.innerHTML = data.data.notificationsHtml;
+          } else if (notificationsDiv) {
+            console.warn(
+              "Notification container found, but no notificationsHtml in response."
+            );
+            // Optionally clear or show default message
+            notificationsDiv.innerHTML = ""; // Clear it perhaps
           }
 
-          // Update Incoming Tutor Requests Table
-          const incomingTutorTableBody = document.querySelector(
-            ".incoming-tutor-requests-table-body"
-          );
-          if (incomingTutorTableBody) {
-            // Check if specific table HTML is provided
-            if (typeof data.data.incomingTutorRequestsHtml !== "undefined") {
-              incomingTutorTableBody.innerHTML =
-                data.data.incomingTutorRequestsHtml ||
-                '<tr><td colspan="6">No incoming requests found.</td></tr>';
-            } else {
-              console.warn("Incoming requests HTML not provided.");
-            }
+          // Update Incoming Requests Table Body
+          const incomingTbody = document.getElementById(
+            "incoming-tutor-requests-table-body"
+          ); // Corrected ID
+          console.log("[AJAX Success] Found tbody element:", incomingTbody); // Log if element found
+          if (
+            incomingTbody &&
+            typeof data.data.incomingTutorRequestsHtml !== "undefined"
+          ) {
+            console.log(
+              "[AJAX Success] Received incomingTutorRequestsHtml:",
+              data.data.incomingTutorRequestsHtml.substring(0, 100) + "..."
+            ); // Log first 100 chars
+            incomingTbody.innerHTML = data.data.incomingTutorRequestsHtml;
+            console.log("[AJAX Success] Updated incomingTbody innerHTML."); // Log after update
+          } else if (incomingTbody) {
+            console.warn(
+              "Incoming requests tbody found, but no incomingTutorRequestsHtml in response."
+            );
+            incomingTbody.innerHTML =
+              '<tr><td colspan="6" class="text-center text-muted">Could not load requests content.</td></tr>'; // Show error in table
           }
 
-          // Update Count Badges (using specific counts from data)
-          const incomingTutorBadge = document.querySelector(
-            ".incoming-tutor-request-count"
-          );
-          if (incomingTutorBadge) {
-            const count = data.data.pendingTutorRequestCount || 0;
-            incomingTutorBadge.textContent = count;
-            incomingTutorBadge.style.display =
-              count > 0 ? "inline-block" : "none";
-          }
-
-          const alternativesBadge = document.querySelector(
-            ".tutor-alternatives-count"
-          );
-          if (alternativesBadge) {
-            const count = data.data.pendingAlternativesCount || 0; // Use correct property name if different
-            alternativesBadge.textContent = count;
-            alternativesBadge.style.display =
-              count > 0 ? "inline-block" : "none";
-          }
-
-          // Update main Requests Tab Badge (using total count)
-          updateMainRequestsTabBadge(data.data.count || 0);
-
-          // Refresh tooltips if new content was added
+          // Initialize tooltips for the newly added content
           initializeTooltips();
         } else {
           console.error(
-            "Error checking student requests:",
-            data.data?.message || "Invalid response structure"
+            "Error checking/loading incoming requests:", // Updated error message context
+            data.data?.message || "Unknown error or invalid response structure"
           );
-          // Potentially stop interval if errors persist?
-          // clearInterval(ajaxIntervalId);
+          // Handle error in UI - maybe show error in table/notifications?
+          const incomingTbodyError = document.getElementById(
+            "incoming-tutor-requests-table-body"
+          ); // Corrected ID
+          if (incomingTbodyError)
+            incomingTbodyError.innerHTML =
+              '<tr><td colspan="6" class="text-center text-danger">Error loading requests.</td></tr>';
+          const notificationsDivError = document.getElementById(
+            "studentRequestNotifications"
+          );
+          if (notificationsDivError)
+            notificationsDivError.innerHTML =
+              '<div class="alert alert-danger">Error loading notifications.</div>';
+
+          // Stop interval on application error? Only if it seems unrecoverable.
+          // if (ajaxIntervalId) clearInterval(ajaxIntervalId);
+          // ajaxIntervalId = null;
         }
       })
       .catch((error) => {
-        console.error("Fetch error checking student requests:", error);
-        // Potentially stop interval if network errors persist?
-        // clearInterval(ajaxIntervalId);
+        console.error("Fetch error checking/loading incoming requests:", error);
+        // Stop interval on network error to prevent flooding logs
+        if (ajaxIntervalId) clearInterval(ajaxIntervalId);
+        ajaxIntervalId = null;
+        console.warn("Stopped checking for new requests due to fetch error.");
+        updateMainRequestsTabBadge("!"); // Update badge to show error state
+        // Show error in UI
+        const incomingTbodyNetworkError = document.getElementById(
+          "incoming-tutor-requests-table-body"
+        ); // Corrected ID
+        if (incomingTbodyNetworkError)
+          incomingTbodyNetworkError.innerHTML =
+            '<tr><td colspan="6" class="text-center text-danger">Network error loading requests.</td></tr>';
+        const notificationsDivNetworkError = document.getElementById(
+          "studentRequestNotifications"
+        );
+        if (notificationsDivNetworkError)
+          notificationsDivNetworkError.innerHTML =
+            '<div class="alert alert-danger">Network error loading notifications.</div>';
       });
   }
 
-  function updateMainRequestsTabBadge(count) {
-    const requestsTabButton = document.getElementById("requests-tab-button");
-    if (!requestsTabButton) return;
-    let badge = requestsTabButton.querySelector(".notification-badge");
+  // --- Helper Functions ---
 
-    if (count > 0) {
-      if (!badge) {
-        badge = document.createElement("span");
-        badge.className =
-          "badge rounded-pill bg-danger notification-badge ms-1"; // Added ms-1
-        requestsTabButton.appendChild(badge);
+  // Update the main 'Requests' tab badge
+  function updateMainRequestsTabBadge(count) {
+    const badgeElement = document.getElementById("student-requests-tab-badge");
+    if (badgeElement) {
+      if (count > 0) {
+        badgeElement.textContent = count;
+        badgeElement.style.display = "inline-block";
+      } else if (count === "!") {
+        // Handle error state
+        badgeElement.textContent = "!";
+        badgeElement.style.display = "inline-block";
+        badgeElement.classList.add("bg-danger"); // Style as error
+      } else {
+        badgeElement.style.display = "none";
+        badgeElement.classList.remove("bg-danger");
       }
-      badge.textContent = count;
-      badge.style.display = "inline-block";
-    } else if (badge) {
-      badge.style.display = "none";
+    } else {
+      // console.warn("Badge element #student-requests-tab-badge not found.");
     }
   }
 
-  // Function to show dismissible alerts at the top of the content area
+  // Show global alert message
   function showGlobalAlert(type, message) {
-    const container = document.querySelector(".student-requests-content"); // Target the main content div
-    if (!container) return;
-
-    const alertDiv = document.createElement("div");
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-    alertDiv.role = "alert";
-    alertDiv.innerHTML = `
-             ${message}
-             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-         `;
-
-    // Prepend the alert to the container
-    container.insertBefore(alertDiv, container.firstChild);
-
-    // Optional: Auto-dismiss after some time
-    // setTimeout(() => {
-    //     const alertInstance = bootstrap.Alert.getOrCreateInstance(alertDiv);
-    //     if (alertInstance) alertInstance.close();
-    // }, 5000);
+    const container = document.getElementById("student-global-alert-container");
+    if (!container) {
+      console.error(
+        "Alert container #student-global-alert-container not found."
+      );
+      return;
+    }
+    // Simple alert for now, replace with Bootstrap alert component if needed
+    container.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+          ${message}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>`;
   }
 
-  // Initialize Tooltips
+  // Initialize Bootstrap tooltips
   function initializeTooltips() {
-    const tooltipTriggerList = Array.from(
-      document.querySelectorAll("[data-bs-toggle='tooltip']")
-    );
-    tooltipTriggerList.map((tooltipTriggerEl) => {
-      // Check if a tooltip instance already exists
-      if (!bootstrap.Tooltip.getInstance(tooltipTriggerEl)) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-      }
-      return null;
-    });
+    // Use understrap global if available
+    const bootstrap = window.understrap || window.bootstrap;
+    if (bootstrap && bootstrap.Tooltip) {
+      const tooltipTriggerList = [].slice.call(
+        document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      );
+      tooltipTriggerList.map(function (tooltipTriggerEl) {
+        // Only initialize if one doesn't exist
+        if (!bootstrap.Tooltip.getInstance(tooltipTriggerEl)) {
+          return new bootstrap.Tooltip(tooltipTriggerEl);
+        }
+        return null;
+      });
+    } else {
+      console.warn(
+        "Could not initialize tooltips: Bootstrap/Understrap Tooltip component not found."
+      );
+    }
   }
 
-  // Helper functions (keep as is)
+  // Format date/time string
   function format_datetime(dateStr, timeStr, format = "default") {
     if (!dateStr || !timeStr) return "N/A";
     try {
-      const dt = new Date(`${dateStr} ${timeStr}`);
-      if (isNaN(dt)) return "Invalid Date";
-      if (format === "default") {
-        return dt.toLocaleString("en-US", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        });
-      }
-      // Add other formats if needed
-      return dt.toISOString(); // Fallback
+      // Basic parsing assumes YYYY-MM-DD and HH:MM(:SS)
+      const [year, month, day] = dateStr.split("-");
+      const [hour, minute] = timeStr.split(":");
+      const date = new Date(year, month - 1, day, hour, minute);
+      if (isNaN(date)) return "Invalid Date";
+
+      // Example formatting (adjust as needed)
+      const options = {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      };
+      return date.toLocaleString("en-US", options);
     } catch (e) {
-      return "Invalid Date";
+      console.error("Error formatting date/time:", e);
+      return `${dateStr} ${timeStr}`;
     }
   }
 
+  // Get tutor display name (placeholder)
   function get_tutor_display_name(login) {
-    // In JS, we don't have direct access to WP user meta.
-    // Pass the display name via data attributes instead, or make another AJAX call if absolutely necessary.
-    return login; // Simple fallback
+    // In a real scenario, you might have this data localized or fetch it
+    return login
+      ? login.replace(/\./g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+      : "Tutor";
   }
 
-  // --- Initialization Function ---
+  // --- Initialization ---
+
   function initializeStudentScripts() {
+    console.log("olHubStudentData found. Initializing...");
+
+    if (!studentAjaxData) {
+      console.error("Initialization Error: studentAjaxData is not assigned.");
+      return;
+    }
+
+    // REMOVED initial call to loadStudentIncomingRequests();
+
+    // Initial check for badge AND load content
+    checkStudentIncomingRequests();
+
+    // Set interval to periodically check for new requests (for badge update AND content refresh)
+    if (!ajaxIntervalId) {
+      ajaxIntervalId = setInterval(checkStudentIncomingRequests, 30000);
+      console.log("Set interval for checking student requests and content."); // Updated log message
+    }
+
+    // Tooltips are now initialized within the success handler of checkStudentIncomingRequests
+    // initializeTooltips(); // REMOVED from here
+
+    // Add other event listeners specific to the student dashboard here
+
+    console.log("Student dashboard scripts initialized.");
+  }
+
+  // Function to try initialization
+  function tryInitialize() {
     initializationAttempts++;
     console.log(`Student Script Init Attempt: ${initializationAttempts}`);
-
-    if (typeof window.olHubStudentData !== "undefined") {
-      console.log("olHubStudentData found. Initializing...");
-      studentAjaxData = window.olHubStudentData;
-
-      // Perform initial check
-      checkStudentIncomingRequests();
-
-      // Start periodic checks (only if interval isn't already running)
-      if (!ajaxIntervalId) {
-        ajaxIntervalId = setInterval(checkStudentIncomingRequests, 30000); // Poll every 30 seconds
-      }
-
-      // Initialize tooltips after first data load might be better?
-      initializeTooltips();
-
-      // Re-check when the requests tab becomes active
-      const requestsTabButton = document.getElementById("requests-tab-button");
-      if (requestsTabButton) {
-        // Ensure listener is only added once
-        requestsTabButton.removeEventListener(
-          "shown.bs.tab",
-          checkStudentIncomingRequests
-        );
-        requestsTabButton.addEventListener(
-          "shown.bs.tab",
-          checkStudentIncomingRequests
-        );
-      }
-    } else if (initializationAttempts < MAX_INIT_ATTEMPTS) {
-      console.log("olHubStudentData not found. Retrying initialization...");
-      setTimeout(initializeStudentScripts, 200); // Wait and retry
-    } else {
+    if (typeof olHubStudentData !== "undefined") {
+      // Assign localized data *immediately* when found
+      studentAjaxData = olHubStudentData;
+      console.log("olHubStudentData found.", studentAjaxData); // Log the found data
+      clearInterval(initIntervalId); // Stop polling
+      initializeStudentScripts(); // Run the main initialization logic
+    } else if (initializationAttempts >= MAX_INIT_ATTEMPTS) {
+      clearInterval(initIntervalId); // Stop polling after max attempts
       console.error(
-        `Failed to initialize student scripts after ${MAX_INIT_ATTEMPTS} attempts. Localized data (olHubStudentData) not available.`
+        "Failed to initialize student scripts: olHubStudentData not found after multiple attempts."
       );
+      // Optionally display an error message to the user
       showGlobalAlert(
         "danger",
-        "Error initializing page components. AJAX features may not work. Please refresh or contact support."
+        "Error loading dashboard components. Please refresh the page."
       );
     }
   }
 
-  // Start the initialization process
-  initializeStudentScripts();
+  // Start polling for olHubStudentData
+  initIntervalId = setInterval(tryInitialize, 200);
 });
