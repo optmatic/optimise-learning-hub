@@ -1,4 +1,5 @@
 <?php
+error_log('[AJAX HANDLER FILE] requests/ajax-handlers.php is being included.'); // TOP LEVEL LOG
 /**
  * AJAX Handlers for Reschedule Requests
  */
@@ -18,19 +19,18 @@ require_once __DIR__ . '/request-functions.php';
  * AJAX handler for tutors to load their notifications.
  */
 function load_tutor_notifications_ajax() {
-    error_log('[AJAX TUTOR] load_tutor_notifications_ajax started'); // Logging added
-    check_ajax_referer('load_tutor_notifications_action', 'nonce');
+    error_log('[AJAX TUTOR] load_tutor_notifications_ajax started');
+    // Correct Nonce Check - use the field name defined in tutor-requests.php
+    // check_ajax_referer('load_tutor_notifications_action', 'nonce'); 
+    check_ajax_referer('check_tutor_notifications_nonce', 'nonce');
 
     $tutor_id = isset($_POST['tutor_id']) ? intval($_POST['tutor_id']) : 0;
     if (!$tutor_id || !ol_hub_can_user_access_tutor_dashboard($tutor_id)) {
         error_log('[AJAX TUTOR] Permission denied or invalid tutor ID for notifications.');
-        wp_send_json_error(['message' => 'Permission denied.'], 403);
+        wp_send_json_error(['message' => 'Permission denied.', 'html' => '<div class="alert alert-danger">Permission denied.</div>'], 403);
         return;
     }
     error_log('[AJAX TUTOR] Tutor ID for notifications: ' . $tutor_id);
-
-    // Combine counts from different sources
-    $total_unread = 0;
 
     // Count 1: Pending incoming student requests needing action
     error_log('[AJAX TUTOR] Querying pending student requests...');
@@ -45,22 +45,24 @@ function load_tutor_notifications_ajax() {
                 'value' => $tutor_id,
                 'compare' => '='
             ],
-            [
-                'key' => 'viewed_by_tutor',
-                'compare' => 'NOT EXISTS' // Only count those not yet viewed
-            ],
              [
                 'key' => 'initiator',
                 'value' => 'student',
                 'compare' => '='
+            ],
+            // Only count if not viewed by tutor
+            [
+                'relation' => 'OR',
+                ['key' => 'viewed_by_tutor', 'compare' => 'NOT EXISTS'],
+                ['key' => 'viewed_by_tutor', 'value' => 'yes', 'compare' => '!= ']
             ]
-        ]
+        ],
+        'fields' => 'ids' // Only need count
     ];
-    $incoming_requests = new WP_Query($incoming_requests_query_args);
-    $incoming_count = $incoming_requests->post_count;
+    $incoming_requests_query = new WP_Query($incoming_requests_query_args);
+    $incoming_count = $incoming_requests_query->post_count;
     error_log('[AJAX TUTOR] Pending student requests count: ' . $incoming_count);
-    $total_unread += $incoming_count;
-
+    
     // Count 2: Status changes on tutor-initiated requests (Accepted/Declined by student)
     error_log('[AJAX TUTOR] Querying unread status changes (student responses)...');
     $status_change_query_args = [
@@ -79,16 +81,18 @@ function load_tutor_notifications_ajax() {
                 'value' => 'tutor', // Request was initiated by the tutor
                 'compare' => '='
             ],
+            // Only count if not viewed by tutor
             [
-                'key' => 'viewed_by_tutor',
-                'compare' => 'NOT EXISTS' // Only count those not yet viewed
+                'relation' => 'OR',
+                ['key' => 'viewed_by_tutor', 'compare' => 'NOT EXISTS'],
+                ['key' => 'viewed_by_tutor', 'value' => 'yes', 'compare' => '!= ']
             ]
-        ]
+        ],
+        'fields' => 'ids' // Only need count
     ];
-    $status_changes = new WP_Query($status_change_query_args);
-    $status_change_count = $status_changes->post_count;
+    $status_changes_query = new WP_Query($status_change_query_args);
+    $status_change_count = $status_changes_query->post_count;
     error_log('[AJAX TUTOR] Unread status changes count: ' . $status_change_count);
-    $total_unread += $status_change_count;
 
     // Count 3: Student responses with alternative times
     error_log('[AJAX TUTOR] Querying unread student alternative time suggestions...');
@@ -108,20 +112,67 @@ function load_tutor_notifications_ajax() {
                 'value' => 'tutor', // Request was initiated by the tutor
                 'compare' => '='
             ],
-            [
-                'key' => 'viewed_by_tutor',
-                'compare' => 'NOT EXISTS' // Only count those not yet viewed
+            // Only count if not viewed by tutor
+             [
+                'relation' => 'OR',
+                ['key' => 'viewed_by_tutor', 'compare' => 'NOT EXISTS'],
+                ['key' => 'viewed_by_tutor', 'value' => 'yes', 'compare' => '!= ']
             ]
-        ]
+        ],
+        'fields' => 'ids' // Only need count
     ];
-    $alternatives = new WP_Query($alternatives_query_args);
-    $alternatives_count = $alternatives->post_count;
-     error_log('[AJAX TUTOR] Unread student alternatives count: ' . $alternatives_count);
-    $total_unread += $alternatives_count;
+    $alternatives_query = new WP_Query($alternatives_query_args);
+    $alternatives_count = $alternatives_query->post_count;
+    error_log('[AJAX TUTOR] Unread student alternatives count: ' . $alternatives_count);
 
-    error_log('[AJAX TUTOR] Total unread count: ' . $total_unread);
-    error_log('[AJAX TUTOR] Sending notification count success response.');
-    wp_send_json_success(['unread_count' => $total_unread]);
+    $total_unread = $incoming_count + $status_change_count + $alternatives_count;
+    error_log('[AJAX TUTOR] Total unread count for badge: ' . $total_unread);
+
+    // --- Generate Notifications HTML --- 
+    ob_start();
+    error_log('[AJAX TUTOR HTML GEN] Starting notifications HTML generation.');
+    try {
+        if ($incoming_count > 0 || $status_change_count > 0 || $alternatives_count > 0) {
+            ?>
+            <div class="alert alert-info">
+                <h5><i class="fas fa-bell me-2"></i>Notifications</h5>
+                <ul class="mb-0" style="list-style: none; padding-left: 0;">
+                    <?php if ($incoming_count > 0): ?>
+                        <li class="mb-2">
+                            <i class="fas fa-arrow-right me-1 text-warning"></i> You have <strong><?php echo $incoming_count; ?></strong> pending request<?php echo ($incoming_count > 1 ? 's' : ''); ?> from students requiring action.
+                            <a href="#tutor-incoming-requests-container" class="btn btn-sm btn-outline-primary ms-2 scroll-to">View Incoming</a>
+                        </li>
+                    <?php endif; ?>
+                     <?php if ($alternatives_count > 0): ?>
+                        <li class="mb-2">
+                            <i class="fas fa-exchange-alt me-1 text-primary"></i> Students proposed alternative times for <strong><?php echo $alternatives_count; ?></strong> request<?php echo ($alternatives_count > 1 ? 's' : ''); ?>.
+                            <a href="#tutor-student-alternatives-container" class="btn btn-sm btn-outline-primary ms-2 scroll-to">View Alternatives</a>
+                        </li>
+                    <?php endif; ?>
+                     <?php if ($status_change_count > 0): ?>
+                        <li class="mb-2">
+                             <i class="fas fa-info-circle me-1 text-success"></i> You have <strong><?php echo $status_change_count; ?></strong> update<?php echo ($status_change_count > 1 ? 's' : ''); ?> on your requests (accepted/declined by students).
+                             <a href="#tutor-outgoing-requests-container" class="btn btn-sm btn-outline-primary ms-2 scroll-to">View Outgoing</a>
+                        </li>
+                    <?php endif; ?>
+                </ul>
+            </div>
+            <?php
+        } else {
+            echo '<div class="alert alert-light text-center"><i class="fas fa-check-circle text-success"></i> No pending notifications.</div>';
+        }
+        error_log('[AJAX TUTOR HTML GEN] Finished notifications HTML generation.');
+    } catch (Throwable $t) {
+        error_log('[AJAX TUTOR HTML GEN ERROR] Error during notifications HTML: ' . $t->getMessage());
+        echo '<div class="alert alert-danger">Error generating notifications.</div>'; // Add fallback
+    }
+    $notifications_html = ob_get_clean();
+
+    error_log('[AJAX TUTOR] Sending notification HTML success response. HTML Length: ' . strlen($notifications_html));
+    wp_send_json_success([
+        'html' => $notifications_html,
+        'unread_count' => $total_unread // Keep sending the count too, might be useful for a badge
+    ]);
 }
 add_action('wp_ajax_load_tutor_notifications', 'load_tutor_notifications_ajax');
 
@@ -129,23 +180,32 @@ add_action('wp_ajax_load_tutor_notifications', 'load_tutor_notifications_ajax');
  * AJAX handler for tutors to load their outgoing requests.
  */
 function load_tutor_outgoing_requests_ajax() {
-    error_log('[AJAX TUTOR] load_tutor_outgoing_requests_ajax started'); // Logging added
+    error_log('[AJAX TUTOR OUTGOING] Function started.'); // START LOG
     check_ajax_referer('load_tutor_outgoing_action', 'nonce');
+    error_log('[AJAX TUTOR OUTGOING] Nonce verified.'); // NONCE LOG
 
     $tutor_id = isset($_POST['tutor_id']) ? intval($_POST['tutor_id']) : 0;
     if (!$tutor_id || !ol_hub_can_user_access_tutor_dashboard($tutor_id)) {
-        error_log('[AJAX TUTOR] Permission denied or invalid tutor ID for outgoing requests.');
+        error_log('[AJAX TUTOR OUTGOING] Permission denied or invalid tutor ID: ' . $tutor_id);
         wp_send_json_error(['message' => 'Permission denied.'], 403);
         return;
     }
-    error_log('[AJAX TUTOR] Tutor ID for outgoing requests: ' . $tutor_id);
+    error_log('[AJAX TUTOR OUTGOING] Tutor ID validated: ' . $tutor_id); // TUTOR ID LOG
 
+    error_log('[AJAX TUTOR OUTGOING] Calling get_reschedule_requests...'); // BEFORE HELPER LOG
     $outgoing_requests = get_reschedule_requests('tutor', $tutor_id, ['pending', 'accepted', 'declined', 'alternative_proposed']); // Fetch relevant statuses
+    $request_count = is_array($outgoing_requests) ? count($outgoing_requests) : 'Not an array';
+    error_log('[AJAX TUTOR OUTGOING] get_reschedule_requests returned. Count: ' . $request_count); // AFTER HELPER LOG
 
+    error_log('[AJAX TUTOR OUTGOING] Starting HTML generation (ob_start)...'); // BEFORE OB LOG
     ob_start();
     if (!empty($outgoing_requests)) {
+        error_log('[AJAX TUTOR OUTGOING] Requests found. Starting loop...'); // BEFORE LOOP LOG
         echo '<div class="list-group">';
-        foreach ($outgoing_requests as $request) {
+        foreach ($outgoing_requests as $index => $request) {
+             if ($index === 0) { // Log only for the first item to avoid flooding
+                 error_log('[AJAX TUTOR OUTGOING] Inside loop - Processing first request ID: ' . $request->ID); // INSIDE LOOP LOG
+             }
             $request_id = $request->ID;
             $student_id = get_post_meta($request_id, 'student_id', true);
             $student_info = get_userdata($student_id);
@@ -223,22 +283,30 @@ function load_tutor_outgoing_requests_ajax() {
             echo '</div>'; // End list-group-item
         }
         echo '</div>'; // End list-group
+         error_log('[AJAX TUTOR OUTGOING] Loop finished.'); // AFTER LOOP LOG
     } else {
+        error_log('[AJAX TUTOR OUTGOING] No requests found.'); // NO REQUESTS LOG
         echo '<div class="alert alert-info">You have no outgoing reschedule requests.</div>';
     }
 
     $html = ob_get_clean();
-    error_log('[AJAX TUTOR] Sending outgoing requests HTML success response.');
+    error_log('[AJAX TUTOR OUTGOING] HTML generated (ob_get_clean). HTML Length: ' . strlen($html)); // AFTER OB LOG
+    error_log('[AJAX TUTOR OUTGOING] Sending success response...'); // BEFORE SEND LOG
     wp_send_json_success(['html' => $html]);
+    // Note: No code should execute after wp_send_json_success
 }
+error_log('[AJAX HANDLER FILE] About to add action: wp_ajax_load_tutor_outgoing_requests'); // BEFORE ADD_ACTION
 add_action('wp_ajax_load_tutor_outgoing_requests', 'load_tutor_outgoing_requests_ajax');
+error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_load_tutor_outgoing_requests'); // AFTER ADD_ACTION
 
 /**
- * AJAX handler for tutors to load incoming requests from students.
+ * AJAX handler for tutors to load their incoming requests (from students).
  */
 function load_tutor_incoming_requests_ajax() {
-     error_log('[AJAX TUTOR] load_tutor_incoming_requests_ajax started'); // Logging added
-    check_ajax_referer('check_tutor_incoming_action', 'nonce');
+    error_log('[AJAX TUTOR] load_tutor_incoming_requests_ajax started'); // Logging added
+    // Correct Nonce Check - Match the nonce created in functions.php
+    // check_ajax_referer('load_tutor_incoming_action', 'nonce'); // Incorrect action name
+    check_ajax_referer('check_tutor_incoming_action', 'nonce'); // Correct action name
 
     $tutor_id = isset($_POST['tutor_id']) ? intval($_POST['tutor_id']) : 0;
     if (!$tutor_id || !ol_hub_can_user_access_tutor_dashboard($tutor_id)) {
@@ -303,7 +371,9 @@ function load_tutor_incoming_requests_ajax() {
     error_log('[AJAX TUTOR] Sending incoming requests HTML success response.');
     wp_send_json_success(['html' => $html]);
 }
+error_log('[AJAX HANDLER FILE] About to add action: wp_ajax_load_tutor_incoming_requests'); // BEFORE ADD_ACTION INCOMING
 add_action('wp_ajax_load_tutor_incoming_requests', 'load_tutor_incoming_requests_ajax');
+error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_load_tutor_incoming_requests'); // AFTER ADD_ACTION INCOMING
 
 /**
  * AJAX handler for tutors to load student alternative time suggestions.
@@ -396,7 +466,9 @@ function load_tutor_student_alternatives_ajax() {
     error_log('[AJAX TUTOR] Sending student alternatives HTML success response.');
     wp_send_json_success(['html' => $html]);
 }
+error_log('[AJAX HANDLER FILE] About to add action: wp_ajax_load_tutor_student_alternatives'); // BEFORE ADD_ACTION ALTERNATIVES
 add_action('wp_ajax_load_tutor_student_alternatives', 'load_tutor_student_alternatives_ajax');
+error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_load_tutor_student_alternatives'); // AFTER ADD_ACTION ALTERNATIVES
 
 /**
  * AJAX handler for tutors to mark an item (notification source) as viewed.
@@ -450,7 +522,9 @@ function mark_tutor_item_viewed_ajax() {
         }
     }
 }
+error_log('[AJAX HANDLER FILE] About to add action: wp_ajax_mark_tutor_item_viewed'); // BEFORE ADD_ACTION MARK_VIEWED
 add_action('wp_ajax_mark_tutor_item_viewed', 'mark_tutor_item_viewed_ajax');
+error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_mark_tutor_item_viewed'); // AFTER ADD_ACTION MARK_VIEWED
 
 
 /**
@@ -497,7 +571,9 @@ function delete_tutor_request_ajax() {
         wp_send_json_error(['message' => 'Failed to delete request.'], 500);
     }
 }
+error_log('[AJAX HANDLER FILE] About to add action: wp_ajax_delete_tutor_request'); // BEFORE ADD_ACTION DELETE_TUTOR
 add_action('wp_ajax_delete_tutor_request', 'delete_tutor_request_ajax');
+error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_delete_tutor_request'); // AFTER ADD_ACTION DELETE_TUTOR
 
 // ======================================
 // == Student AJAX Handlers
@@ -751,7 +827,9 @@ function check_student_incoming_requests_ajax() {
 
     wp_die();
 }
+error_log('[AJAX HANDLER FILE] About to add action: wp_ajax_check_student_incoming_requests'); // BEFORE ADD_ACTION CHECK_STUDENT
 add_action('wp_ajax_check_student_incoming_requests', 'check_student_incoming_requests_ajax');
+error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_check_student_incoming_requests'); // AFTER ADD_ACTION CHECK_STUDENT
 
 /**
  * AJAX handler for students to mark tutor alternative suggestions as viewed.
@@ -783,7 +861,9 @@ function mark_tutor_alternatives_viewed_ajax() {
         wp_send_json_error(['message' => 'No request IDs provided.']);
     }
 }
+error_log('[AJAX HANDLER FILE] About to add action: wp_ajax_mark_tutor_alternatives_viewed'); // BEFORE MARK ALT
 add_action('wp_ajax_mark_tutor_alternatives_viewed', 'mark_tutor_alternatives_viewed_ajax');
+error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_mark_tutor_alternatives_viewed'); // AFTER MARK ALT
 
 /**
  * AJAX handler for Students to delete their own reschedule requests.
@@ -821,6 +901,8 @@ function delete_student_request_ajax() {
         wp_send_json_error(['message' => 'You do not have permission to delete this request.']);
     }
 }
+error_log('[AJAX HANDLER FILE] About to add action: wp_ajax_delete_student_request'); // BEFORE DELETE STUDENT
 add_action('wp_ajax_delete_student_request', 'delete_student_request_ajax');
+error_log('[AJAX HANDLER FILE] Finished adding action: wp_ajax_delete_student_request'); // AFTER DELETE STUDENT
 
 ?> 

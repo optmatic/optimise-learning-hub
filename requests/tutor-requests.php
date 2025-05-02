@@ -115,8 +115,8 @@ $tutor_id     = $current_user->ID;
                                  $assigned_students = get_tutor_students($tutor_id); // Use helper function
                                  if (!empty($assigned_students)) {
                                      foreach ($assigned_students as $student) {
-                                         // Use array access based on debug log warning
-                                         echo '<option value="' . esc_attr($student['ID']) . '">' . esc_html($student['display_name']) . '</option>';
+                                         // Use array access based on debug log warning - corrected key
+                                         echo '<option value="' . esc_attr($student['id']) . '">' . esc_html($student['display_name']) . '</option>';
                                      }
                                  }
                                  ?>

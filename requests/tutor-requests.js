@@ -1,7 +1,112 @@
 // Tutor Dashboard Requests Tab AJAX and Modal Handling
 jQuery(document).ready(function ($) {
+  // Function Definitions (moved back inside document.ready)
+
+  // Tooltip initialization logic (with internal retries)
+  var attemptTooltipInitialization = function (
+    targetContainer,
+    attemptsLeft = 3
+  ) {
+    // Check if Bootstrap (as understrap) and Tooltip component are loaded
+    if (
+      typeof understrap === "undefined" || // Check for understrap
+      typeof understrap.Tooltip === "undefined" // Check for understrap.Tooltip
+    ) {
+      console.warn(
+        "Understrap Tooltip component not ready for", // Updated message
+        targetContainer.attr("id"),
+        attemptsLeft > 0
+          ? `(${attemptsLeft} attempts left)`
+          : "(No attempts left)"
+      );
+      // If attempts remain, schedule a retry
+      if (attemptsLeft > 0) {
+        setTimeout(function () {
+          attemptTooltipInitialization(targetContainer, attemptsLeft - 1);
+        }, 300); // Retry delay
+      }
+      return false; // Indicate failure or exhaustion of retries
+    }
+
+    // Now check if there are actually tooltips to initialize IN THIS CONTAINER
+    var tooltipTriggerList = targetContainer[0].querySelectorAll(
+      '[data-bs-toggle="tooltip"]'
+    );
+
+    if (tooltipTriggerList.length === 0) {
+      // console.log("No tooltips found in", targetContainer.attr("id"));
+      return true;
+    }
+
+    // console.log("Found", tooltipTriggerList.length, "tooltips in", targetContainer.attr("id"));
+    var initializedCount = 0;
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+      // Use understrap.Tooltip
+      if (!understrap.Tooltip.getInstance(tooltipTriggerEl)) {
+        new understrap.Tooltip(tooltipTriggerEl);
+        initializedCount++;
+      }
+    });
+    // console.log("Initialized", initializedCount, "new tooltips in", targetContainer.attr("id"));
+    return true; // Indicate success
+  };
+
+  // Function to initialize ALL tooltips within the requests tab pane
+  function initializeAllTooltips(attemptsLeft = 5) {
+    // Add attempts counter
+    console.log(
+      `Attempting to initialize all tooltips... (${attemptsLeft} attempts left)`
+    );
+
+    // REMOVED Detailed check logging
+
+    // Check if understrap and Tooltip component are loaded
+    if (
+      typeof understrap === "undefined" || // Check for understrap
+      typeof understrap.Tooltip === "undefined" // Check for understrap.Tooltip
+    ) {
+      console.warn("Understrap Tooltip component not ready for global init."); // Updated message
+      if (attemptsLeft > 0) {
+        console.log("Retrying tooltip init in 500ms...");
+        setTimeout(() => initializeAllTooltips(attemptsLeft - 1), 500); // Retry
+      } else {
+        console.error(
+          "Understrap Tooltip component failed to initialize after multiple attempts."
+        ); // Updated message
+      }
+      return; // Stop this attempt
+    }
+
+    const container = document.getElementById("requests-tab-pane");
+    if (!container) {
+      console.warn("Tooltip init: requests-tab-pane not found.");
+      return;
+    }
+
+    const tooltipTriggerList = container.querySelectorAll(
+      '[data-bs-toggle="tooltip"]'
+    );
+    console.log(
+      `Found ${tooltipTriggerList.length} tooltip triggers in #requests-tab-pane.`
+    );
+    const tooltipList = [...tooltipTriggerList].map((tooltipTriggerEl) => {
+      // Check if instance already exists before creating
+      // Use understrap.Tooltip
+      if (!understrap.Tooltip.getInstance(tooltipTriggerEl)) {
+        return new understrap.Tooltip(tooltipTriggerEl);
+      }
+      return understrap.Tooltip.getInstance(tooltipTriggerEl); // Return existing instance
+    });
+    console.log("Tooltip initialization complete.");
+  }
+
   // Function to load content into a container
-  function loadTutorRequestSection(action, nonce, containerId) {
+  function loadTutorRequestSection(
+    action,
+    nonce,
+    containerId,
+    isInitialLoad = false
+  ) {
     var container = $(containerId);
     if (!container.length) {
       console.error("Container not found:", containerId);
@@ -11,86 +116,57 @@ jQuery(document).ready(function ($) {
       '<div class="text-center p-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...</div>'
     );
 
-    var attemptTooltipInitialization = function (targetContainer) {
-      if (
-        typeof bootstrap !== "undefined" &&
-        typeof bootstrap.Tooltip !== "undefined"
-      ) {
-        try {
-          var tooltipTriggerList = [].slice.call(
-            targetContainer[0].querySelectorAll('[data-bs-toggle="tooltip"]')
-          );
-          tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-            // Ensure we don't create multiple instances
-            if (!bootstrap.Tooltip.getInstance(tooltipTriggerEl)) {
-              new bootstrap.Tooltip(tooltipTriggerEl);
-            }
-          });
-          console.log("Tooltips initialized for", targetContainer.attr("id"));
-          return true; // Success
-        } catch (e) {
-          console.warn(
-            "Error during tooltip initialization attempt for",
-            targetContainer.attr("id"),
-            ":",
-            e
-          );
-          return false; // Failure
-        }
-      } else {
-        console.warn(
-          "Bootstrap Tooltip component not ready for",
-          targetContainer.attr("id")
-        );
-        return false; // Failure
-      }
-    };
-
     // Use localized data if available
     const ajaxData = {
       action: action,
       nonce: nonce,
     };
-    if (typeof olHubTutorData !== "undefined" && olHubTutorData.tutor_id) {
-      ajaxData.tutor_id = olHubTutorData.tutor_id;
+    // Correctly check for userId from localization
+    if (typeof olHubTutorData !== "undefined" && olHubTutorData.userId) {
+      // Correctly assign userId to tutor_id for the POST request
+      ajaxData.tutor_id = olHubTutorData.userId;
     }
 
     $.ajax({
-      url: olHubTutorData.ajaxurl || ajaxurl, // Prefer localized, fallback to global
+      url: olHubTutorData.ajax_url,
       type: "POST",
       data: ajaxData,
       success: function (response) {
-        if (
-          response.success &&
-          response.data &&
-          typeof response.data.html !== "undefined"
-        ) {
+        if (response.success && response.data && response.data.html) {
           container.html(response.data.html);
 
-          // Attempt to initialize tooltips immediately
-          if (!attemptTooltipInitialization(container)) {
-            // If failed, try again after a short delay
-            console.log("Retrying tooltip initialization for", containerId);
-            setTimeout(function () {
-              attemptTooltipInitialization(container);
-            }, 300);
+          // If this was one of the initial loads, increment counter and check if all done
+          if (isInitialLoad) {
+            initialLoadCounter++;
+            if (initialLoadCounter >= 4) {
+              // Check if all 4 initial loads are complete
+              console.log(
+                "All initial sections loaded, initializing tooltips..."
+              );
+              initializeAllTooltips();
+            }
           }
 
           $(document).trigger("tutorRequestSectionLoaded", {
             containerId: containerId,
-            response: response.data,
+            action: action,
+            response: response,
           });
         } else {
           console.error(
-            "AJAX Error for",
+            "AJAX Success but no HTML:",
             action,
-            ":",
-            response.data?.message || "Unknown error or missing HTML"
+            response?.data?.message || "No message"
           );
+          let errorMessage =
+            response?.data?.message ||
+            "Server returned success but no HTML content.";
+          if (response?.data?.message === "Permission denied.") {
+            errorMessage =
+              'Permission denied. Please ensure you are logged in as the correct tutor. <a href="/access/">Login</a>';
+          }
           container.html(
-            '<div class="alert alert-danger">Error loading content: ' +
-              (response.data?.message || "Unknown error") +
-              "</div>"
+            '<div class="alert alert-warning">' + errorMessage + "</div>"
           );
         }
       },
@@ -100,700 +176,480 @@ jQuery(document).ready(function ($) {
           action,
           ":",
           textStatus,
-          errorThrown
+          errorThrown,
+          jqXHR.responseText
         );
-        var errorMsg = "Failed to load content.";
-        if (jqXHR.status === 403) {
-          errorMsg =
-            "Permission denied. Please ensure you are logged in and have the correct role."; // More specific
-        } else if (jqXHR.status === 500) {
-          errorMsg = "Server error encountered. Please check server logs."; // Suggest checking logs
-        } else if (jqXHR.responseText) {
-          console.error("Server Response: ", jqXHR.responseText);
-        }
         container.html(
-          '<div class="alert alert-danger">' +
-            errorMsg +
-            " (Action: " +
-            action +
-            ")</div>"
-        ); // Include action in error
+          '<div class="alert alert-danger">Server error encountered (' +
+            textStatus +
+            "). Please check server logs.</div>"
+        );
       },
     });
   }
 
-  // --- Initial Loads (Keep delay) ---
+  var initialLoadCounter = 0; // Counter for initial section loads
+
+  // ==================================================
+  // Initialization Logic
+  // ==================================================
+
+  // Check if localized data is available before proceeding
+  if (typeof olHubTutorData === "undefined") {
+    console.error("olHubTutorData is not defined. Script cannot initialize.");
+    // Display an error message on the page?
+    return; // Stop execution if data is missing
+  }
+
+  // --- Initial Loads (with delay) ---
   setTimeout(function () {
-    // Use localized nonces directly
-    var loadOutgoingNonce = olHubTutorData?.nonces?.loadTutorOutgoing;
-    var loadIncomingNonce = olHubTutorData?.nonces?.checkTutorIncoming; // Matches PHP check_ajax_referer
-    var notificationNonce = olHubTutorData?.nonces?.loadNotifications; // Matches PHP check_ajax_referer
-    var loadAlternativesNonce = olHubTutorData?.nonces?.loadStudentAlternatives; // Matches PHP check_ajax_referer
+    // Use localized nonces directly, matching the keys from functions.php
+    var loadOutgoingNonce = olHubTutorData?.nonces?.loadTutorOutgoingNonce;
+    var loadIncomingNonce = olHubTutorData?.nonces?.checkTutorIncomingNonce;
+    var notificationNonce =
+      olHubTutorData?.nonces?.checkTutorNotificationsNonce;
+    var loadAlternativesNonce =
+      olHubTutorData?.nonces?.loadTutorStudentAlternativesNonce;
 
     // Load Notifications
     if (notificationNonce) {
       loadTutorRequestSection(
-        "load_tutor_notifications",
+        "load_tutor_notifications", // Corrected AJAX action name
         notificationNonce,
-        "#tutor-notifications-container"
+        "#tutor-notifications-container",
+        true // Mark as initial load
       );
     } else {
       console.error("Tutor notification nonce not found in olHubTutorData.");
       $("#tutor-notifications-container").html(
-        '<div class="alert alert-warning">Could not load notifications (security token missing).</div>'
+        '<div class="alert alert-warning">Could not load notifications (nonce missing).</div>'
       );
+      initialLoadCounter++; // Increment even on error to avoid blocking tooltip init
     }
 
     // Load Outgoing Requests
     if (loadOutgoingNonce) {
       loadTutorRequestSection(
-        "load_tutor_outgoing_requests",
+        "load_tutor_outgoing_requests", // Corrected AJAX action name
         loadOutgoingNonce,
-        "#tutor-outgoing-requests-container"
+        "#tutor-outgoing-requests-container",
+        true // Mark as initial load
       );
     } else {
       console.error(
         "Tutor load outgoing requests nonce not found in olHubTutorData."
       );
       $("#tutor-outgoing-requests-container").html(
-        '<div class="alert alert-warning">Could not load outgoing requests (security token missing).</div>'
+        '<div class="alert alert-warning">Could not load outgoing requests (nonce missing).</div>'
       );
+      initialLoadCounter++;
     }
 
-    // Load Incoming Requests
+    // Load Incoming Requests (Students needing response)
     if (loadIncomingNonce) {
       loadTutorRequestSection(
-        "load_tutor_incoming_requests",
+        "load_tutor_incoming_requests", // Corrected AJAX action name
         loadIncomingNonce,
-        "#tutor-incoming-requests-container"
+        "#tutor-incoming-requests-container",
+        true // Mark as initial load
       );
     } else {
       console.error(
         "Tutor load incoming requests nonce not found in olHubTutorData."
       );
       $("#tutor-incoming-requests-container").html(
-        '<div class="alert alert-warning">Could not load incoming requests (security token missing).</div>'
+        '<div class="alert alert-warning">Could not load incoming requests (nonce missing).</div>'
       );
+      initialLoadCounter++;
     }
 
     // Load Student Alternatives
     if (loadAlternativesNonce) {
       loadTutorRequestSection(
-        "load_tutor_student_alternatives",
+        "load_tutor_student_alternatives", // Corrected AJAX action name
         loadAlternativesNonce,
-        "#tutor-student-alternatives-container"
+        "#tutor-student-alternatives-container",
+        true // Mark as initial load
       );
     } else {
       console.error(
         "Tutor load student alternatives nonce not found in olHubTutorData."
       );
       $("#tutor-student-alternatives-container").html(
-        '<div class="alert alert-warning">Could not load student alternatives (security token missing).</div>'
+        '<div class="alert alert-warning">Could not load student alternatives (nonce missing).</div>'
       );
+      initialLoadCounter++;
     }
-  }, 150); // Slightly increased delay, adjust if needed
+
+    // Consider if intervals are still desired
+    // setInterval(() => loadTutorRequestSection('load_tutor_notifications', '#tutor-notifications-container'), 30000); // e.g., Check notifications every 30s
+  }, 500); // Delay for the initial AJAX calls themselves
 
   // --- Event Handlers (Delegated for AJAX-loaded content) ---
 
-  // Handle Tutor deleting their own outgoing request
-  $(document).on(
-    "click",
-    "#tutor-outgoing-requests-container .delete-tutor-request-btn",
-    function () {
-      var button = $(this);
-      var requestId = button.data("request-id");
-      // Get specific nonce from the button first, fallback to localized
-      var nonce =
-        button.data("nonce") || olHubTutorData?.nonces?.delete_request;
-
-      if (!requestId || !nonce) {
-        alert("Error: Could not identify request or security token.");
-        console.error("Delete error: Missing request ID or nonce.", {
-          requestId,
-          nonce,
-        });
-        return;
-      }
-
-      if (
-        !confirm("Are you sure you want to cancel this reschedule request?")
-      ) {
-        return;
-      }
-
-      button
-        .prop("disabled", true)
-        .html(
-          '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
-        );
-
-      $.ajax({
-        url: olHubTutorData.ajaxurl || ajaxurl,
-        type: "POST",
-        data: {
-          action: "tutor_delete_outgoing_request", // Specific AJAX action
-          request_id: requestId,
-          nonce: nonce, // Send the specific or generic nonce
-        },
-        success: function (response) {
-          if (response.success) {
-            // Visually remove the row
-            button.closest("tr").fadeOut(300, function () {
-              $(this).remove();
-            });
-            // Refresh counts/notifications if necessary
-            var notificationNonce =
-              olHubTutorData?.nonces?.check_notifications ||
-              $("#check_tutor_notifications_nonce_field").val();
-            if (notificationNonce)
-              loadTutorRequestSection(
-                "load_tutor_notifications",
-                notificationNonce,
-                "#tutor-notifications-container"
-              );
-          } else {
-            alert(
-              "Error cancelling request: " +
-                (response.data?.message || "Please try again.")
-            );
-            button
-              .prop("disabled", false)
-              .html(
-                '<i class="fa-solid fa-trash-can"></i> <span class="d-none d-md-inline">Cancel</span>'
-              ); // Restore button icon/text
-          }
-        },
-        error: function () {
-          alert(
-            "An error occurred while cancelling the request. Please try again."
-          );
-          button
-            .prop("disabled", false)
-            .html(
-              '<i class="fa-solid fa-trash-can"></i> <span class="d-none d-md-inline">Cancel</span>'
-            ); // Restore button icon/text
-        },
-      });
-    }
-  );
-
-  // Handle Tutor clicking Accept/Decline/Unavailable on an INCOMING student request
-  $(document).on(
-    "click",
-    "#tutor-incoming-requests-container .handle-student-request-btn",
-    function () {
-      var button = $(this);
-      var requestId = button.data("request-id");
-      var actionType = button.data("action"); // 'accept', 'decline', 'unavailable'
-      var handleNonce =
-        olHubTutorData?.nonces?.handle_student_request ||
-        $("#tutor_handle_student_request_nonce_field").val();
-      var modal = $("#tutorHandleStudentRequestModal");
-      var modalBody = $("#tutorHandleStudentRequestModalBody");
-      var modalTitle = $("#tutorHandleStudentRequestModalLabel");
-
-      if (
-        !requestId ||
-        !actionType ||
-        !handleNonce ||
-        !modal.length ||
-        !modalBody.length ||
-        !modalTitle.length
-      ) {
-        alert(
-          "Error: Cannot process request (missing data or modal elements)."
-        );
-        console.error(
-          "Handle student request error: Missing elements or data",
-          {
-            requestId,
-            actionType,
-            handleNonce,
-            modalExists: modal.length > 0,
-          }
-        );
-        return;
-      }
-
-      var actionText = actionType.charAt(0).toUpperCase() + actionType.slice(1);
-      if (actionType === "unavailable") actionText = "Propose Alternatives";
-      modalTitle.text("Respond to Request: " + actionText);
-      modalBody.html(
-        '<div class="text-center p-3"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading details...</div>'
-      );
-
-      // Show modal using Bootstrap 5 method
-      var modalInstance = bootstrap.Modal.getOrCreateInstance(modal[0]);
-      modalInstance.show();
-
-      // AJAX call to get the modal content / form
-      $.ajax({
-        url: olHubTutorData.ajaxurl || ajaxurl,
-        type: "POST",
-        data: {
-          action: "get_tutor_handle_request_modal_content",
-          request_id: requestId,
-          action_type: actionType,
-          nonce: handleNonce,
-        },
-        success: function (response) {
-          if (response.success && response.data && response.data.html) {
-            modalBody.html(response.data.html);
-            // Initialize components within the modal if necessary (e.g., datepickers)
-            // Safely initialize tooltips within the modal body
-            if (
-              typeof bootstrap !== "undefined" &&
-              typeof bootstrap.Tooltip !== "undefined"
-            ) {
-              var tooltipTriggerListModal = [].slice.call(
-                modalBody[0].querySelectorAll('[data-bs-toggle="tooltip"]')
-              );
-              tooltipTriggerListModal.map(function (tooltipTriggerEl) {
-                return bootstrap.Tooltip.getOrCreateInstance(tooltipTriggerEl);
-              });
-            }
-          } else {
-            modalBody.html(
-              '<div class="alert alert-danger">' +
-                (response.data?.message || "Error loading details.") +
-                "</div>"
-            );
-          }
-        },
-        error: function () {
-          modalBody.html(
-            '<div class="alert alert-danger">Failed to load request details. Please close and try again.</div>'
-          );
-        },
-      });
-    }
-  );
-
-  // Handle form submissions INSIDE the 'Handle Student Request' modal
-  $(document).on(
-    "submit",
-    "#tutorHandleStudentRequestModal form.ajax-modal-form",
-    function (e) {
-      e.preventDefault();
-      var form = $(this);
-      var submitButton = form.find('button[type="submit"]');
-      var responseDiv = form.find(".ajax-modal-response");
-      var modal = form.closest(".modal");
-      var ajaxAction = form.data("action"); // e.g., 'tutor_accept_student_request'
-
-      if (!ajaxAction) {
-        console.error(
-          "Modal form submit error: Missing data-action attribute on form."
-        );
-        responseDiv
-          .html('<div class="alert alert-danger">Configuration error.</div>')
-          .show();
-        return;
-      }
-
-      // Store original button text/html
-      var originalButtonContent = submitButton.html();
-      submitButton
-        .prop("disabled", true)
-        .html(
-          '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...'
-        );
-      responseDiv.hide().html("");
-
-      var formData = form.serialize() + "&action=" + ajaxAction; // Add the WP AJAX action
-
-      $.ajax({
-        url: olHubTutorData.ajaxurl || ajaxurl,
-        type: "POST",
-        data: formData,
-        success: function (response) {
-          if (response.success) {
-            responseDiv
-              .html(
-                '<div class="alert alert-success">' +
-                  (response.data?.message || "Action successful!") +
-                  "</div>"
-              )
-              .show();
-            // Refresh the main lists
-            var loadNonce =
-              olHubTutorData?.nonces?.load_requests ||
-              $("#tutor_load_requests_nonce_field").val();
-            if (loadNonce) {
-              loadTutorRequestSection(
-                "load_tutor_incoming_requests",
-                loadNonce,
-                "#tutor-incoming-requests-container"
-              );
-              loadTutorRequestSection(
-                "load_tutor_outgoing_requests",
-                loadNonce,
-                "#tutor-outgoing-requests-container"
-              ); // Refresh outgoing if action affects it
-              loadTutorRequestSection(
-                "load_tutor_student_alternatives",
-                loadNonce,
-                "#tutor-student-alternatives-container"
-              );
-            }
-            var notificationNonce =
-              olHubTutorData?.nonces?.check_notifications ||
-              $("#check_tutor_notifications_nonce_field").val();
-            if (notificationNonce)
-              loadTutorRequestSection(
-                "load_tutor_notifications",
-                notificationNonce,
-                "#tutor-notifications-container"
-              );
-
-            // Close modal after delay
-            setTimeout(function () {
-              var modalInstance = bootstrap.Modal.getInstance(modal[0]);
-              if (modalInstance) modalInstance.hide();
-            }, 2000);
-          } else {
-            responseDiv
-              .html(
-                '<div class="alert alert-danger">Error: ' +
-                  (response.data?.message || "Could not complete action.") +
-                  "</div>"
-              )
-              .show();
-            submitButton.prop("disabled", false).html(originalButtonContent); // Restore button
-          }
-        },
-        error: function () {
-          responseDiv
-            .html(
-              '<div class="alert alert-danger">AJAX error processing action.</div>'
-            )
-            .show();
-          submitButton.prop("disabled", false).html(originalButtonContent); // Restore button
-        },
-      });
-    }
-  );
-
-  // Handle Tutor clicking a button related to STUDENT ALTERNATIVES (within accordion)
-  $(document).on(
-    "click",
-    "#tutor-student-alternatives-container .respond-to-student-alternative-btn",
-    function () {
-      var button = $(this);
-      var altRequestId = button.data("alt-request-id");
-      var actionType = button.data("action"); // 'accept', 'decline_all', 'cancel_original'
-      var form = button.closest("form"); // Find the wrapping form
-      // Get nonce from hidden field in the form, fallback to localized
-      var nonce =
-        form.find('input[name="tutor_respond_alt_nonce"]').val() ||
-        olHubTutorData?.nonces?.respond_alternatives;
-      var responseDiv = form.find(".ajax-modal-response"); // Find response div within the same form
-      var selectedIndex = null;
-      var ajaxAction = "";
-      var confirmMsg = "";
-
-      if (!altRequestId || !actionType || !nonce) {
-        alert("Error: Missing data for handling alternatives.");
-        console.error("Respond alternative error: Missing data", {
-          altRequestId,
-          actionType,
-          nonce,
-        });
-        return;
-      }
-
-      if (actionType === "accept") {
-        var selectedRadio = form.find(
-          "input.tutor-accept-alternative-radio:checked"
-        );
-        if (!selectedRadio.length) {
-          alert("Please select an alternative time to accept.");
-          return;
-        }
-        selectedIndex = selectedRadio.data("selected-index");
-        ajaxAction = "tutor_accept_student_alternative";
-        confirmMsg = "Are you sure you want to accept this alternative time?";
-      } else if (actionType === "decline_all") {
-        ajaxAction = "tutor_decline_student_alternatives";
-        confirmMsg =
-          "Are you sure you want to decline all alternatives and cancel the original request?";
-      } else if (actionType === "cancel_original") {
-        ajaxAction = "tutor_cancel_original_from_unavailable";
-        confirmMsg =
-          "Are you sure you want to acknowledge this and cancel the original request?";
-      } else {
-        console.error("Unknown alternative action type:", actionType);
-        return;
-      }
-
-      if (!confirm(confirmMsg)) {
-        return;
-      }
-
-      // Store original button text/html
-      var originalButtonContent = button.html();
-      button
-        .prop("disabled", true)
-        .html(
-          '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
-        );
-      responseDiv.hide().html("");
-
-      var data = {
-        action: ajaxAction,
-        alt_request_id: altRequestId,
-        nonce: nonce,
-        action_type: actionType, // May not be strictly needed by handler, but good for context
-      };
-      if (selectedIndex !== null) {
-        data.selected_index = selectedIndex;
-      }
-
-      $.ajax({
-        url: olHubTutorData.ajaxurl || ajaxurl,
-        type: "POST",
-        data: data,
-        success: function (response) {
-          if (response.success) {
-            responseDiv
-              .html(
-                '<div class="alert alert-success">' +
-                  (response.data?.message || "Action successful!") +
-                  "</div>"
-              )
-              .show();
-            // Refresh relevant sections
-            var loadNonce =
-              olHubTutorData?.nonces?.load_requests ||
-              $("#tutor_load_requests_nonce_field").val();
-            if (loadNonce) {
-              // Delay slightly to allow changes to propagate before reload
-              setTimeout(function () {
-                loadTutorRequestSection(
-                  "load_tutor_outgoing_requests",
-                  loadNonce,
-                  "#tutor-outgoing-requests-container"
-                );
-                loadTutorRequestSection(
-                  "load_tutor_student_alternatives",
-                  loadNonce,
-                  "#tutor-student-alternatives-container"
-                );
-                var notificationNonce =
-                  olHubTutorData?.nonces?.check_notifications ||
-                  $("#check_tutor_notifications_nonce_field").val();
-                if (notificationNonce)
-                  loadTutorRequestSection(
-                    "load_tutor_notifications",
-                    notificationNonce,
-                    "#tutor-notifications-container"
-                  );
-              }, 500);
-            }
-          } else {
-            responseDiv
-              .html(
-                '<div class="alert alert-danger">Error: ' +
-                  (response.data?.message || "Could not complete action.") +
-                  "</div>"
-              )
-              .show();
-            button.prop("disabled", false).html(originalButtonContent); // Restore button
-          }
-        },
-        error: function () {
-          responseDiv
-            .html(
-              '<div class="alert alert-danger">AJAX error processing action.</div>'
-            )
-            .show();
-          button.prop("disabled", false).html(originalButtonContent); // Restore button
-        },
-      });
-    }
-  );
-
-  // --- Tutor Initiate Reschedule Modal Form ---
-  // Add logic for tutor reschedule form lesson selection
-  $("#tutor_reschedule_lesson_select").on("change", function () {
-    var selectedOption = $(this).find("option:selected");
-    var value = selectedOption.val();
-    if (value) {
-      var valueParts = value.split("|"); // date|time|student_id
-      if (valueParts.length === 3) {
-        $("#tutor_reschedule_original_date").val(valueParts[0]);
-        $("#tutor_reschedule_original_time").val(valueParts[1]);
-        // Update the hidden student ID field *AND* the visible select (for clarity, though hidden is used for submit)
-        var studentIdFromLesson = valueParts[2];
-        $("#tutor_reschedule_selected_student_id").val(studentIdFromLesson);
-        $("#tutor_reschedule_student_select").val(studentIdFromLesson);
-      } else {
-        console.warn("Lesson option value format unexpected:", value);
-        $("#tutor_reschedule_original_date").val("");
-        $("#tutor_reschedule_original_time").val("");
-        $("#tutor_reschedule_selected_student_id").val("");
-      }
-    } else {
-      $("#tutor_reschedule_original_date").val("");
-      $("#tutor_reschedule_original_time").val("");
-      $("#tutor_reschedule_selected_student_id").val("");
-    }
-  });
-  // Ensure student select also updates hidden field if changed manually (edge case)
-  $("#tutor_reschedule_student_select").on("change", function () {
-    var selectedStudentId = $(this).val();
-    // Only update the hidden field if the lesson select is NOT set (otherwise lesson dictates)
-    if (!$("#tutor_reschedule_lesson_select").val()) {
-      $("#tutor_reschedule_selected_student_id").val(selectedStudentId);
-    }
-  });
-
-  // Handle Tutor Initiate Reschedule Form Submission via AJAX
-  $("#tutorRescheduleForm").on("submit", function (e) {
+  // Handle clicking "Mark as Viewed" (example for notifications)
+  $(document).on("click", ".mark-tutor-item-viewed", function (e) {
     e.preventDefault();
+    var $button = $(this);
+    var itemId = $button.data("item-id"); // Assuming data-item-id attribute exists
+    var itemType = $button.data("item-type"); // e.g., 'notification', 'alternative'
+    var nonce = olHubTutorData?.nonces?.markItemViewedNonce;
 
-    var form = $(this);
-    var submitButton = $("#submitTutorReschedule");
-    var successMsg = $("#tutorRescheduleSuccessMessage");
-    var errorMsg = $("#tutorRescheduleErrorMessage");
-
-    // --- Basic Frontend Validation ---
-    let isValid = true;
-    const requiredFields = form.find("[required]");
-    requiredFields.each(function () {
-      if (!$(this).val()) {
-        isValid = false;
-        $(this).addClass("is-invalid"); // Highlight invalid fields
-      } else {
-        $(this).removeClass("is-invalid");
-      }
-    });
-    // Ensure hidden student ID is set (should be by lesson select)
-    var studentIdSelected = $("#tutor_reschedule_selected_student_id").val();
-    if (!studentIdSelected) {
-      isValid = false;
-      $("#tutor_reschedule_student_select").addClass("is-invalid"); // Highlight student select
-      console.warn(
-        "Tutor Reschedule: No student ID selected/derived from lesson."
-      );
-    } else {
-      $("#tutor_reschedule_student_select").removeClass("is-invalid");
+    if (!itemId || !itemType || !nonce) {
+      console.error("Missing data for mark as viewed action.");
+      return;
     }
-
-    if (!isValid) {
-      errorMsg
-        .html(
-          '<p><i class="fas fa-exclamation-triangle"></i> Please fill in all required fields (marked with *).</p>'
-        )
-        .show();
-      successMsg.hide();
-      return; // Stop submission
-    }
-    // --- End Validation ---
-
-    var originalButtonContent = submitButton.html();
-    submitButton
-      .prop("disabled", true)
-      .html(
-        '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...'
-      );
-    successMsg.hide();
-    errorMsg.hide();
-    form.find(".is-invalid").removeClass("is-invalid"); // Clear validation classes
-
-    // Prepare form data, ensuring the correct student ID is used
-    var formData = form.serializeArray();
-    // Remove student_id from the select if it exists, use the hidden one
-    formData = formData.filter((item) => item.name !== "student_id");
-    formData.push({ name: "student_id", value: studentIdSelected });
-    // Add the AJAX action
-    formData.push({ name: "action", value: "tutor_initiate_reschedule_ajax" });
 
     $.ajax({
-      url: olHubTutorData.ajaxurl || ajaxurl,
+      url: olHubTutorData.ajax_url,
       type: "POST",
-      data: $.param(formData), // Serialize the array correctly for POST
+      data: {
+        action: "mark_tutor_item_viewed",
+        item_id: itemId,
+        item_type: itemType,
+        nonce: nonce,
+        tutor_id: olHubTutorData.userId,
+      },
       success: function (response) {
         if (response.success) {
-          successMsg
-            .html(
-              '<p><i class="fas fa-check-circle"></i> ' +
-                (response.data?.message || "Request submitted successfully.") +
-                "</p>"
-            )
-            .show();
-          form[0].reset();
-          $("#tutor_reschedule_original_date").val("");
-          $("#tutor_reschedule_original_time").val("");
-          $("#tutor_reschedule_selected_student_id").val("");
+          console.log("Item marked as viewed:", itemId, itemType);
+          // Option 1: Remove the item visually
+          // $button.closest('.notification-item, .alternative-item').fadeOut(); // Adjust selector
 
-          setTimeout(function () {
-            var modalInstance = bootstrap.Modal.getInstance(
-              $("#tutorRescheduleModal")[0]
-            );
-            if (modalInstance) modalInstance.hide();
-            successMsg.hide(); // Hide message on close
-          }, 2500);
-          // Refresh relevant lists
-          var loadNonce =
-            olHubTutorData?.nonces?.load_requests ||
-            $("#tutor_load_requests_nonce_field").val();
-          if (loadNonce)
-            loadTutorRequestSection(
-              "load_tutor_outgoing_requests",
-              loadNonce,
-              "#tutor-outgoing-requests-container"
-            );
-          var notificationNonce =
-            olHubTutorData?.nonces?.check_notifications ||
-            $("#check_tutor_notifications_nonce_field").val();
-          if (notificationNonce)
-            loadTutorRequestSection(
-              "load_tutor_notifications",
-              notificationNonce,
-              "#tutor-notifications-container"
-            );
+          // Option 2: Update UI element (e.g., remove 'unread' class, disable button)
+          $button
+            .removeClass("btn-primary")
+            .addClass("btn-secondary disabled")
+            .text("Viewed");
+          // Update notification count badge if applicable
+          // loadTutorRequestSection("load_tutor_notifications", olHubTutorData?.nonces?.checkTutorNotificationsNonce, "#tutor-notifications-container");
         } else {
-          errorMsg
-            .html(
-              '<p><i class="fas fa-exclamation-triangle"></i> ' +
-                (response.data?.message || "Error submitting request.") +
-                "</p>"
-            )
-            .show();
+          console.error(
+            "Failed to mark item as viewed:",
+            response.data?.message
+          );
+          alert(
+            "Error marking item as viewed: " +
+              (response.data?.message || "Unknown error")
+          );
         }
       },
-      error: function () {
-        errorMsg
-          .html(
-            '<p><i class="fas fa-exclamation-triangle"></i> An unexpected network or server error occurred. Please try again.</p>'
-          )
-          .show();
-      },
-      complete: function () {
-        // Only restore button if error occurred
-        if (errorMsg.is(":visible")) {
-          submitButton.prop("disabled", false).html(originalButtonContent);
-        } else {
-          // Keep it disabled on success until modal closes
-          submitButton.html(originalButtonContent); // Restore content but keep disabled
-        }
+      error: function (jqXHR, textStatus, errorThrown) {
+        console.error(
+          "AJAX error marking item as viewed:",
+          textStatus,
+          errorThrown
+        );
+        alert("Could not mark item as viewed due to a server error.");
       },
     });
   });
 
-  // Add smooth scroll for notification links
-  $(document).on("click", "a.scroll-to", function (e) {
+  // Handle clicking "Delete My Request"
+  $(document).on("click", ".delete-tutor-request-btn", function (e) {
     e.preventDefault();
-    var targetId = $(this).attr("href"); // Get the target ID like #some-element
-    var targetElement = $(targetId);
-    if (targetElement.length) {
-      $("html, body").animate(
-        {
-          scrollTop: targetElement.offset().top - 100, // Adjust offset as needed (e.g., for fixed headers)
+    var $button = $(this);
+    var requestId = $button.data("request-id");
+    var nonce = olHubTutorData?.nonces?.deleteTutorRequestNonce;
+
+    if (!requestId || !nonce) {
+      console.error("Missing data for delete request action.");
+      return;
+    }
+
+    if (confirm("Are you sure you want to delete this request permanently?")) {
+      $.ajax({
+        url: olHubTutorData.ajax_url,
+        type: "POST",
+        data: {
+          action: "delete_tutor_request", // Matches PHP hook wp_ajax_delete_tutor_request
+          request_id: requestId,
+          nonce: nonce, // Sending the specific nonce
+          tutor_id: olHubTutorData.userId, // Optional: Pass tutor ID for extra server-side check
         },
-        500
-      );
+        success: function (response) {
+          if (response.success) {
+            console.log("Request deleted:", requestId);
+            // Remove the request's row/card from the UI
+            $button
+              .closest(".tutor-request-item") // Or 'tr' if in a table
+              .fadeOut(function () {
+                $(this).remove();
+                // Optional: Check if the container is empty and show a message
+                if (
+                  $("#tutor-outgoing-requests-container").children().length ===
+                  0
+                ) {
+                  $("#tutor-outgoing-requests-container").html(
+                    '<p class="text-muted">No outgoing requests.</p>'
+                  );
+                }
+              });
+          } else {
+            console.error("Failed to delete request:", response.data?.message);
+            alert(
+              "Error deleting request: " +
+                (response.data?.message || "Unknown error")
+            );
+          }
+        },
+        error: function (jqXHR, textStatus, errorThrown) {
+          console.error(
+            "AJAX error deleting request:",
+            textStatus,
+            errorThrown
+          );
+          alert("Could not delete request due to a server error.");
+        },
+      });
     }
   });
-}); // end document ready
+
+  // --- Tutor Responding to Student Requests (Incoming) ---
+
+  // Open modal for Accept/Decline/Propose
+  $(document).on("click", ".respond-student-request-btn", function () {
+    const requestId = $(this).data("request-id");
+    const studentName = $(this).data("student-name");
+    const originalDateTime = $(this).data("original-datetime");
+    const newDateTime = $(this).data("new-datetime");
+    const reason = $(this).data("reason");
+
+    // Populate modal fields
+    $("#responseModalLabel").text(`Respond to ${studentName}'s Request`);
+    $("#modal-request-id").val(requestId);
+    $("#modal-original-datetime").text(originalDateTime);
+    $("#modal-new-datetime").text(newDateTime);
+    $("#modal-student-reason").text(reason || "No reason provided.");
+
+    // Reset proposal fields
+    $("#propose-new-datetime-group").hide();
+    $("#propose-new-datetime").val("");
+    $("#modal-tutor-comments").val("");
+    $("#decline-reason-group").hide();
+    $("#modal-decline-reason").val("");
+    $("#response-action-accept").prop("checked", true); // Default to accept
+
+    // Show the modal
+    const responseModal = new understrap.Modal(
+      document.getElementById("respondStudentRequestModal")
+    );
+    responseModal.show();
+  });
+
+  // Toggle visibility of modal fields based on action chosen
+  $('input[name="response-action"]').on("change", function () {
+    const action = $(this).val();
+    $("#propose-new-datetime-group").toggle(action === "propose");
+    $("#decline-reason-group").toggle(action === "decline");
+  });
+
+  // Handle modal form submission
+  $("#submitResponseForm").on("submit", function (e) {
+    e.preventDefault();
+    const formData = $(this).serializeArray(); // Get form data as array
+    const nonce = olHubTutorData?.nonces?.handleStudentRequestNonce;
+
+    if (!nonce) {
+      console.error("Missing nonce for student request response.");
+      alert("Security token missing. Cannot process response.");
+      return;
+    }
+
+    // Add action and nonce to the data
+    formData.push({ name: "action", value: "handle_student_request_response" });
+    formData.push({ name: "nonce", value: nonce });
+    formData.push({ name: "tutor_id", value: olHubTutorData.userId });
+
+    // Disable button, show spinner
+    const $submitButton = $(this).find('button[type="submit"]');
+    const originalButtonText = $submitButton.html();
+    $submitButton
+      .prop("disabled", true)
+      .html(
+        '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...'
+      );
+
+    $.ajax({
+      url: olHubTutorData.ajax_url,
+      type: "POST",
+      data: $.param(formData), // Convert array to URL-encoded string
+      success: function (response) {
+        if (response.success) {
+          // Close the modal
+          const responseModal = understrap.Modal.getInstance(
+            document.getElementById("respondStudentRequestModal")
+          );
+          responseModal.hide();
+
+          // Refresh the incoming requests section to show updated status
+          console.log("Refreshing incoming requests after response.");
+          loadTutorRequestSection(
+            "load_tutor_incoming_requests",
+            olHubTutorData?.nonces?.checkTutorIncomingNonce,
+            "#tutor-incoming-requests-container"
+          );
+          // Optionally, also refresh notifications if status change triggers one
+          // loadTutorRequestSection("load_tutor_notifications", olHubTutorData?.nonces?.checkTutorNotificationsNonce, "#tutor-notifications-container");
+        } else {
+          alert(
+            "Error processing response: " +
+              (response.data?.message || "Unknown error")
+          );
+        }
+      },
+      error: function (jqXHR, textStatus, errorThrown) {
+        console.error(
+          "AJAX error responding to student request:",
+          textStatus,
+          errorThrown
+        );
+        alert("Could not process response due to a server error.");
+      },
+      complete: function () {
+        // Re-enable button, restore text
+        $submitButton.prop("disabled", false).html(originalButtonText);
+      },
+    });
+  });
+
+  // --- Tutor Responding to Student Alternative Times ---
+
+  // Open modal for responding to alternatives
+  $(document).on("click", ".respond-alternatives-btn", function () {
+    const requestId = $(this).data("request-id");
+    const studentName = $(this).data("student-name");
+    const originalDateTime = $(this).data("original-datetime");
+    const alternative1 = $(this).data("alt1");
+    const alternative2 = $(this).data("alt2");
+    const alternative3 = $(this).data("alt3");
+
+    $("#alternativesResponseModalLabel").text(
+      `Respond to ${studentName}'s Alternatives`
+    );
+    $("#alt-modal-request-id").val(requestId);
+    $("#alt-modal-original-datetime").text(originalDateTime);
+
+    // Populate radio buttons/labels dynamically
+    const $optionsContainer = $("#alternative-options-container");
+    $optionsContainer.empty(); // Clear previous options
+
+    const alternatives = [alternative1, alternative2, alternative3].filter(
+      Boolean
+    ); // Filter out empty alternatives
+
+    if (alternatives.length > 0) {
+      alternatives.forEach((alt, index) => {
+        const radioId = `alt-choice-${index + 1}`;
+        $optionsContainer.append(`
+                  <div class="form-check">
+                      <input class="form-check-input" type="radio" name="alternative_choice" id="${radioId}" value="${
+          index + 1
+        }" ${index === 0 ? "checked" : ""}>
+                      <label class="form-check-label" for="${radioId}">
+                          ${alt}
+                      </label>
+                  </div>
+              `);
+      });
+      // Add the 'None suitable' option
+      $optionsContainer.append(`
+              <div class="form-check">
+                  <input class="form-check-input" type="radio" name="alternative_choice" id="alt-choice-none" value="none">
+                  <label class="form-check-label" for="alt-choice-none">
+                      None of these times are suitable
+                  </label>
+              </div>
+          `);
+      $("#alt-modal-tutor-comments-group").show();
+    } else {
+      $optionsContainer.html(
+        '<p class="text-danger">No alternative times were provided by the student.</p>'
+      );
+      // Hide the submit button and comments if no alternatives? Or allow commenting?
+      $("#alt-modal-tutor-comments-group").hide(); // Hide comments if no alternatives
+    }
+
+    $("#alt-modal-tutor-comments").val("");
+
+    // Show the modal
+    const alternativesModal = new understrap.Modal(
+      document.getElementById("respondAlternativesModal")
+    );
+    alternativesModal.show();
+  });
+
+  // Handle alternative response form submission
+  $("#submitAlternativesResponseForm").on("submit", function (e) {
+    e.preventDefault();
+    const formData = $(this).serializeArray();
+    const nonce = olHubTutorData?.nonces?.respondToAlternativesNonce;
+
+    if (!nonce) {
+      console.error("Missing nonce for alternatives response.");
+      alert("Security token missing. Cannot process response.");
+      return;
+    }
+
+    // Add action and nonce
+    formData.push({
+      name: "action",
+      value: "handle_tutor_alternatives_response",
+    });
+    formData.push({ name: "nonce", value: nonce });
+    formData.push({ name: "tutor_id", value: olHubTutorData.userId });
+
+    // Disable button, show spinner
+    const $submitButton = $(this).find('button[type="submit"]');
+    const originalButtonText = $submitButton.html();
+    $submitButton
+      .prop("disabled", true)
+      .html(
+        '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...'
+      );
+
+    $.ajax({
+      url: olHubTutorData.ajax_url,
+      type: "POST",
+      data: $.param(formData),
+      success: function (response) {
+        if (response.success) {
+          // Close the modal
+          const alternativesModal = understrap.Modal.getInstance(
+            document.getElementById("respondAlternativesModal")
+          );
+          alternativesModal.hide();
+
+          // Refresh the alternatives section
+          console.log("Refreshing student alternatives after response.");
+          loadTutorRequestSection(
+            "load_tutor_student_alternatives",
+            olHubTutorData?.nonces?.loadTutorStudentAlternativesNonce,
+            "#tutor-student-alternatives-container"
+          );
+          // Optionally refresh notifications
+          // loadTutorRequestSection("load_tutor_notifications", olHubTutorData?.nonces?.checkTutorNotificationsNonce, "#tutor-notifications-container");
+        } else {
+          alert(
+            "Error processing response: " +
+              (response.data?.message || "Unknown error")
+          );
+        }
+      },
+      error: function (jqXHR, textStatus, errorThrown) {
+        console.error(
+          "AJAX error responding to alternatives:",
+          textStatus,
+          errorThrown
+        );
+        alert("Could not process response due to a server error.");
+      },
+      complete: function () {
+        // Re-enable button, restore text
+        $submitButton.prop("disabled", false).html(originalButtonText);
+      },
+    });
+  });
+
+  // --- End Event Handlers ---
+}); // End jQuery(document).ready

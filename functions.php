@@ -46,44 +46,51 @@ function enqueue_tutor_dashboard_styles() {
             filemtime(get_stylesheet_directory() . '/tutors/styles.css')
         );
 
-        // Re-enable tutor-dashboard script (if it has separate functionality)
-        wp_enqueue_script(
-            'tutor-dashboard-scripts',
-            get_stylesheet_directory_uri() . '/tutors/index.js',
-            array('jquery', 'understrap-bootstrap-scripts'), // Depend on our bootstrap script
-            filemtime(get_stylesheet_directory() . '/tutors/index.js'),
-            true
-        );
+        // Enqueue tutor-dashboard script (for general tutor dashboard functionality)
+        $tutor_index_script_path = get_stylesheet_directory() . '/tutors/index.js';
+        if (file_exists($tutor_index_script_path)) {
+             wp_enqueue_script(
+                'tutor-dashboard-scripts', // Handle for the general dashboard script
+                get_stylesheet_directory_uri() . '/tutors/index.js',
+                array('jquery', 'understrap-bootstrap-scripts'), // Depend on CHILD Bootstrap handle
+                filemtime($tutor_index_script_path),
+                true // Load in footer
+            );
+        }
 
-        // Enqueue the requests script, dependent on our bootstrap script handle
-        $requests_script_path = get_stylesheet_directory() . '/tutors/requests.js';
+        // Enqueue the tutor requests script (for the requests tab functionality)
+        $requests_script_path = get_stylesheet_directory() . '/requests/tutor-requests.js';
         if (file_exists($requests_script_path)) {
             wp_enqueue_script(
-                'tutor-requests-script',
-                get_stylesheet_directory_uri() . '/tutors/requests.js',
-                array('jquery', 'understrap-bootstrap-scripts'), // Depend on bootstrap
+                'tutor-requests-script', // Specific handle for the requests tab script
+                get_stylesheet_directory_uri() . '/requests/tutor-requests.js',
+                array('jquery', 'understrap-bootstrap-scripts'), // Depend on CHILD Bootstrap handle
                 filemtime($requests_script_path),
                 true // Load in footer
             );
 
             // Localize data specifically for tutor-requests-script
-            wp_localize_script('tutor-requests-script', 'tutorDashboardData', array(
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'tutor_id' => get_current_user_id(), // May not be needed in JS, but can include
-                // Nonces for AJAX calls within requests.js
-                'checkNonce' => wp_create_nonce('check_tutor_incoming_requests'),
-                'checkNotificationNonce' => wp_create_nonce('check_tutor_notifications'),
-                'approveNonce' => wp_create_nonce('approve_student_request_placeholder'), 
-                'declineNonce' => wp_create_nonce('decline_student_request_placeholder'),
-                'cancelNonce' => wp_create_nonce('cancel_tutor_request_placeholder')
-                // Add any other nonces/data needed by requests.js
+            wp_localize_script('tutor-requests-script', 'olHubTutorData', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'userId'   => get_current_user_id(),
+                'nonces'   => [
+                    'loadTutorOutgoingNonce'            => wp_create_nonce('load_tutor_outgoing_action'),
+                    'checkTutorIncomingNonce'           => wp_create_nonce('check_tutor_incoming_action'),
+                    'loadTutorStudentAlternativesNonce' => wp_create_nonce('load_tutor_student_alternatives_action'),
+                    'checkTutorNotificationsNonce'      => wp_create_nonce('check_tutor_notifications_nonce'),
+                    'deleteTutorRequestNonce'           => wp_create_nonce('delete_tutor_request_action'),
+                    'markItemViewedNonce'               => wp_create_nonce('mark_tutor_item_viewed_action'),
+                    'handleStudentRequestNonce'         => wp_create_nonce('tutor_handle_student_request_nonce'),
+                    'respondToAlternativesNonce'        => wp_create_nonce('tutor_respond_alternatives_nonce')
+                ]
             ));
         } else {
             error_log("Tutor requests script file not found: " . $requests_script_path);
         }
-    }   
+    }
 }
-add_action('wp_enqueue_scripts', 'enqueue_tutor_dashboard_styles', 21);
+// Use a later priority just in case, ensure it runs after parent theme might enqueue 'understrap-scripts'
+add_action('wp_enqueue_scripts', 'enqueue_tutor_dashboard_styles', 25);
 
 // Add classroom URL field to user profile // THIS IS THE TUTOR DASHBOARD //
 function add_classroom_url_field($user) {
@@ -337,7 +344,9 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Removes the parent themes stylesheet and scripts from inc/enqueue.php
+ * [RE-ENABLED - We want to control Bootstrap loading in the child theme]
  */
+// /* // Remove commenting
 function understrap_remove_scripts() {
 	wp_dequeue_style( 'understrap-styles' );
 	wp_deregister_style( 'understrap-styles' );
@@ -346,6 +355,7 @@ function understrap_remove_scripts() {
 	wp_deregister_script( 'understrap-scripts' ); // Deregister parent script
 }
 add_action( 'wp_enqueue_scripts', 'understrap_remove_scripts', 20 );
+// */ // Remove commenting
 
 /**
  * Enqueue our stylesheet and javascript file
@@ -366,16 +376,17 @@ function theme_enqueue_styles() {
 	wp_enqueue_style( 'child-understrap-styles', get_stylesheet_directory_uri() . $theme_styles, array(), $css_version );
 	wp_enqueue_script( 'jquery' );
 
-	// Enqueue the combined Bootstrap JS from the child theme
+	// Enqueue the combined Bootstrap JS from the child theme [RE-ENABLED]
+	// /* // Remove commenting
 	$bootstrap_js_version = $theme_version . '.' . filemtime( get_stylesheet_directory() . $bootstrap_scripts );
 	wp_enqueue_script( 'understrap-bootstrap-scripts', get_stylesheet_directory_uri() . $bootstrap_scripts, array( 'jquery' ), $bootstrap_js_version, true );
-
+    // */ // Remove commenting
 
 	// Enqueue the child theme's main JS file
 	$js_version = $theme_version . '.' . filemtime( get_stylesheet_directory() . $theme_scripts );
 	wp_enqueue_script( 'child-understrap-scripts', get_stylesheet_directory_uri() . $theme_scripts, array('jquery'), $js_version, true ); // Ensure it depends on jquery
 
-    // <<< ADDED: Conditionally enqueue and localize student dashboard script >>>
+    // <<< Student script enqueue logic remains unchanged >>>
     if (is_page_template('student-dashboard.php')) {
         $student_script_path = get_stylesheet_directory() . '/requests/student-requests.js';
         // Ensure the file exists before trying to get modification time
@@ -386,11 +397,11 @@ function theme_enqueue_styles() {
             // Check if the Bootstrap script handle is registered before depending on it
             $bootstrap_handle = 'understrap-bootstrap-scripts';
             $dependencies = array('jquery');
-            if (wp_script_is($bootstrap_handle, 'registered')) {
+            if (wp_script_is($bootstrap_handle, 'registered') || wp_script_is($bootstrap_handle, 'enqueued')) { // Check if registered OR enqueued
                 $dependencies[] = $bootstrap_handle;
             } else {
-                // Optional: Log a warning if Bootstrap isn't registered
-                error_log("Warning: Bootstrap script handle '{$bootstrap_handle}' not registered when enqueueing '{$student_script_handle}'.");
+                // Optional: Log a warning if Bootstrap isn't registered/enqueued
+                error_log("Warning: Bootstrap script handle '{$bootstrap_handle}' not available when enqueueing '{$student_script_handle}'.");
             }
 
             wp_enqueue_script(
@@ -405,22 +416,20 @@ function theme_enqueue_styles() {
             wp_localize_script($student_script_handle, 'olHubStudentData', [
                 'ajaxurl' => admin_url('admin-ajax.php'),
                 'checkNonce' => wp_create_nonce('check_student_incoming_requests'),
-                // Add other nonces or data as needed by the script
-                'deleteNoncePlaceholder' => wp_create_nonce('delete_student_request_nonce_placeholder'), // Pass a base nonce
-                'unavailableNoncePlaceholder' => wp_create_nonce('unavailable_all_nonce_placeholder') // Pass a base nonce
+                'deleteNoncePlaceholder' => wp_create_nonce('delete_student_request_nonce_placeholder'),
+                'unavailableNoncePlaceholder' => wp_create_nonce('unavailable_all_nonce_placeholder')
             ]);
         } else {
-            // Optional: Log an error if the script file is missing
             error_log("Student requests script file not found: " . $student_script_path);
         }
     }
-    // <<< END ADDED CODE >>>
+    // <<< END Student script logic >>>
 
 	if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
 		wp_enqueue_script( 'comment-reply' );
 	}
 }
-add_action( 'wp_enqueue_scripts', 'theme_enqueue_styles' );
+add_action( 'wp_enqueue_scripts', 'theme_enqueue_styles', 10 ); // Ensure this runs at priority 10
 
 /**
  * Load the child theme's text domain
@@ -1801,56 +1810,4 @@ function understrap_child_remove_integrations() {
 }
 add_action('after_setup_theme', 'understrap_child_remove_integrations', 20);
 
-add_action('admin_init', 'restrict_admin_with_redirect'); // Re-enable V4
-
-// Enqueue custom dashboard scripts
-function ol_hub_enqueue_dashboard_scripts() {
-    // Enqueue scripts only on the specific dashboard pages
-    // IMPORTANT: Replace 'student-dashboard' and 'tutor-dashboard' with the correct page slugs or IDs if different.
-    if ( is_page('student-dashboard') ) {
-        wp_enqueue_script(
-            'student-requests-js',
-            get_stylesheet_directory_uri() . '/requests/student-requests.js',
-            array('jquery', 'understrap-bootstrap-scripts'), // Corrected dependency handle
-            filemtime(get_stylesheet_directory() . '/requests/student-requests.js'), // Versioning based on file modification time
-            true // Load in footer
-        );
-
-        // Localize data for the student script
-        wp_localize_script('student-requests-js', 'olHubStudentData', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'student_id' => get_current_user_id(), // Assuming student is logged-in user
-            'nonces' => array(
-                'checkStudentIncoming' => wp_create_nonce('ol_hub_check_student_incoming_action'), // Use prefixed action name
-                'loadStudentNotifications' => wp_create_nonce('ol_hub_load_student_notifications_action'), // Prefix others for consistency
-                'markStudentItemViewed' => wp_create_nonce('ol_hub_mark_student_item_viewed_action'),
-                'deleteStudentRequest' => wp_create_nonce('ol_hub_delete_student_request_action'), 
-                // Add any other nonces needed by student-requests.js
-            )
-        ));
-    } elseif ( is_page('tutor-dashboard') ) {
-        wp_enqueue_script(
-            'tutor-requests-js',
-            get_stylesheet_directory_uri() . '/requests/tutor-requests.js',
-            array('jquery', 'understrap-bootstrap-scripts'), // Corrected dependency handle
-            filemtime(get_stylesheet_directory() . '/requests/tutor-requests.js'), // Versioning based on file modification time
-            true // Load in footer
-        );
-
-        // Localize data for the tutor script
-        wp_localize_script('tutor-requests-js', 'olHubTutorData', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'tutor_id' => get_current_user_id(), // Assuming tutor is logged-in user
-            'nonces' => array(
-                'checkTutorIncoming' => wp_create_nonce('check_tutor_incoming_action'),
-                'loadNotifications' => wp_create_nonce('load_tutor_notifications_action'),
-                'loadTutorOutgoing' => wp_create_nonce('load_tutor_outgoing_action'),
-                'loadStudentAlternatives' => wp_create_nonce('load_tutor_student_alternatives_action'),
-                'markTutorItemViewed' => wp_create_nonce('mark_tutor_item_viewed_action'),
-                'deleteTutorRequest' => wp_create_nonce('delete_tutor_request_action'),
-                // Add any other nonces needed by tutor-requests.js
-            )
-        ));
-    }
-}
-add_action('wp_enqueue_scripts', 'ol_hub_enqueue_dashboard_scripts');
+// add_action('admin_init', 'restrict_admin_with_redirect'); // Re-enable V4

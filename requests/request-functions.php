@@ -1,4 +1,5 @@
 <?php
+error_log('[REQUEST FUNCTIONS FILE] requests/request-functions.php starting.'); // TOP LOG
 /**
  * Request Helper Functions
  * 
@@ -7,6 +8,22 @@
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly.
+}
+
+/**
+ * Check if a user ID has permission to access the tutor dashboard.
+ *
+ * @param int $user_id User ID to check.
+ * @return bool True if user can access, false otherwise.
+ */
+function ol_hub_can_user_access_tutor_dashboard($user_id) {
+    if ( ! $user_id ) {
+        return false;
+    }
+    $user = get_userdata($user_id);
+    // Check if user exists and has the 'tutor' role.
+    // Add any other specific checks if needed.
+    return $user && in_array('tutor', (array) $user->roles);
 }
 
 /**
@@ -381,7 +398,7 @@ function get_reschedule_requests($type, $user_id, $user_role, $status = null, $e
     }
 
     $args = [
-        'post_type' => 'progress_report', // Make sure this matches your CPT
+        'post_type' => 'lesson_reschedule', // CORRECTED POST TYPE
         'posts_per_page' => -1, // Get all matching requests
         'meta_query' => $meta_query,
         'orderby' => 'date',
@@ -698,4 +715,6 @@ function has_pending_student_alternatives(int $original_request_id): bool {
 
     return !empty($alternative_requests);
 }
+
+error_log('[REQUEST FUNCTIONS FILE] requests/request-functions.php finished.'); // BOTTOM LOG
 ?> 
