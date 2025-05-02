@@ -130,18 +130,30 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // Check at least one preferred time
       let hasPreferred = false;
+      console.log("--- Checking Preferred Times ---"); // Log start
       for (let i = 1; i <= 3; i++) {
-        if (
-          newStudentForm.querySelector(`#new_preferred_date_${i}`).value &&
-          newStudentForm.querySelector(`#new_preferred_time_${i}`).value
-        ) {
+        const dateInput = newStudentForm.querySelector(
+          `#new_preferred_date_${i}`
+        );
+        const timeInput = newStudentForm.querySelector(
+          `#new_preferred_time_${i}`
+        );
+        const dateValue = dateInput ? dateInput.value : "null";
+        const timeValue = timeInput ? timeInput.value : "null";
+        console.log(`Slot ${i}: Date='${dateValue}', Time='${timeValue}'`); // Log values
+
+        if (dateInput && dateInput.value && timeInput && timeInput.value) {
+          console.log(`Slot ${i}: Found valid pair.`); // Log success
           hasPreferred = true;
           break;
         }
       }
+      console.warn(`Final hasPreferred check result: ${hasPreferred}`);
       if (!hasPreferred) isValid = false;
+      console.warn(`Final form isValid state: ${isValid}`);
 
       if (!isValid) {
+        console.error("Validation FAILED. Preventing submit.");
         e.preventDefault(); // Stop submission
         document.getElementById(
           "newRescheduleRequestErrorMessage"
@@ -149,6 +161,7 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("new_preferred-times-error").style.display =
           !hasPreferred ? "block" : "none";
       } else {
+        console.log("Validation PASSED. Submitting form...");
         document.getElementById(
           "newRescheduleRequestErrorMessage"
         ).style.display = "none";
