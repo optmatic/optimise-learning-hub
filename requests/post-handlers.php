@@ -211,15 +211,19 @@ function handle_tutor_decline_student_request() {
 function handle_tutor_submit_request() {
     $tutor_id = get_current_user_id();
     $tutor_name = wp_get_current_user()->user_login;
-    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0; // Keep student ID from dropdown
     $student_name = ''; // We'll get this from the ID
-    $original_date = isset($_POST['original_date']) ? sanitize_text_field($_POST['original_date']) : '';
-    $original_time = isset($_POST['original_time']) ? sanitize_text_field($_POST['original_time']) : '';
+    // Get original date/time from the new input fields
+    $original_date = isset($_POST['original_lesson_date']) ? sanitize_text_field($_POST['original_lesson_date']) : '';
+    $original_time = isset($_POST['original_lesson_time']) ? sanitize_text_field($_POST['original_lesson_time']) : '';
     $reason = isset($_POST['reason']) ? sanitize_textarea_field($_POST['reason']) : '';
+    // Get proposed date/time
+    $proposed_date = isset($_POST['proposed_date']) ? sanitize_text_field($_POST['proposed_date']) : ''; 
+    $proposed_time = isset($_POST['proposed_time']) ? sanitize_text_field($_POST['proposed_time']) : ''; 
 
-    // Basic validation
-    if (empty($student_id) || empty($original_date) || empty($original_time) || empty($reason)) {
-        wp_die('Missing required fields for reschedule request.');
+    // Basic validation - Added proposed date/time check
+    if (empty($student_id) || empty($original_date) || empty($original_time) || empty($reason) || empty($proposed_date) || empty($proposed_time)) {
+        wp_die('Missing required fields for reschedule request. Please ensure student, original date/time, reason, and proposed date/time are provided.');
     }
 
     // Get student username from ID
@@ -229,27 +233,12 @@ function handle_tutor_submit_request() {
     }
     $student_name = $student_user->user_login;
 
-    // Collect preferred times (proposed by tutor)
-    $preferred_times = [];
-    for ($i = 1; $i <= 3; $i++) {
-        $date = isset($_POST['preferred_date_' . $i]) ? sanitize_text_field($_POST['preferred_date_' . $i]) : '';
-        $time = isset($_POST['preferred_time_' . $i]) ? sanitize_text_field($_POST['preferred_time_' . $i]) : '';
-        if (!empty($date) && !empty($time)) {
-            $preferred_times[] = ['date' => $date, 'time' => $time];
-        }
-    }
-    
-    // Require at least one preferred time from the tutor
-    if (empty($preferred_times)) {
-        wp_die('Please provide at least one preferred alternative time.');
-    }
-
     // Create the request post
     $request_post = [
         'post_title'   => 'Tutor Reschedule Request from ' . $tutor_name . ' for ' . $student_name,
         'post_content' => $reason, // Store reason in content maybe?
-        'post_status'  => 'publish',
-        'post_type'    => 'progress_report',
+        'post_status'  => 'publish', // Keep publish? Status meta is 'pending'. Or change to 'pending'? Let's keep publish for now.
+        'post_type'    => 'lesson_reschedule', // CORRECTED post type
         'post_author'  => $tutor_id, // Ensure post author is the tutor
     ];
     $request_id = wp_insert_post($request_post);
@@ -257,11 +246,12 @@ function handle_tutor_submit_request() {
     if (!is_wp_error($request_id)) {
         // Combine original date and time for storage
         $original_lesson_time_string = trim($original_date . ' ' . $original_time);
-        // Combine first preferred date and time for storage
-        $proposed_reschedule_time_string = trim($preferred_times[0]['date'] . ' ' . $preferred_times[0]['time']);
+        // Combine proposed date and time for storage
+        $proposed_lesson_time_string = trim($proposed_date . ' ' . $proposed_time); 
 
         // Save meta data
         update_post_meta($request_id, 'request_type', 'tutor_reschedule');
+        update_post_meta($request_id, 'initiator', 'tutor'); // ADDED initiator meta
         update_post_meta($request_id, 'status', 'pending');
         update_post_meta($request_id, 'tutor_id', $tutor_id);
         update_post_meta($request_id, 'tutor_name', $tutor_name);
@@ -270,16 +260,24 @@ function handle_tutor_submit_request() {
         update_post_meta($request_id, 'reason', $reason);
         
         // Save the combined date/time strings
-        update_post_meta($request_id, 'original_lesson_time', $original_lesson_time_string);
-        update_post_meta($request_id, 'proposed_reschedule_time', $proposed_reschedule_time_string);
+        update_post_meta($request_id, 'original_lesson_time', $original_lesson_time_string); 
+        update_post_meta($request_id, 'proposed_lesson_time', $proposed_lesson_time_string); 
+
+        // Save the individual proposed date/time fields
+        update_post_meta($request_id, 'proposed_date', $proposed_date);
+        update_post_meta($request_id, 'proposed_time', $proposed_time);
         
-        // Save the full array of preferred times as well (for editing/reference)
-        update_post_meta($request_id, 'preferred_times', $preferred_times);
+        // Save original date/time meta as well (consistency)
+        update_post_meta($request_id, 'original_date', $original_date);
+        update_post_meta($request_id, 'original_time', $original_time);
         
         update_post_meta($request_id, 'viewed_by_student', '0'); // Mark as unread for student
 
         // Redirect back to tutor dashboard requests tab
-        $redirect_url = add_query_arg(['active_tab' => 'requests', 'request_status' => 'submitted'], get_permalink(23)); // Use page ID 23
+        // Use get_permalink by page slug if available
+        $dashboard_page = get_page_by_path('tutor-dashboard'); // Assumes 'tutor-dashboard' is the slug
+        $redirect_base_url = $dashboard_page ? get_permalink($dashboard_page->ID) : home_url('/'); // Fallback to home_url
+        $redirect_url = add_query_arg(['active_tab' => 'requests', 'request_status' => 'submitted'], $redirect_base_url);
         wp_safe_redirect($redirect_url);
         exit;
     } else {

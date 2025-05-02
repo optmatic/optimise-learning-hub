@@ -124,29 +124,13 @@ $tutor_id     = $current_user->ID;
                         </div>
                         
                         <div class="mb-3">
-                            <label for="tutor_reschedule_lesson_select" class="form-label">Lesson to Reschedule <span class="text-danger">*</span></label>
-                             <select class="form-select" id="tutor_reschedule_lesson_select" name="lesson_select" required>
-                                 <option value="">-- Select a Scheduled Lesson --</option>
-                                 <?php
-                                 // Note: Lessons could be dynamically loaded based on selected student via JS/AJAX
-                                 // Or list all tutor's upcoming lessons initially
-                                 $upcoming_lessons = get_upcoming_lessons_for_user($tutor_id, 'tutor'); // Fetch tutor's lessons
-                                 if (!empty($upcoming_lessons)) {
-                                     foreach ($upcoming_lessons as $lesson) {
-                                          // Assume lesson contains student info if fetched this way, adjust if needed
-                                         $student_name_lesson = isset($lesson['student_name']) ? ' (' . esc_html($lesson['student_name']) . ')' : '';
-                                         echo '<option value="' . esc_attr($lesson['date_value']) . '|' . esc_attr($lesson['time_value']) . '|' . esc_attr($lesson['student_id']) . '">' // Include student ID
-                                              . esc_html($lesson['subject']) . ' - ' . esc_html($lesson['formatted']) . $student_name_lesson . '</option>';
-                                     }
-                                 } else {
-                                     echo '<option value="" disabled>No upcoming lessons found in your schedule.</option>';
-                                 }
-                                 ?>
-                             </select>
-                             <input type="hidden" id="tutor_reschedule_original_date" name="original_date">
-                             <input type="hidden" id="tutor_reschedule_original_time" name="original_time">
-                             <!-- Hidden field to store the correct student_id when a lesson is selected -->
-                             <input type="hidden" id="tutor_reschedule_selected_student_id" name="student_id_from_lesson">
+                            <label for="tutor_reschedule_original_date_input" class="form-label">Original Lesson Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="tutor_reschedule_original_date_input" name="original_lesson_date" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="tutor_reschedule_original_time_input" class="form-label">Original Lesson Time <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="tutor_reschedule_original_time_input" name="original_lesson_time" required>
                         </div>
                         
                         <div class="mb-3">

@@ -193,7 +193,7 @@ function load_tutor_outgoing_requests_ajax() {
     error_log('[AJAX TUTOR OUTGOING] Tutor ID validated: ' . $tutor_id); // TUTOR ID LOG
 
     error_log('[AJAX TUTOR OUTGOING] Calling get_reschedule_requests...'); // BEFORE HELPER LOG
-    $outgoing_requests = get_reschedule_requests('tutor', $tutor_id, ['pending', 'accepted', 'declined', 'alternative_proposed']); // Fetch relevant statuses
+    $outgoing_requests = get_reschedule_requests('tutor_reschedule', $tutor_id, 'tutor', ['pending', 'accepted', 'declined', 'alternative_proposed']); 
     $request_count = is_array($outgoing_requests) ? count($outgoing_requests) : 'Not an array';
     error_log('[AJAX TUTOR OUTGOING] get_reschedule_requests returned. Count: ' . $request_count); // AFTER HELPER LOG
 
